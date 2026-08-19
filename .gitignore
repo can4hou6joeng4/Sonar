@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.moved-aside
+*.hmap
+*.ipa
+.swiftpm/
+
+# CocoaPods / SPM
+Pods/
+.build/
+
+# Node（音源打包链）
+node_modules/
+dist/
+*.bundle.js
+
+# 凭证：任何含真实 token 的脚本或配置，禁止提交
+*credentials*
+Secrets.xcconfig
+lx-custom-source-*.js
