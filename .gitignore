@@ -24,3 +24,4 @@ dist/
 *credentials*
 Secrets.xcconfig
 lx-custom-source-*.js
+Sonar/Resources/BuildCredentials.json

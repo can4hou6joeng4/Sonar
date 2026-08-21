@@ -1,0 +1,16 @@
+{
+  "name": "sonar-source-bundle",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:source": "node scripts/build-source-bundle.mjs",
+    "smoke:runtime": "bash scripts/smoke-runtime.sh"
+  },
+  "devDependencies": {
+    "buffer": "^6.0.3",
+    "esbuild": "^0.28.2",
+    "he": "^1.2.0",
+    "lrc-file-parser": "^1.0.2",
+    "pako": "^2.1.0"
+  }
+}

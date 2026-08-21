@@ -1,0 +1,62 @@
+name: Sonar
+options:
+  bundleIdPrefix: cn.bobochang
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  developmentLanguage: zh-Hans
+settings:
+  base:
+    SWIFT_VERSION: 5.0
+    TARGETED_DEVICE_FAMILY: "1"
+    SUPPORTS_MACCATALYST: NO
+    INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+    INFOPLIST_KEY_UIStatusBarStyle: UIStatusBarStyleLightContent
+    INFOPLIST_KEY_UILaunchScreen_Generation: YES
+    INFOPLIST_KEY_UIRequiresFullScreen: YES
+    INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
+targets:
+  Sonar:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sonar
+        excludes:
+          - Resources/BuildCredentials.json
+    resources:
+      - path: Sonar/Resources
+        excludes:
+          - BuildCredentials.json
+    postBuildScripts:
+      - name: Embed local build credentials
+        script: |
+          CREDENTIAL_OUTPUT="${DERIVED_FILE_DIR}/BuildCredentials.json"
+          node "${SRCROOT}/scripts/generate-build-credentials.mjs" "${CREDENTIAL_OUTPUT}"
+          install -d "${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"
+          install -m 600 "${CREDENTIAL_OUTPUT}" "${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/BuildCredentials.json"
+        basedOnDependencyAnalysis: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cn.bobochang.sonar
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_FILE: Sonar/Info.plist
+        INFOPLIST_KEY_CFBundleDisplayName: Sonar
+        PRODUCT_NAME: Sonar
+        TARGETED_DEVICE_FAMILY: "1"
+        SUPPORTS_MACCATALYST: NO
+        INFOPLIST_KEY_UIRequiresFullScreen: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
+    scheme:
+      testTargets:
+        - SonarTests
+  SonarTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: SonarTests
+    dependencies:
+      - target: Sonar
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cn.bobochang.sonar.tests
+        INFOPLIST_FILE: SonarTests/Info.plist
