@@ -9017,6 +9017,19 @@ ${result.lyric}`;
         const artist = typeof track.singer === "string" ? track.singer : "";
         return artist ? `${track.name} - ${artist}` : track.name;
       }).filter(Boolean))];
+    },
+    async playlistCatalog(source, sortId, tagId, page = 1) {
+      const sdk = sdkFor(source);
+      const result = await unwrapRequest(sdk.songList.getList(sortId, tagId, Number(page)));
+      if (!result || !Array.isArray(result.list)) throw new Error("\u97F3\u6E90\u8FD4\u56DE\u6B4C\u5355\u5E7F\u573A\u5F02\u5E38");
+      return result;
+    },
+    async playlistDetail(source, id, page = 1) {
+      const sdk = sdkFor(source);
+      const request = source === "tx" ? sdk.songList.getListDetail(String(id)) : sdk.songList.getListDetail(String(id), Number(page));
+      const result = await unwrapRequest(request);
+      if (!result || !Array.isArray(result.list)) throw new Error("\u97F3\u6E90\u8FD4\u56DE\u6B4C\u5355\u8BE6\u60C5\u5F02\u5E38");
+      return result;
     }
   });
 })();

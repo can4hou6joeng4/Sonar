@@ -34,6 +34,8 @@ struct SongsView: View {
     @State private var selectedPlaylistID: UUID?
     @State private var presentedSheet: PresentedSheet?
     @State private var showingPlaylists = false
+    @State private var isSearching = false
+    @State private var searchQuery = ""
     @State private var lastScrollMarkerY: CGFloat?
     @State private var scrollSettleTask: Task<Void, Never>?
     @State private var errorMessage: String?
@@ -45,7 +47,7 @@ struct SongsView: View {
 
     private var title: String { selectedPlaylist?.name ?? "全部歌曲" }
 
-    private var entries: [Entry] {
+    private var unfilteredEntries: [Entry] {
         guard let selectedPlaylist else {
             return allRecords.map { Entry(record: $0, playlistIndex: nil) }
         }
@@ -54,11 +56,22 @@ struct SongsView: View {
         }
     }
 
+    private var entries: [Entry] {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return unfilteredEntries }
+        return unfilteredEntries.filter { entry in
+            [entry.record.title, entry.record.artist, entry.record.album]
+                .contains { $0.localizedCaseInsensitiveContains(query) }
+        }
+    }
+
     private var tracks: [Track] { entries.compactMap(\.record.track) }
 
     var body: some View {
         VStack(spacing: 0) {
             header
+            if isSearching { searchField }
+            countRow
             if entries.isEmpty {
                 ContentUnavailableView(
                     "这个歌单还没有曲目",
@@ -69,21 +82,13 @@ struct SongsView: View {
             } else {
                 List {
                     CapsuleScrollMarker()
-                    Section {
-                        ForEach(Array(entries.enumerated()), id: \.element.id) { queueIndex, entry in
-                            if let track = entry.record.track {
-                                songRow(track: track, queueIndex: queueIndex, entry: entry)
-                                    .listRowInsets(EdgeInsets())
-                                    .listRowSeparator(.hidden)
-                                    .listRowBackground(scheme.appSurface)
-                            }
+                    ForEach(Array(entries.enumerated()), id: \.element.id) { queueIndex, entry in
+                        if let track = entry.record.track {
+                            songRow(track: track, queueIndex: queueIndex, entry: entry)
+                                .listRowInsets(EdgeInsets())
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(scheme.appSurface)
                         }
-                    } header: {
-                        Text("\(tracks.count) 首 · 顺序播放")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(scheme.onSurfaceVariant)
-                            .textCase(nil)
-                            .padding(.horizontal, 4)
                     }
                 }
                 .listStyle(.plain)
@@ -147,8 +152,10 @@ struct SongsView: View {
             }
             Spacer(minLength: 0)
             Menu {
-                Button("歌单管理", systemImage: "music.note.list") { showingPlaylists = true }
-                Button("随机播放全部", systemImage: "shuffle") { playShuffled() }
+                Button("搜索", systemImage: "magnifyingglass") { isSearching = true }
+                Button("下载历史", systemImage: "arrow.down.circle") {
+                    toastCenter.show("下载历史即将推出")
+                }
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 21, weight: .medium))
@@ -161,6 +168,36 @@ struct SongsView: View {
         .padding(.horizontal, 16)
         .padding(.top, 10)
         .padding(.bottom, 8)
+    }
+
+    private var searchField: some View {
+        HStack {
+            Image(systemName: "magnifyingglass")
+            TextField("搜索歌曲、歌手或专辑", text: $searchQuery)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .accessibilityIdentifier("library-search-field")
+            Button {
+                searchQuery = ""
+                isSearching = false
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("关闭搜索")
+        }
+        .foregroundStyle(scheme.onSurfaceVariant)
+        .padding(.horizontal, 16)
+        .frame(minHeight: 44)
+    }
+
+    private var countRow: some View {
+        Text("\(tracks.count) 首歌曲")
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(scheme.onSurfaceVariant)
+            .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+            .padding(.horizontal, 16)
+            .accessibilityIdentifier("library-track-count")
     }
 
     private func iconButton(systemName: String, label: String, action: @escaping () -> Void) -> some View {

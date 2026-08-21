@@ -112,45 +112,30 @@ struct PlaylistDetailView: View {
             .listRowSeparator(.hidden)
             .listRowBackground(scheme.surface)
 
-            HStack(spacing: 10) {
-                actionButton(
-                    "播放全部",
-                    systemImage: "play.fill",
-                    identifier: "playlist-detail-play-all",
-                    filled: true,
-                    scheme: scheme
-                ) {
+            PlaylistDetailActions(
+                isLoading: false,
+                isFavoriteInProgress: false,
+                isFavorite: false,
+                showFavorite: false,
+                onPlayAll: {
                     guard !tracks.isEmpty else { return }
                     Task { await playbackService.replaceQueue(tracks) }
-                }
-                actionButton(
-                    "随机",
-                    systemImage: "shuffle",
-                    identifier: "playlist-detail-shuffle",
-                    filled: false,
-                    scheme: scheme
-                ) {
-                    let shuffled = tracks.shuffled()
-                    guard !shuffled.isEmpty else { return }
-                    Task { await playbackService.replaceQueue(shuffled) }
-                }
-                if playlist == nil {
-                    actionButton(
-                        "收藏",
-                        systemImage: "text.badge.plus",
-                        identifier: "playlist-detail-save",
-                        filled: false,
-                        scheme: scheme
-                    ) {
-                        toastCenter.show("已收藏到我的歌单")
-                    }
-                }
-            }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 10)
+                },
+                onFavorite: {}
+            )
             .listRowInsets(EdgeInsets())
             .listRowSeparator(.hidden)
             .listRowBackground(scheme.surface)
+
+            Text("歌曲  \(entries.count)")
+                .font(.title3.weight(.bold))
+                .foregroundStyle(scheme.onSurface)
+                .frame(maxWidth: 900, minHeight: 24, alignment: .leading)
+                .padding(.init(top: 16, leading: 16, bottom: 8, trailing: 16))
+                .listRowInsets(EdgeInsets())
+                .listRowSeparator(.hidden)
+                .listRowBackground(scheme.surface)
+                .accessibilityIdentifier("playlist-track-count")
 
             if entries.isEmpty {
                 ContentUnavailableView("这个歌单还没有曲目", systemImage: "music.note.list")
@@ -248,11 +233,6 @@ struct PlaylistDetailView: View {
                                 guard !tracks.isEmpty else { return }
                                 Task { await playbackService.replaceQueue(tracks) }
                             }
-                            Button("随机播放", systemImage: "shuffle") {
-                                let shuffled = tracks.shuffled()
-                                guard !shuffled.isEmpty else { return }
-                                Task { await playbackService.replaceQueue(shuffled) }
-                            }
                             if let playlist, !playlist.isSystem {
                                 Button("重命名", systemImage: "pencil") {
                                     renameText = playlist.name
@@ -295,26 +275,6 @@ struct PlaylistDetailView: View {
         .buttonStyle(.plain)
         .accessibilityLabel(label)
         .accessibilityIdentifier("playlist-detail-back")
-    }
-
-    private func actionButton(
-        _ title: String,
-        systemImage: String,
-        identifier: String,
-        filled: Bool,
-        scheme: M3Scheme,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.system(size: 14, weight: filled ? .semibold : .medium))
-                .foregroundStyle(filled ? scheme.onPrimary : scheme.onSecondaryContainer)
-                .padding(.horizontal, 18)
-                .frame(minHeight: 40)
-                .background(filled ? scheme.primary : scheme.secondaryContainer, in: Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier(identifier)
     }
 
     private func detailRow(entry: Entry, queueIndex: Int, scheme: M3Scheme) -> some View {

@@ -89,6 +89,38 @@ public final class JavaScriptSourceRuntime: SourceRuntime, @unchecked Sendable {
         try JSONDecoder().decode([String].self, from: await invokeData("tipSearch", arguments: [keyword]))
     }
 
+    public func playlistCatalog(
+        source: MusicSource,
+        sortId: String,
+        tagId: String? = nil,
+        page: Int = 1
+    ) async throws -> PlaylistCatalogPage {
+        try JSONDecoder().decode(
+            PlaylistCatalogPage.self,
+            from: await invokeData("playlistCatalog", arguments: [source.rawValue, sortId, tagId ?? NSNull(), page])
+        )
+    }
+
+    public func playlistDetail(source: MusicSource, id: String, page: Int = 1) async throws -> PlaylistDetail {
+        let data = try await invokeData("playlistDetail", arguments: [source.rawValue, id, page])
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rawList = object["list"] as? [[String: Any]],
+              let infoObject = object["info"] else {
+            throw SourceError.source(message: "音源返回歌单详情异常")
+        }
+        let infoData = try JSONSerialization.data(withJSONObject: infoObject)
+        let info = try JSONDecoder().decode(PlaylistDetailInfo.self, from: infoData)
+        let tracks = try rawList.map { try Track(source: source, raw: $0) }
+        return PlaylistDetail(
+            list: tracks,
+            total: (object["total"] as? NSNumber)?.intValue ?? tracks.count,
+            page: (object["page"] as? NSNumber)?.intValue ?? 1,
+            limit: (object["limit"] as? NSNumber)?.intValue ?? tracks.count,
+            source: source,
+            info: info
+        )
+    }
+
     private func invokeData(_ name: String, arguments: [Any]) async throws -> Data {
         try await withCheckedThrowingContinuation { continuation in
             queue.async {

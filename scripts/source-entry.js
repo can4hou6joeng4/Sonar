@@ -47,4 +47,20 @@ globalThis.__source__ = Object.freeze({
       return artist ? `${track.name} - ${artist}` : track.name
     }).filter(Boolean))]
   },
+  async playlistCatalog(source, sortId, tagId, page = 1) {
+    const sdk = sdkFor(source)
+    const result = await unwrapRequest(sdk.songList.getList(sortId, tagId, Number(page)))
+    if (!result || !Array.isArray(result.list)) throw new Error('音源返回歌单广场异常')
+    return result
+  },
+  async playlistDetail(source, id, page = 1) {
+    const sdk = sdkFor(source)
+    // QQ 的第二个参数是重试次数，不是页码；传入 page 会让首次请求直接被当成重试。
+    const request = source === 'tx'
+      ? sdk.songList.getListDetail(String(id))
+      : sdk.songList.getListDetail(String(id), Number(page))
+    const result = await unwrapRequest(request)
+    if (!result || !Array.isArray(result.list)) throw new Error('音源返回歌单详情异常')
+    return result
+  },
 })

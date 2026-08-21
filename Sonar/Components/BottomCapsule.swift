@@ -386,57 +386,71 @@ private struct MiniPlayerCapsulePage: View {
     let onOpenPlayer: () -> Void
 
     var body: some View {
-        HStack(spacing: 0) {
-            Button(action: onOpenPlayer) {
-                ArtworkThumbnail(track: playbackService.queue.current, size: 44)
-                    .clipShape(Circle())
-                    .frame(width: 44, height: 44)
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("打开播放页")
-            .accessibilityIdentifier("mini-player-cover")
+        GeometryReader { proxy in
+            let compact = proxy.size.width < 240
+            let artworkSize: CGFloat = compact ? 36 : 44
+            let controlSize: CGFloat = compact ? 36 : 40
 
-            Button(action: onOpenPlayer) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(playbackService.queue.current?.title ?? "暂无播放")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(scheme.onSurface)
-                        .lineLimit(1)
-                    Text(playbackService.queue.current?.artist ?? "选择一首歌曲开始播放")
-                        .font(.system(size: 10.5, weight: .medium))
-                        .foregroundStyle(scheme.onSurfaceVariant)
-                        .lineLimit(1)
+            HStack(spacing: 0) {
+                Button(action: onOpenPlayer) {
+                    HStack(spacing: 10) {
+                        SpinningCoverArt(
+                            track: playbackService.queue.current,
+                            size: artworkSize,
+                            isPlaying: playbackService.state == .playing
+                        )
+                        .contentShape(Circle())
+                        .accessibilityIdentifier("mini-player-cover")
+
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(playbackService.queue.current?.title ?? "暂无播放")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(scheme.onSurface)
+                                .lineLimit(1)
+                                .frame(height: 13 * 1.2)
+                            if !compact {
+                                Text(playbackService.queue.current?.artist ?? "选择一首歌曲开始播放")
+                                    .font(.system(size: 10.5, weight: .medium))
+                                    .foregroundStyle(scheme.onSurfaceVariant)
+                                    .lineLimit(1)
+                                    .frame(height: 10.5 * 1.2)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: artworkSize, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                .padding(.horizontal, 10)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("打开播放页")
-            .accessibilityIdentifier("mini-player-title")
+                .buttonStyle(.plain)
+                .accessibilityLabel("打开播放页")
+                .accessibilityIdentifier("mini-player-title")
 
-            MiniPlayerControl(
-                systemImage: "backward.fill",
-                label: "上一首",
-                identifier: "mini-player-previous"
-            ) {
-                Task { await playbackService.previous() }
+                MiniPlayerControl(
+                    systemImage: "backward.fill",
+                    label: "上一首",
+                    identifier: "mini-player-previous",
+                    size: controlSize
+                ) {
+                    Task { await playbackService.previous() }
+                }
+                MiniPlayerControl(
+                    systemImage: playbackService.state == .playing ? "pause.fill" : "play.fill",
+                    label: playbackService.state == .playing ? "暂停" : "播放",
+                    identifier: "mini-player-play-pause",
+                    size: controlSize
+                ) {
+                    Task { await playbackService.togglePlayback() }
+                }
+                MiniPlayerControl(
+                    systemImage: "forward.fill",
+                    label: "下一首",
+                    identifier: "mini-player-next",
+                    size: controlSize
+                ) {
+                    Task { await playbackService.next() }
+                }
             }
-            MiniPlayerControl(
-                systemImage: playbackService.state == .playing ? "pause.fill" : "play.fill",
-                label: playbackService.state == .playing ? "暂停" : "播放",
-                identifier: "mini-player-play-pause"
-            ) {
-                Task { await playbackService.togglePlayback() }
-            }
-            MiniPlayerControl(
-                systemImage: "forward.fill",
-                label: "下一首",
-                identifier: "mini-player-next"
-            ) {
-                Task { await playbackService.next() }
-            }
+            .padding(.horizontal, 4)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -449,18 +463,19 @@ private struct MiniPlayerControl: View {
     let systemImage: String
     let label: String
     let identifier: String
+    let size: CGFloat
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: systemImage.contains("play") || systemImage.contains("pause") ? 20 : 17, weight: .semibold))
-                .frame(width: 44, height: 44)
+                .frame(width: size, height: size)
                 .contentShape(Circle())
         }
         .buttonStyle(CapsulePressButtonStyle())
         .foregroundStyle(scheme.onSurfaceVariant)
-        .disabled(playbackService.queue.current == nil)
+        .disabled(playbackService.queue.current == nil || playbackService.state == .loading)
         .accessibilityLabel(label)
         .accessibilityIdentifier(identifier)
     }

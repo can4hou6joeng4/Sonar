@@ -16,6 +16,7 @@ struct PlayerArtwork: View {
     let track: Track?
     let size: CGFloat
     var circular = false
+    var cornerRadius: CGFloat = 10
 
     @Environment(\.artworkService) private var artworkService
     @Environment(\.m3Scheme) private var scheme
@@ -32,7 +33,7 @@ struct PlayerArtwork: View {
             }
         }
         .frame(width: size, height: size)
-        .clipShape(circular ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 10, style: .continuous)))
+        .clipShape(circular ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)))
         .task(id: track?.musicID) {
             image = nil
             guard let track, let artworkService else { return }
