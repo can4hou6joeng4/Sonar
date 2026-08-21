@@ -20,7 +20,6 @@ final class UIPlaybackPreferences {
 
     private static let miniLyricsKey = "miniLyricsEnabled"
     private static let motionKey = "appMotionEnabled"
-    private static let qualityKey = "preferredPlaybackQuality"
 
     var miniLyricsEnabled: Bool {
         didSet { defaults.set(miniLyricsEnabled, forKey: Self.miniLyricsKey) }
@@ -30,15 +29,12 @@ final class UIPlaybackPreferences {
         didSet { defaults.set(motionEnabled, forKey: Self.motionKey) }
     }
 
-    var preferredQuality: Quality {
-        didSet { defaults.set(preferredQuality.rawValue, forKey: Self.qualityKey) }
-    }
+    // 音质偏好归 PlaybackService：只有它能拿这个值去重新解析播放地址，
+    // 放在这里会变成一份没人执行的副本。
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         miniLyricsEnabled = defaults.object(forKey: Self.miniLyricsKey) as? Bool ?? true
         motionEnabled = defaults.object(forKey: Self.motionKey) as? Bool ?? true
-        preferredQuality = defaults.string(forKey: Self.qualityKey)
-            .flatMap(Quality.init(rawValue:)) ?? .hiRes
     }
 }

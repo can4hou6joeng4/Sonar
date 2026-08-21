@@ -4,7 +4,7 @@ struct QualitySheet: View {
     let track: Track
 
     @Environment(\.dismiss) private var dismiss
-    @Environment(UIPlaybackPreferences.self) private var preferences
+    @Environment(PlaybackService.self) private var playbackService
     @Environment(ToastCenter.self) private var toastCenter
     @Environment(\.m3Scheme) private var scheme
 
@@ -28,11 +28,7 @@ struct QualitySheet: View {
                     LazyVStack(spacing: 4) {
                         ForEach(options) { option in
                             Button {
-                                // 偏离规格：PlaybackService 没有单曲音质覆盖契约；这里只持久化用户偏好，
-                                // 不能绕过播放层直接替换当前 URL。
-                                preferences.preferredQuality = option.quality
-                                dismiss()
-                                toastCenter.show("音质偏好已设为 \(option.quality.title)")
+                                apply(option.quality)
                             } label: {
                                 HStack(spacing: 12) {
                                     VStack(alignment: .leading, spacing: 3) {
@@ -44,7 +40,7 @@ struct QualitySheet: View {
                                             .foregroundStyle(scheme.onSurfaceVariant)
                                     }
                                     .frame(maxWidth: .infinity, alignment: .leading)
-                                    if preferences.preferredQuality == option.quality {
+                                    if playbackService.preferredQuality == option.quality {
                                         Image(systemName: "checkmark.circle.fill")
                                             .font(.system(size: 22))
                                             .foregroundStyle(scheme.onSecondaryContainer)
@@ -53,7 +49,7 @@ struct QualitySheet: View {
                                 .padding(.horizontal, 16)
                                 .frame(minHeight: 62)
                                 .background(
-                                    preferences.preferredQuality == option.quality
+                                    playbackService.preferredQuality == option.quality
                                         ? scheme.secondaryContainer.opacity(0.72)
                                         : scheme.surfaceContainer,
                                     in: RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -70,5 +66,22 @@ struct QualitySheet: View {
             }
         }
         .background(scheme.surfaceContainerLow.ignoresSafeArea())
+    }
+
+    /// 先收起弹层再等解析：重新拿播放地址要走一次网络，让用户对着不动的表等没有意义。
+    private func apply(_ quality: Quality) {
+        dismiss()
+        Task { @MainActor in
+            switch await playbackService.setPreferredQuality(quality) {
+            case .unchanged:
+                toastCenter.show("当前已是 \(quality.title)")
+            case let .reloaded(applied):
+                toastCenter.show("已切换到 \(applied.title)")
+            case .deferred:
+                toastCenter.show("下一首将从 \(quality.title) 开始")
+            case let .failed(message):
+                toastCenter.show("切换失败：\(message)")
+            }
+        }
     }
 }

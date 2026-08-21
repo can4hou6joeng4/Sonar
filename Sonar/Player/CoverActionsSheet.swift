@@ -7,6 +7,7 @@ struct CoverActionsSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(UIPlaybackPreferences.self) private var preferences
+    @Environment(PlaybackService.self) private var playbackService
     @Environment(ToastCenter.self) private var toastCenter
     @Environment(\.m3Scheme) private var scheme
 
@@ -16,7 +17,7 @@ struct CoverActionsSheet: View {
         VStack(spacing: 0) {
             SheetHeader(
                 title: track.title,
-                subtitle: "\(preferences.preferredQuality.title) · \(track.artist)"
+                subtitle: "\(playbackService.preferredQuality.title) · \(track.artist)"
             )
             .accessibilityIdentifier("player-cover-actions-sheet")
             ScrollView {

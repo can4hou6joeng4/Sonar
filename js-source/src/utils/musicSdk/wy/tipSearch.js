@@ -20,7 +20,9 @@ export default {
       }),
     })
     return this.requestObj.promise.then(({ statusCode, body }) => {
-      if (statusCode != 200 || body.code != 200) return Promise.reject(new Error('请求失败'))
+      if (statusCode != 200 || body.code != 200) {
+        return Promise.reject(new Error(`网易联想请求失败: HTTP ${statusCode}, code ${body?.code ?? 'unknown'}`))
+      }
       return body.result?.songs ?? []
     })
   },

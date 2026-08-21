@@ -15,20 +15,42 @@ public final class PlaybackService {
         case failed(String)
     }
 
+    /// 切换音质的结果。界面据此给出不同提示，不允许「点了没反应」。
+    public enum QualityChange: Equatable, Sendable {
+        case unchanged
+        case reloaded(Quality)
+        case deferred
+        case failed(String)
+    }
+
+    private static let preferredQualityKey = "preferredPlaybackQuality"
+
     public private(set) var queue = PlaybackQueue()
     public private(set) var state: State = .idle
     public private(set) var elapsed: TimeInterval = 0
     public private(set) var duration: TimeInterval = 0
+    /// 用户选定的音质**上限**：解析器从这一档起逐级下降，所以它是起点而不是锁死值。
+    public private(set) var preferredQuality: Quality {
+        didSet { defaults.set(preferredQuality.rawValue, forKey: Self.preferredQualityKey) }
+    }
     private let player: AVPlayer
     private let resolver: PlaybackURLResolving
+    private let defaults: UserDefaults
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
     private var remoteCommandTokens: [(MPRemoteCommand, Any)] = []
     private var nowPlayingArtwork: MPMediaItemArtwork?
 
-    public init(player: AVPlayer = AVPlayer(), resolver: PlaybackURLResolving = PlaybackURLResolver()) {
+    public init(
+        player: AVPlayer = AVPlayer(),
+        resolver: PlaybackURLResolving = PlaybackURLResolver(),
+        defaults: UserDefaults = .standard
+    ) {
         self.player = player
         self.resolver = resolver
+        self.defaults = defaults
+        preferredQuality = defaults.string(forKey: Self.preferredQualityKey)
+            .flatMap(Quality.init(rawValue:)) ?? .hiRes
         installTimeObserver()
         installEndObserver()
         installRemoteCommands()
@@ -127,6 +149,45 @@ public final class PlaybackService {
         updateNowPlaying()
     }
 
+    /// 记下新的音质上限，并让当前曲目按它重新解析。
+    /// 解析成功前不碰 `AVPlayer`，失败时旧的流还在播，只回滚状态并把原因交回界面。
+    @discardableResult
+    public func setPreferredQuality(_ quality: Quality) async -> QualityChange {
+        guard preferredQuality != quality else { return .unchanged }
+        preferredQuality = quality
+        guard let track = queue.current else { return .deferred }
+
+        let resumeAt = elapsed
+        let previousState = state
+        let wasPlaying = previousState == .playing
+        state = .loading
+        do {
+            let url = try await resolver.musicURL(for: track, quality: quality)
+            player.replaceCurrentItem(with: AVPlayerItem(url: url))
+            if resumeAt > 0 {
+                // 用回调版而不是 await 版：新 item 还没 ready 时 await 会一直挂着，
+                // 而我们只需要把起播点排进队列。
+                player.seek(to: CMTime(seconds: resumeAt, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) { _ in }
+                elapsed = resumeAt
+            } else {
+                elapsed = 0
+            }
+            if wasPlaying {
+                try configureAudioSession()
+                player.play()
+                state = .playing
+            } else {
+                state = .paused
+            }
+            updateNowPlaying()
+            return .reloaded(quality)
+        } catch {
+            state = previousState
+            updateNowPlaying()
+            return .failed(error.localizedDescription)
+        }
+    }
+
     private func loadCurrent(autoplay: Bool) async {
         guard let track = queue.current else {
             player.replaceCurrentItem(with: nil)
@@ -138,7 +199,7 @@ public final class PlaybackService {
         }
         state = .loading
         do {
-            let url = try await resolver.musicURL(for: track, quality: .hiRes)
+            let url = try await resolver.musicURL(for: track, quality: preferredQuality)
             let item = AVPlayerItem(url: url)
             player.replaceCurrentItem(with: item)
             elapsed = 0

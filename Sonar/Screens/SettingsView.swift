@@ -107,7 +107,7 @@ struct SettingsView: View {
                             SettingsLabel(
                                 icon: "waveform.badge.magnifyingglass",
                                 title: "播放音质",
-                                subtitle: "\(preferences.preferredQuality.title) · 自动请求最高可用"
+                                subtitle: "\(playbackService.preferredQuality.title) 起，自动选可用的最高档"
                             )
                             Button("切换") {
                                 qualityTrack = playbackService.queue.current
