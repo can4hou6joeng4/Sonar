@@ -1,7 +1,109 @@
 import SwiftUI
 
+enum NCMDesignTokens {
+    struct Palette: Equatable, Sendable {
+        let background: String
+        let card: String
+        let ink: String
+        let secondaryInk: String
+        let tertiaryInk: String
+        let divider: String
+        let accent: String
+
+        static let light = Palette(
+            background: "#F5F7FB", card: "#FFFFFF", ink: "#0C0C23",
+            secondaryInk: "#838190", tertiaryInk: "#B6B6C0",
+            divider: "#E8E8EE", accent: "#FF3738"
+        )
+        static let dark = Palette(
+            background: "#0D0D11", card: "#1B1B1F", ink: "#F3F3F3",
+            secondaryInk: "#858587", tertiaryInk: "#55555E",
+            divider: "#232327", accent: "#FF3A39"
+        )
+    }
+
+    enum Typography {
+        static let homeTitle: CGFloat = 22
+        static let bannerTitle: CGFloat = 17
+        static let bannerSubtitle: CGFloat = 11.5
+        static let sectionTitle: CGFloat = 18
+        static let sectionAction: CGFloat = 12
+        static let shortcut: CGFloat = 13
+        static let playlistCardTitle: CGFloat = 13
+        static let playCount: CGFloat = 10
+        static let songTitle: CGFloat = 16
+        static let songSubtitle: CGFloat = 12
+        static let selectedTab: CGFloat = 17
+        static let tab: CGFloat = 16
+        static let miniPlayer: CGFloat = 15
+        static let libraryTitle: CGFloat = 30
+        static let playerTitle: CGFloat = 20
+        static let playerArtist: CGFloat = 13
+        static let timecode: CGFloat = 10.5
+        static let activeLyric: CGFloat = 19
+        static let lyric: CGFloat = 16
+        static let lyricTranslation: CGFloat = 13
+        static let queueTitle: CGFloat = 15
+        static let queueSubtitle: CGFloat = 12
+        static let qualityBadge: CGFloat = 9
+    }
+
+    enum Layout {
+        static let horizontalPadding: CGFloat = 16
+        static let navigationHeight: CGFloat = 44
+        static let tabBarHeight: CGFloat = 50
+        static let miniPlayerHeight: CGFloat = 56
+        static let songRowHeight: CGFloat = 60
+        static let minimumTouchTarget: CGFloat = 44
+        static let bottomContentSpacing: CGFloat = 12
+        static let miniPlayerHorizontalInset: CGFloat = 8
+        static let miniPlayerBottomSpacing: CGFloat = 2
+        static let miniArtworkSize: CGFloat = 44
+        static let miniControlSize: CGFloat = 34
+        static let bannerHeight: CGFloat = 116
+        static let bannerCornerRadius: CGFloat = 10
+        static let shortcutHeight: CGFloat = 34
+        static let shortcutCornerRadius: CGFloat = 10
+        static let shortcutSpacing: CGFloat = 9
+        static let playlistCardWidth: CGFloat = 112
+        static let playlistArtworkCornerRadius: CGFloat = 8
+        static let playlistRowHeight: CGFloat = 66
+        static let playlistArtworkSize: CGFloat = 50
+        static let queueRowHeight: CGFloat = 54
+    }
+
+    enum Player {
+        static let topLightness = 0.35
+        static let bottomLightness = 0.23
+        static let saturation = 0.15
+        static let fallbackHue = 40.0
+        static let discWidthRatio: CGFloat = 0.753
+        static let artworkRatio: CGFloat = 0.68
+        static let tonearmSizeRatio: CGFloat = 0.538
+        static let tonearmPivotRatio: CGFloat = 0.14
+        static let tonearmTopRatio: CGFloat = -0.282
+        static let discTopClearanceRatio: CGFloat = 0.36
+        static let primaryInk = Color.white.opacity(0.96)
+        static let secondaryInk = Color.white.opacity(0.62)
+        static let tertiaryInk = Color.white.opacity(0.34)
+        static let progressTrack = Color.white.opacity(0.24)
+    }
+
+    enum Layer {
+        static let tabRoot = 0.0
+        static let childPage = 5.0
+        static let miniPlayer = 19.0
+        static let tabBar = 20.0
+        static let player = 30.0
+        static let sheet = 40.0
+        static let toast = 60.0
+    }
+}
+
+// Compatibility layer for views that have not yet migrated to NCMDesignTokens.
+// The former seed-driven Material palette is intentionally gone.
 struct M3Scheme {
-    static let fallbackSeedHex = "#2196F3"
+    static let fallbackSeedHex = NCMDesignTokens.Palette.light.accent
 
     struct HexValues: Equatable, Sendable {
         let primary: String
@@ -59,86 +161,37 @@ struct M3Scheme {
     var appInputFill: Color { color(hex.appInputFill) }
     var capsuleBackground: Color { color(hex.capsuleBackground) }
 
-    static func tonalSpot(seedHex: String, dark: Bool) -> M3Scheme {
-        let normalizedSeed = normalizedHex(seedHex) ?? Self.fallbackSeedHex
-        let hue = ColorMath.lch(from: normalizedSeed).hue
-        let primary = { ColorMath.tone(hue: hue, chroma: 36, tone: $0) }
-        let secondary = { ColorMath.tone(hue: hue, chroma: 16, tone: $0) }
-        let tertiary = { ColorMath.tone(hue: (hue + 60).truncatingRemainder(dividingBy: 360), chroma: 24, tone: $0) }
-        let neutral = { ColorMath.tone(hue: hue, chroma: 6, tone: $0) }
-        let neutralVariant = { ColorMath.tone(hue: hue, chroma: 8, tone: $0) }
-
-        let values: HexValues
-        if dark {
-            let appSurface = neutral(10)
-            let containerHigh = neutral(17)
-            let primaryValue = primary(80)
-            values = HexValues(
-                primary: primaryValue,
-                onPrimary: primary(20),
-                primaryContainer: primary(30),
-                onPrimaryContainer: primary(90),
-                secondary: secondary(80),
-                secondaryContainer: secondary(30),
-                onSecondaryContainer: secondary(90),
-                tertiaryContainer: tertiary(30),
-                onTertiaryContainer: tertiary(90),
-                surface: neutral(6),
-                surfaceContainerLowest: neutral(4),
-                surfaceContainerLow: appSurface,
-                surfaceContainer: neutral(12),
-                surfaceContainerHigh: containerHigh,
-                surfaceContainerHighest: neutral(22),
-                onSurface: neutral(90),
-                onSurfaceVariant: neutralVariant(80),
-                outline: neutralVariant(60),
-                outlineVariant: neutralVariant(30),
-                error: "#FFB4AB",
-                onError: "#690005",
-                appSurface: appSurface,
-                appInputFill: ColorMath.mix(top: primaryValue, bottom: appSurface, alpha: 0.14),
-                capsuleBackground: ColorMath.mix(
-                    top: primaryValue,
-                    bottom: ColorMath.mix(top: containerHigh, bottom: appSurface, alpha: 0.90),
-                    alpha: 0.04
-                )
-            )
-        } else {
-            let appSurface = neutral(96)
-            let containerHigh = neutral(92)
-            let primaryValue = primary(40)
-            values = HexValues(
-                primary: primaryValue,
-                onPrimary: primary(100),
-                primaryContainer: primary(90),
-                onPrimaryContainer: primary(10),
-                secondary: secondary(40),
-                secondaryContainer: secondary(90),
-                onSecondaryContainer: secondary(10),
-                tertiaryContainer: tertiary(90),
-                onTertiaryContainer: tertiary(10),
-                surface: neutral(98),
-                surfaceContainerLowest: neutral(100),
-                surfaceContainerLow: appSurface,
-                surfaceContainer: neutral(94),
-                surfaceContainerHigh: containerHigh,
-                surfaceContainerHighest: neutral(90),
-                onSurface: neutral(10),
-                onSurfaceVariant: neutralVariant(30),
-                outline: neutralVariant(50),
-                outlineVariant: neutralVariant(80),
-                error: "#BA1A1A",
-                onError: "#FFFFFF",
-                appSurface: appSurface,
-                appInputFill: ColorMath.mix(top: primaryValue, bottom: appSurface, alpha: 0.07),
-                capsuleBackground: ColorMath.mix(
-                    top: primaryValue,
-                    bottom: ColorMath.mix(top: containerHigh, bottom: appSurface, alpha: 0.90),
-                    alpha: 0.025
-                )
-            )
-        }
-        return M3Scheme(seedHex: normalizedSeed, isDark: dark, hex: values)
+    static func tonalSpot(seedHex _: String, dark: Bool) -> M3Scheme {
+        let palette = dark ? NCMDesignTokens.Palette.dark : .light
+        let primaryContainer = dark ? "#5A1F20" : "#FFE3E3"
+        let elevatedCard = dark ? "#202025" : "#F0F1F5"
+        let values = HexValues(
+            primary: palette.accent,
+            onPrimary: "#FFFFFF",
+            primaryContainer: primaryContainer,
+            onPrimaryContainer: dark ? "#FFFFFF" : palette.ink,
+            secondary: palette.accent,
+            secondaryContainer: primaryContainer,
+            onSecondaryContainer: dark ? "#FFFFFF" : palette.ink,
+            tertiaryContainer: primaryContainer,
+            onTertiaryContainer: dark ? "#FFFFFF" : palette.ink,
+            surface: palette.background,
+            surfaceContainerLowest: palette.background,
+            surfaceContainerLow: palette.card,
+            surfaceContainer: palette.card,
+            surfaceContainerHigh: elevatedCard,
+            surfaceContainerHighest: elevatedCard,
+            onSurface: palette.ink,
+            onSurfaceVariant: palette.secondaryInk,
+            outline: palette.tertiaryInk,
+            outlineVariant: palette.divider,
+            error: palette.accent,
+            onError: "#FFFFFF",
+            appSurface: palette.background,
+            appInputFill: palette.card,
+            capsuleBackground: palette.card
+        )
+        return M3Scheme(seedHex: palette.accent, isDark: dark, hex: values)
     }
 
     static func normalizedHex(_ value: String) -> String? {
@@ -150,51 +203,6 @@ struct M3Scheme {
     }
 
     static func mixHex(top: String, bottom: String, alpha: Double) -> String {
-        ColorMath.mix(top: top, bottom: bottom, alpha: alpha)
-    }
-
-    private func color(_ value: String) -> Color {
-        Color(hex: value) ?? .clear
-    }
-}
-
-private enum ColorMath {
-    private static let whitePoint = (x: 0.95047, y: 1.0, z: 1.08883)
-
-    struct LCh {
-        let lightness: Double
-        let chroma: Double
-        let hue: Double
-    }
-
-    static func lch(from hex: String) -> LCh {
-        let xyz = rgbToXYZ(rgb(from: hex))
-        let lab = xyzToLab(xyz)
-        var hue = atan2(lab.b, lab.a) * 180 / .pi
-        if hue < 0 { hue += 360 }
-        return LCh(lightness: lab.lightness, chroma: hypot(lab.a, lab.b), hue: hue)
-    }
-
-    static func tone(hue: Double, chroma: Double, tone: Double) -> String {
-        let radians = hue * .pi / 180
-        let full = labToRGB(lightness: tone, a: chroma * cos(radians), b: chroma * sin(radians))
-        if inGamut(full) { return hex(from: full) }
-
-        var low = 0.0
-        var high = chroma
-        for _ in 0..<18 {
-            let candidate = (low + high) / 2
-            let rgb = labToRGB(
-                lightness: tone,
-                a: candidate * cos(radians),
-                b: candidate * sin(radians)
-            )
-            if inGamut(rgb) { low = candidate } else { high = candidate }
-        }
-        return hex(from: labToRGB(lightness: tone, a: low * cos(radians), b: low * sin(radians)))
-    }
-
-    static func mix(top: String, bottom: String, alpha: Double) -> String {
         let topRGB = rgb(from: top)
         let bottomRGB = rgb(from: bottom)
         return hex(from: (
@@ -204,70 +212,18 @@ private enum ColorMath {
         ))
     }
 
+    private func color(_ value: String) -> Color {
+        Color(hex: value) ?? .clear
+    }
+
     private static func rgb(from hex: String) -> (red: Double, green: Double, blue: Double) {
-        let digits = M3Scheme.normalizedHex(hex)?.dropFirst() ?? "000000"
+        let digits = normalizedHex(hex)?.dropFirst() ?? "000000"
         let value = UInt64(digits, radix: 16) ?? 0
         return (
             Double((value >> 16) & 0xFF),
             Double((value >> 8) & 0xFF),
             Double(value & 0xFF)
         )
-    }
-
-    private static func rgbToXYZ(_ rgb: (red: Double, green: Double, blue: Double)) -> (x: Double, y: Double, z: Double) {
-        let red = linearize(rgb.red)
-        let green = linearize(rgb.green)
-        let blue = linearize(rgb.blue)
-        return (
-            0.4124564 * red + 0.3575761 * green + 0.1804375 * blue,
-            0.2126729 * red + 0.7151522 * green + 0.0721750 * blue,
-            0.0193339 * red + 0.1191920 * green + 0.9503041 * blue
-        )
-    }
-
-    private static func xyzToLab(_ xyz: (x: Double, y: Double, z: Double)) -> (lightness: Double, a: Double, b: Double) {
-        let fx = labForward(xyz.x / whitePoint.x)
-        let fy = labForward(xyz.y / whitePoint.y)
-        let fz = labForward(xyz.z / whitePoint.z)
-        return (116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz))
-    }
-
-    private static func labToRGB(lightness: Double, a: Double, b: Double) -> (red: Double, green: Double, blue: Double) {
-        let fy = (lightness + 16) / 116
-        let fx = fy + a / 500
-        let fz = fy - b / 200
-        let x = whitePoint.x * labInverse(fx)
-        let y = whitePoint.y * labInverse(fy)
-        let z = whitePoint.z * labInverse(fz)
-        return (
-            delinearize(3.2404542 * x - 1.5371385 * y - 0.4985314 * z),
-            delinearize(-0.9692660 * x + 1.8760108 * y + 0.0415560 * z),
-            delinearize(0.0556434 * x - 0.2040259 * y + 1.0572252 * z)
-        )
-    }
-
-    private static func linearize(_ component: Double) -> Double {
-        let value = component / 255
-        return value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
-    }
-
-    private static func delinearize(_ component: Double) -> Double {
-        255 * (component <= 0.0031308 ? 12.92 * component : 1.055 * pow(component, 1 / 2.4) - 0.055)
-    }
-
-    private static func labForward(_ value: Double) -> Double {
-        value > 0.008856452 ? pow(value, 1 / 3) : 7.787037 * value + 16 / 116
-    }
-
-    private static func labInverse(_ value: Double) -> Double {
-        let cube = value * value * value
-        return cube > 0.008856452 ? cube : (value - 16 / 116) / 7.787037
-    }
-
-    private static func inGamut(_ rgb: (red: Double, green: Double, blue: Double)) -> Bool {
-        (-0.6...255.6).contains(rgb.red)
-            && (-0.6...255.6).contains(rgb.green)
-            && (-0.6...255.6).contains(rgb.blue)
     }
 
     private static func hex(from rgb: (red: Double, green: Double, blue: Double)) -> String {

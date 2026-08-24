@@ -8,7 +8,6 @@ struct KaraokeLyricsView: View {
     let edgeFadeEnabled: Bool
 
     @Environment(PlaybackService.self) private var playbackService
-    @Environment(\.playerPalette) private var palette
     @Environment(\.sonarReduceMotion) private var reduceMotion
     @State private var state = KaraokeLyricsViewState()
 
@@ -31,15 +30,15 @@ struct KaraokeLyricsView: View {
     }
 
     private var lyricsContent: some View {
-        VStack(spacing: 0) {
-            GeometryReader { geometry in
+        GeometryReader { geometry in
+            ZStack {
                 ScrollView(.vertical, showsIndicators: false) {
-                    LazyVStack(alignment: .leading, spacing: 2) {
-                        Color.clear.frame(height: 102)
+                    LazyVStack(alignment: .center, spacing: 0) {
+                        Color.clear.frame(height: geometry.size.height * 0.40)
                         ForEach(lyrics.lines) { line in
                             measuredLine(line)
                         }
-                        Color.clear.frame(height: 92)
+                        Color.clear.frame(height: geometry.size.height * 0.60)
                     }
                     .coordinateSpace(name: KaraokeCoordinateSpace.content)
                     .background {
@@ -68,10 +67,33 @@ struct KaraokeLyricsView: View {
                     KaraokeFrameTicker(state: state)
                 }
                 .accessibilityIdentifier("karaoke-lyrics-list")
-            }
 
-            if lyrics.hasTranslation {
-                translationToggle
+                if lyrics.isSynthesized {
+                    Text("这首歌没有逐字歌词 · 已按字数合成")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(NCMDesignTokens.Player.tertiaryInk)
+                        .frame(maxWidth: .infinity)
+                        .frame(maxHeight: .infinity, alignment: .top)
+                        .padding(.top, 2)
+                        .allowsHitTesting(false)
+                }
+
+                if state.userScrollLocked {
+                    Button {
+                        state.resumeFollowing(at: .now)
+                    } label: {
+                        Label("回到当前", systemImage: "play.fill")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(NCMDesignTokens.Player.primaryInk)
+                            .padding(.horizontal, 14)
+                            .frame(height: 30)
+                            .background(.white.opacity(0.16), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, 8)
+                    .accessibilityIdentifier("lyrics-return-current")
+                }
             }
         }
     }
@@ -84,51 +106,18 @@ struct KaraokeLyricsView: View {
                 showTranslation: state.showTranslation,
                 onSelect: { select(line) }
             )
-            .offset(y: state.waveOffsets[line.id, default: 0])
         }
-    }
-
-    private var translationToggle: some View {
-        HStack {
-            Spacer()
-            Button {
-                state.toggleTranslation(at: .now)
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "character.bubble")
-                        .font(.system(size: 16, weight: .medium))
-                        .rotationEffect(.degrees(state.showTranslation ? 0 : -28.8))
-                    Text(state.showTranslation ? "隐藏翻译" : "显示翻译")
-                        .font(.system(size: 12, weight: .medium))
-                }
-                .foregroundStyle(palette.ink.opacity(0.78))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(
-                    palette.ink.opacity(state.showTranslation ? 0.11 : 0.06),
-                    in: Capsule()
-                )
-            }
-            .buttonStyle(.plain)
-            .animation(
-                AppMotion.emphasized(duration: AppMotion.medium, reduceMotion: reduceMotion),
-                value: state.showTranslation
-            )
-            .accessibilityIdentifier("lyrics-translation-toggle")
-        }
-        .padding(.top, 4)
-        .padding(.bottom, 10)
     }
 
     private var emptyState: some View {
         VStack(spacing: 12) {
-            Image(systemName: "captions.bubble")
-                .font(.system(size: 40, weight: .regular))
+            Image(systemName: "music.note")
+                .font(.system(size: 34, weight: .regular))
             Text(errorMessage ?? "暂无歌词")
-                .font(.system(size: 16, weight: .medium))
+                .font(.system(size: 14, weight: .medium))
                 .multilineTextAlignment(.center)
         }
-        .foregroundStyle(palette.ink)
+        .foregroundStyle(NCMDesignTokens.Player.tertiaryInk)
         .padding(28)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -153,7 +142,7 @@ struct KaraokeLyricsView: View {
 @MainActor
 @Observable
 private final class KaraokeLyricsViewState {
-    private static let scrollAnchor = 0.42
+    private static let scrollAnchor = 0.40
     private static let springStiffness = 210.0
     private static let springDamping = 27.0
     private static let waveStiffness = 200.0
@@ -180,7 +169,7 @@ private final class KaraokeLyricsViewState {
     private var spring = ScrollSpring()
     private var waves: [Int: WaveState] = [:]
     private var waveStartedAt: Date?
-    private var userScrollLocked = false
+    private(set) var userScrollLocked = false
     private var unlockAt: Date?
     private var blurRestoreAt: Date?
     private var selectionClearAt: Date?
@@ -290,8 +279,19 @@ private final class KaraokeLyricsViewState {
 
     func userScrollEnded(at date: Date) {
         guard userScrollLocked else { return }
-        unlockAt = date.addingTimeInterval(1.8)
-        blurRestoreAt = date.addingTimeInterval(3.0)
+        unlockAt = date.addingTimeInterval(AppMotion.lyricsFollowResume)
+        blurRestoreAt = date.addingTimeInterval(AppMotion.lyricsFollowResume)
+    }
+
+    func resumeFollowing(at date: Date) {
+        userScrollLocked = false
+        unlockAt = nil
+        blurSuppressed = false
+        blurRestoreAt = nil
+        guard let activeIndex else { return }
+        let target = targetOffset(for: activeIndex)
+        startSpring(to: target.offset, isRough: target.isRough)
+        lastFrameDate = date
     }
 
     func selectLine(_ index: Int, startMs: Int, at date: Date) {
@@ -317,21 +317,14 @@ private final class KaraokeLyricsViewState {
     }
 
     func opacity(for index: Int) -> Double {
-        guard let activeIndex else { return 0.24 }
+        guard let activeIndex else { return 0.3 }
         guard index != activeIndex else { return 1 }
         let distance = min(abs(index - activeIndex), 6)
-        return min(max(0.58 - Double(distance) * 0.055, 0.24), 0.53)
+        return max(0.3, 1 - Double(distance) * 0.13)
     }
 
-    func blurRadius(for index: Int) -> CGFloat {
-        guard !blurSuppressed, !reduceMotion, let activeIndex else { return 0 }
-        switch abs(index - activeIndex) {
-        case 0: return 0
-        case 1: return 1.1
-        case 2: return 2
-        case 3: return 3
-        default: return 3.65
-        }
+    func blurRadius(for _: Int) -> CGFloat {
+        0
     }
 
     private func effectiveSeconds(at date: Date) -> TimeInterval {
@@ -570,26 +563,32 @@ private struct KaraokeFrameTicker: View {
 }
 
 private struct KaraokeLyricLineView: View {
+    @Environment(\.sonarReduceMotion) private var reduceMotion
+
     let line: KaraokeLine
     let state: KaraokeLyricsViewState
     let showTranslation: Bool
     let onSelect: () -> Void
 
-    @Environment(\.playerPalette) private var palette
-    @Environment(\.sonarReduceMotion) private var reduceMotion
-
     private var isActive: Bool { state.activeIndex == line.id }
-    private var isSelected: Bool { state.selectedIndex == line.id }
 
     var body: some View {
         Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: 0) {
-                KaraokeTokenLine(line: line, state: state, isActive: isActive)
+            VStack(alignment: .center, spacing: 0) {
+                if isActive {
+                    KaraokeTokenLine(line: line, state: state, isActive: true)
+                } else {
+                    Text(line.text)
+                        .font(.system(size: NCMDesignTokens.Typography.lyric, weight: .medium))
+                        .foregroundStyle(NCMDesignTokens.Player.tertiaryInk)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                }
 
                 if let translation = line.translation {
                     KaraokeSupplementLine(
                         text: translation,
-                        size: 14,
+                        size: NCMDesignTokens.Typography.lyricTranslation,
                         visible: showTranslation
                     )
                 }
@@ -602,42 +601,19 @@ private struct KaraokeLyricLineView: View {
                     )
                 }
             }
-            .scaleEffect(isActive ? 1 : 0.95, anchor: .leading)
-            .animation(focusAnimation, value: isActive)
-            .padding(.horizontal, isSelected ? 18 : 0)
-            .padding(.vertical, 11)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                palette.ink.opacity(isSelected ? 0.075 : 0),
-                in: RoundedRectangle(cornerRadius: 22, style: .continuous)
-            )
+            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .center)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(palette.muted)
         .opacity(state.opacity(for: line.id))
-        .blur(radius: state.blurRadius(for: line.id))
-        .animation(
-            AppMotion.emphasized(duration: AppMotion.medium, reduceMotion: reduceMotion),
-            value: state.blurSuppressed
-        )
         .animation(
             AppMotion.emphasized(duration: AppMotion.medium, reduceMotion: reduceMotion),
             value: state.activeIndex
-        )
-        .animation(
-            AppMotion.emphasized(duration: AppMotion.medium, reduceMotion: reduceMotion),
-            value: isSelected
         )
         .accessibilityLabel(line.text)
         .accessibilityHint("双击跳转到这一句")
         .accessibilityIdentifier("karaoke-line-\(line.id)")
         .accessibilityAddTraits(isActive ? .isSelected : [])
-    }
-
-    private var focusAnimation: Animation? {
-        guard !reduceMotion else { return nil }
-        let animation = Animation.timingCurve(0.25, 0, 0.2, 1, duration: isActive ? 0.6 : 0.5)
-        return isActive ? animation : animation.delay(0.1)
     }
 }
 
@@ -671,7 +647,7 @@ private struct KaraokeTokenLine: View {
                 )
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 }
 
@@ -701,7 +677,7 @@ private struct KaraokeTokenView: View {
 
     private var tokenText: some View {
         Text(token.text)
-            .font(.system(size: 32, weight: .medium))
+            .font(.system(size: NCMDesignTokens.Typography.activeLyric, weight: .bold))
             .tracking(0)
     }
 }
@@ -736,29 +712,37 @@ private struct KaraokeTokenWrapLayout: Layout {
 
     private func layout(proposal: ProposedViewSize, subviews: Subviews) -> (size: CGSize, points: [CGPoint]) {
         let availableWidth = max(1, proposal.width ?? .greatestFiniteMagnitude)
-        var points: [CGPoint] = []
-        var x: CGFloat = 0
-        var y: CGFloat = 0
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        var rows: [(range: Range<Int>, width: CGFloat, height: CGFloat)] = []
+        var rowStart = 0
+        var rowWidth: CGFloat = 0
         var rowHeight: CGFloat = 0
-        var usedWidth: CGFloat = 0
 
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x > 0, x + size.width > availableWidth {
-                y += rowHeight
-                x = 0
+        for (index, size) in sizes.enumerated() {
+            if index > rowStart, rowWidth + size.width > availableWidth {
+                rows.append((rowStart..<index, rowWidth, rowHeight))
+                rowStart = index
+                rowWidth = 0
                 rowHeight = 0
             }
-            points.append(CGPoint(x: x, y: y))
-            x += size.width
+            rowWidth += size.width
             rowHeight = max(rowHeight, size.height)
-            usedWidth = max(usedWidth, x)
+        }
+        if rowStart < sizes.count {
+            rows.append((rowStart..<sizes.count, rowWidth, rowHeight))
         }
 
-        return (
-            CGSize(width: min(availableWidth, usedWidth), height: y + rowHeight),
-            points
-        )
+        var points = Array(repeating: CGPoint.zero, count: sizes.count)
+        var y: CGFloat = 0
+        for row in rows {
+            var x = max(0, (availableWidth - row.width) / 2)
+            for index in row.range {
+                points[index] = CGPoint(x: x, y: y)
+                x += sizes[index].width
+            }
+            y += row.height
+        }
+        return (CGSize(width: availableWidth, height: y), points)
     }
 }
 
@@ -767,14 +751,15 @@ private struct KaraokeSupplementLine: View {
     let size: CGFloat
     let visible: Bool
 
-    @Environment(\.playerPalette) private var palette
     @Environment(\.sonarReduceMotion) private var reduceMotion
     @State private var naturalHeight: CGFloat = 0
 
     var body: some View {
         Text(text)
             .font(.system(size: size, weight: .regular))
-            .foregroundStyle(palette.muted)
+            .foregroundStyle(NCMDesignTokens.Player.tertiaryInk)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
             .fixedSize(horizontal: false, vertical: true)
             .background {
                 GeometryReader { geometry in
@@ -834,13 +819,11 @@ private struct KaraokeEdgeFadeMask: View {
 
     var body: some View {
         if enabled, height > 0 {
-            let extent = min(48, height * 0.18)
-            let location = extent / height
             LinearGradient(
                 stops: [
                     .init(color: .clear, location: 0),
-                    .init(color: .black, location: location),
-                    .init(color: .black, location: 1 - location),
+                    .init(color: .black, location: 0.12),
+                    .init(color: .black, location: 0.88),
                     .init(color: .clear, location: 1),
                 ],
                 startPoint: .top,

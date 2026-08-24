@@ -8,6 +8,12 @@ private enum ShellLayer: Hashable {
     case capsule
 }
 
+private enum ShellSheet: String, Identifiable {
+    case queue
+
+    var id: String { rawValue }
+}
+
 private struct ShellSafeAreaInsetsKey: EnvironmentKey {
     static let defaultValue = EdgeInsets()
 }
@@ -29,9 +35,9 @@ struct RootView: View {
     @Environment(\.m3Scheme) private var scheme
     @Environment(\.sonarReduceMotion) private var reduceMotion
 
-    @State private var selectedTab: ShellTab = .discover
+    @State private var selectedTab: ShellTab = .home
     @State private var pullController = PlayerPullController()
-    @State private var capsuleScrollController = BottomCapsuleScrollController()
+    @State private var presentedSheet: ShellSheet?
 
     private var successfullyLoadedTrackID: String? {
         switch playbackService.state {
@@ -45,104 +51,113 @@ struct RootView: View {
     var body: some View {
         GeometryReader { proxy in
             let safeBottom = proxy.safeAreaInsets.bottom
-            let travelExtent = 58 + max(safeBottom, 10)
 
             ZStack(alignment: .bottom) {
                 routeContent
                     .id(ShellLayer.route)
                     .accessibilityHidden(pullController.pull > 0)
                     .environment(\.shellSafeAreaInsets, proxy.safeAreaInsets)
-                    .environment(
-                        \.capsuleScrollReporter,
-                        CapsuleScrollReporter(
-                            update: { delta in
-                                capsuleScrollController.update(delta: delta, travelExtent: travelExtent)
-                            },
-                            settle: {
-                                capsuleScrollController.settle(reduceMotion: reduceMotion)
-                            }
+
+                ZStack {
+                    if pullController.playerMounted {
+                        PlayerPage(
+                            sourceRuntime: sourceRuntime,
+                            pullController: pullController,
+                            viewportHeight: proxy.size.height,
+                            onClose: { pullController.close(reduceMotion: reduceMotion) }
                         )
-                    )
-
-                if pullController.playerMounted {
-                    PlayerPage(
-                        sourceRuntime: sourceRuntime,
-                        pullController: pullController,
-                        viewportHeight: proxy.size.height
-                    )
-                    .frame(width: proxy.size.width, height: proxy.size.height)
-                    .offset(y: CGFloat(1 - pullController.pull) * proxy.size.height)
-                    .allowsHitTesting(pullController.pull > 0)
-                    .accessibilityHidden(pullController.pull == 0)
-                    .id(ShellLayer.player)
-                    .zIndex(1)
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                        .scaleEffect(pullController.scale)
+                        .opacity(pullController.opacity)
+                        .offset(y: CGFloat(1 - pullController.pull) * proxy.size.height + pullController.translationY)
+                        .id(ShellLayer.player)
+                    }
                 }
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                // The player stays mounted after closing; clip this layer without clipping bottom chrome.
+                .clipped()
+                .allowsHitTesting(pullController.pull > 0)
+                .accessibilityHidden(pullController.pull == 0)
+                .zIndex(NCMDesignTokens.Layer.player)
 
-                BottomCapsule(
+                NCMMiniPlayer(
+                    onOpenPlayer: { pullController.open(reduceMotion: reduceMotion) },
+                    onOpenQueue: { presentedSheet = .queue }
+                )
+                .padding(.horizontal, NCMDesignTokens.Layout.miniPlayerHorizontalInset)
+                .padding(.bottom, NCMDesignTokens.Layout.tabBarHeight + safeBottom + NCMDesignTokens.Layout.miniPlayerBottomSpacing)
+                .offset(y: safeBottom)
+                .opacity(pullController.toolbarReveal)
+                .allowsHitTesting(pullController.pull == 0)
+                .zIndex(NCMDesignTokens.Layer.miniPlayer)
+
+                NCMTextTabBar(
                     selectedTab: selectedTab,
-                    availableWidth: proxy.size.width,
                     safeBottom: safeBottom,
-                    pullController: pullController,
-                    scrollController: capsuleScrollController,
-                    onSelectTab: selectTab
+                    onSelect: selectTab
                 )
                 .id(ShellLayer.capsule)
-                .zIndex(2)
+                .offset(y: safeBottom)
+                .opacity(pullController.toolbarReveal)
+                .allowsHitTesting(pullController.pull == 0)
+                .zIndex(NCMDesignTokens.Layer.tabBar)
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
-            // 收起的播放器仍常驻在 Shell 下方；裁剪可避免它从底部安全区露出。
-            .clipped()
         }
-        .background(scheme.appSurface.ignoresSafeArea())
+        .background {
+            ZStack {
+                scheme.appSurface
+                if pullController.playerMounted {
+                    FlowingLightBackground(track: playbackService.queue.current)
+                        .opacity(pullController.pull)
+                }
+            }
+            .ignoresSafeArea()
+        }
         .ignoresSafeArea(.keyboard, edges: .bottom)
-        .onChange(of: selectedTab) { _, _ in
-            capsuleScrollController.showImmediately()
-        }
-        .onChange(of: pullController.pull) { _, pull in
-            if pull == 0 { capsuleScrollController.showImmediately() }
-        }
         .task(id: playbackService.queue.current?.musicID, updateArtworkAndTheme)
         .task(id: successfullyLoadedTrackID, recordRecentTrack)
         .overlay(alignment: .bottom) {
             ToastOverlay()
-                .padding(.bottom, 96)
-                .zIndex(30)
+                .padding(.bottom, 156)
+                .zIndex(NCMDesignTokens.Layer.toast)
+        }
+        .sheet(item: $presentedSheet) { destination in
+            switch destination {
+            case .queue:
+                QueueSheet()
+                    .presentationDetents([.fraction(0.72)])
+                    .presentationDragIndicator(.hidden)
+            }
         }
     }
 
     private var routeContent: some View {
         ZStack {
             NavigationStack {
-                DiscoverView(runtime: sourceRuntime, isActive: selectedTab == .discover)
+                DiscoverView(runtime: sourceRuntime, isActive: selectedTab == .home)
             }
-            .opacity(selectedTab == .discover ? 1 : 0)
-            .allowsHitTesting(selectedTab == .discover)
-            .accessibilityHidden(selectedTab != .discover)
+            .opacity(selectedTab == .home ? 1 : 0)
+            .allowsHitTesting(selectedTab == .home)
+            .accessibilityHidden(selectedTab != .home)
 
             NavigationStack {
-                SongsView(isActive: selectedTab == .songs)
+                SongsView(isActive: selectedTab == .library)
             }
-            .opacity(selectedTab == .songs ? 1 : 0)
-            .allowsHitTesting(selectedTab == .songs)
-            .accessibilityHidden(selectedTab != .songs)
-
-            NavigationStack {
-                SettingsView()
-            }
-            .opacity(selectedTab == .settings ? 1 : 0)
-            .allowsHitTesting(selectedTab == .settings)
-            .accessibilityHidden(selectedTab != .settings)
+            .opacity(selectedTab == .library ? 1 : 0)
+            .allowsHitTesting(selectedTab == .library)
+            .accessibilityHidden(selectedTab != .library)
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            Color.clear.frame(height: 76)
+            Color.clear.frame(
+                height: NCMDesignTokens.Layout.miniPlayerHeight
+                    + NCMDesignTokens.Layout.tabBarHeight
+                    + NCMDesignTokens.Layout.bottomContentSpacing
+            )
         }
     }
 
     private func selectTab(_ tab: ShellTab) {
-        if tab == .player {
-            pullController.open(reduceMotion: reduceMotion)
-            return
-        }
         selectedTab = tab
     }
 

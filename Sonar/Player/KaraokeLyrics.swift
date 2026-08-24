@@ -39,6 +39,7 @@ struct KaraokeLyrics: Equatable, Sendable {
     )
 
     let lines: [KaraokeLine]
+    let isSynthesized: Bool
 
     var hasTranslation: Bool {
         lines.contains { $0.translation?.isEmpty == false }
@@ -48,15 +49,17 @@ struct KaraokeLyrics: Equatable, Sendable {
         lines.contains { $0.romanization?.isEmpty == false }
     }
 
-    init(lines: [KaraokeLine] = []) {
+    init(lines: [KaraokeLine] = [], isSynthesized: Bool = false) {
         self.lines = lines
+        self.isSynthesized = isSynthesized
     }
 
     init(info: LyricInfo) {
         let translations = LRCParser.parse(info.tlyric ?? "")
         let romanizations = LRCParser.parse(info.rlyric ?? "")
-        let parsed = Self.parseTimed(info.lxlyric)
-            ?? Self.synthesizeFallback(info.lyric)
+        let timed = Self.parseTimed(info.lxlyric)
+        let parsed = timed ?? Self.synthesizeFallback(info.lyric)
+        isSynthesized = timed == nil
 
         lines = parsed.enumerated().map { index, rawLine in
             KaraokeLine(

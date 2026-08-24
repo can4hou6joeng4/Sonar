@@ -1,6 +1,54 @@
 import Foundation
 import Observation
 
+enum DiscoveryContent {
+    static func merged(_ pages: [MusicSource: [PlaylistSummary]]) -> [PlaylistSummary] {
+        let sourceLists = MusicSource.allCases.map { pages[$0] ?? [] }
+        let maximumCount = sourceLists.map(\.count).max() ?? 0
+        var seen = Set<String>()
+        var result: [PlaylistSummary] = []
+
+        for index in 0..<maximumCount {
+            for list in sourceLists where list.indices.contains(index) {
+                let playlist = list[index]
+                if seen.insert(normalizedIdentity(for: playlist)).inserted {
+                    result.append(playlist)
+                }
+            }
+        }
+        return result
+    }
+
+    static func deduplicatedTracks(_ tracks: [Track]) -> [Track] {
+        var seen = Set<String>()
+        return tracks.filter { seen.insert($0.musicID).inserted }
+    }
+
+    static func playCountValue(_ text: String) -> Double {
+        let compact = text.replacingOccurrences(of: ",", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let multiplier: Double
+        if compact.contains("亿") {
+            multiplier = 100_000_000
+        } else if compact.contains("万") {
+            multiplier = 10_000
+        } else {
+            multiplier = 1
+        }
+        let numeric = compact.filter { ($0 >= "0" && $0 <= "9") || $0 == "." }
+        return (Double(numeric) ?? 0) * multiplier
+    }
+
+    private static func normalizedIdentity(for playlist: PlaylistSummary) -> String {
+        let name = playlist.name.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .filter { !$0.isWhitespace && !$0.isPunctuation }
+        let author = playlist.author.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .filter { !$0.isWhitespace && !$0.isPunctuation }
+        let semanticKey = "\(name)|\(author)"
+        return semanticKey == "|" ? playlist.key : semanticKey
+    }
+}
+
 struct DiscoveryPageState: Sendable {
     var items: [PlaylistSummary] = []
     var isLoading = false

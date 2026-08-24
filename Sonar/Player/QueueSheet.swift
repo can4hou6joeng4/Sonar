@@ -1,141 +1,261 @@
 import SwiftUI
 
+enum QueueDragMetrics {
+    static let rowHeight = NCMDesignTokens.Layout.queueRowHeight
+
+    static func destination(from index: Int, translation: CGFloat, count: Int) -> Int {
+        guard count > 0 else { return 0 }
+        return min(max(index + Int((translation / rowHeight).rounded()), 0), count - 1)
+    }
+
+    static func insertionOffset(from source: Int, to destination: Int) -> Int {
+        source < destination ? destination + 1 : destination
+    }
+
+    static func rowOffset(index: Int, source: Int, destination: Int, translation: CGFloat) -> CGFloat {
+        if index == source { return translation }
+        if source < destination, index > source, index <= destination { return -rowHeight }
+        if source > destination, index >= destination, index < source { return rowHeight }
+        return 0
+    }
+}
+
 struct QueueSheet: View {
-    @Environment(PlaybackService.self) private var playbackService
     @Environment(\.playerPalette) private var palette
-    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        QueueFace()
+            .padding(.top, 8)
+            .background(palette.queueBackground.ignoresSafeArea())
+    }
+}
+
+struct QueueFace: View {
+    @Environment(PlaybackService.self) private var playbackService
+    @Environment(ToastCenter.self) private var toastCenter
+    @Environment(\.m3Scheme) private var scheme
+    @State private var drag: DragState?
 
     var body: some View {
         VStack(spacing: 0) {
-            Capsule()
-                .fill(palette.ink.opacity(0.18))
-                .frame(width: 38, height: 4)
-                .padding(.top, 10)
-
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("播放列表")
-                        .font(.system(size: 22, weight: .semibold))
-                        .accessibilityIdentifier("playback-queue-list")
-                    Text("\(playbackService.queue.tracks.count) 首 · 顺序播放")
-                        .font(.system(size: 12.5, weight: .medium))
-                        .foregroundStyle(palette.muted)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 17, weight: .semibold))
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("关闭")
-                .accessibilityIdentifier("playback-queue-close")
-            }
-            .padding(.leading, 22)
-            .padding(.trailing, 14)
-            .padding(.top, 12)
-            .padding(.bottom, 12)
-
-            Rectangle()
-                .fill(palette.ink.opacity(0.08))
-                .frame(height: 1)
-
+            header
             if playbackService.queue.tracks.isEmpty {
-                ContentUnavailableView("播放列表为空", systemImage: "music.note.list")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                emptyState
             } else {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(spacing: 6) {
-                            ForEach(Array(playbackService.queue.tracks.enumerated()), id: \.offset) { index, track in
-                                queueRow(track: track, index: index)
-                                    .id(index)
-                            }
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
+                queueList
+            }
+        }
+        .foregroundStyle(NCMDesignTokens.Player.primaryInk)
+        .accessibilityIdentifier("playback-queue-list")
+    }
+
+    private var header: some View {
+        HStack(spacing: 10) {
+            Text("当前播放 (\(playbackService.queue.tracks.count))")
+                .font(.system(size: 16, weight: .bold))
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button(action: cycleMode) {
+                Label(playbackService.playbackMode.title, systemImage: playbackService.playbackMode.systemImage)
+                    .font(.system(size: 12, weight: .medium))
+                    .labelStyle(.titleAndIcon)
+                    .frame(minHeight: 44)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(NCMDesignTokens.Player.secondaryInk)
+            .accessibilityIdentifier("queue-playback-mode")
+
+            Button {
+                playbackService.clearUpcoming()
+            } label: {
+                Image(systemName: "trash")
+                    .font(.system(size: 16, weight: .medium))
+                    .frame(width: 30, height: 44)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(NCMDesignTokens.Player.secondaryInk)
+            .disabled(playbackService.queue.currentIndex == nil)
+            .accessibilityLabel("清空待播")
+            .accessibilityIdentifier("queue-clear-upcoming")
+        }
+        .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
+        .frame(height: 44)
+    }
+
+    private var queueList: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(playbackService.queue.tracks.enumerated()), id: \.offset) { index, track in
+                        queueRow(track: track, index: index)
+                            .id(index)
                     }
-                    .scrollIndicators(.hidden)
-                    .onAppear {
-                        guard let index = playbackService.queue.currentIndex else { return }
-                        Task { @MainActor in
-                            await Task.yield()
-                            proxy.scrollTo(index, anchor: .center)
-                        }
-                    }
+                }
+            }
+            .scrollIndicators(.hidden)
+            .mask(queueFade)
+            .coordinateSpace(name: "ncm-player-queue")
+            .onAppear {
+                guard let index = playbackService.queue.currentIndex else { return }
+                Task { @MainActor in
+                    await Task.yield()
+                    proxy.scrollTo(index, anchor: .center)
                 }
             }
         }
-        .foregroundStyle(palette.ink)
-        .background(palette.queueBackground.ignoresSafeArea())
     }
 
     private func queueRow(track: Track, index: Int) -> some View {
         let isCurrent = playbackService.queue.currentIndex == index
-        return Button {
-            Task { await playbackService.selectQueueItem(at: index) }
-        } label: {
-            HStack(spacing: 12) {
-                PlayerArtwork(track: track, size: 50)
-                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(track.title)
-                        .font(.system(size: 14.5, weight: isCurrent ? .semibold : .medium))
-                        .foregroundStyle(isCurrent ? palette.ink : palette.ink.opacity(0.86))
-                        .lineLimit(1)
-                    Text([track.artist, track.album].filter { !$0.isEmpty }.joined(separator: " · "))
-                        .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(palette.muted)
-                        .lineLimit(1)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                if isCurrent {
-                    QueuePlayingBars(isPlaying: playbackService.state == .playing)
-                } else {
-                    Text(track.highestKnownQuality.badgeTitle.uppercased())
-                        .font(.system(size: 9.5, weight: .semibold))
-                        .foregroundStyle(palette.muted.opacity(0.78))
-                }
-            }
-            .padding(.leading, 8)
-            .padding(.trailing, 10)
-            .frame(height: 66)
-            .background(
-                isCurrent ? palette.ink.opacity(0.075) : .clear,
-                in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+        let destination = drag.map {
+            QueueDragMetrics.destination(
+                from: $0.source,
+                translation: $0.translation,
+                count: playbackService.queue.tracks.count
             )
-            .contentShape(Rectangle())
+        } ?? index
+        let offset = drag.map {
+            QueueDragMetrics.rowOffset(
+                index: index,
+                source: $0.source,
+                destination: destination,
+                translation: $0.translation
+            )
+        } ?? 0
+
+        return HStack(spacing: 12) {
+            Button {
+                Task { await playbackService.selectQueueItem(at: index) }
+            } label: {
+                HStack(spacing: 12) {
+                    Group {
+                        if isCurrent {
+                            PlayingEqualizer(
+                                isAnimating: playbackService.state == .playing,
+                                color: scheme.primary
+                            )
+                        } else {
+                            Color.clear.frame(width: 9, height: 11)
+                        }
+                    }
+                    .frame(width: 11)
+
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(track.title)
+                            .font(.system(size: NCMDesignTokens.Typography.queueTitle))
+                            .foregroundStyle(isCurrent ? scheme.primary : NCMDesignTokens.Player.primaryInk)
+                            .lineLimit(1)
+                        Text("- \(track.artist)")
+                            .font(.system(size: NCMDesignTokens.Typography.queueSubtitle))
+                            .foregroundStyle(NCMDesignTokens.Player.secondaryInk)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(track.title)，\(track.artist)")
+            .accessibilityIdentifier("playback-queue-row-\(index)")
+            .accessibilityAddTraits(isCurrent ? .isSelected : [])
+
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(NCMDesignTokens.Player.tertiaryInk)
+                .frame(width: 30, height: 44)
+                .contentShape(Rectangle())
+                .gesture(reorderGesture(index: index))
+                .accessibilityLabel("拖动排序")
+
+            Button {
+                Task { await playbackService.removeQueueItem(at: index) }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .medium))
+                    .frame(width: 30, height: 44)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(NCMDesignTokens.Player.tertiaryInk)
+            .accessibilityLabel("移除 \(track.title)")
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(track.title)，\(track.artist)")
-        .accessibilityIdentifier("playback-queue-row-\(index)")
-        .accessibilityAddTraits(isCurrent ? .isSelected : [])
+        .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
+        .frame(height: QueueDragMetrics.rowHeight)
+        .background(.white.opacity(drag?.source == index ? 0.10 : 0))
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(.white.opacity(0.10))
+                .frame(height: 0.5)
+                .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
+        }
+        .offset(y: offset)
+        .zIndex(drag?.source == index ? 2 : 1)
+        .animation(
+            drag?.source == index ? nil : .timingCurve(0.2, 0, 0, 1, duration: AppMotion.queueReorder),
+            value: offset
+        )
+    }
+
+    private func reorderGesture(index: Int) -> some Gesture {
+        DragGesture(minimumDistance: 2, coordinateSpace: .named("ncm-player-queue"))
+            .onChanged { value in
+                if drag == nil { drag = DragState(source: index, translation: 0) }
+                guard drag?.source == index else { return }
+                drag?.translation = value.translation.height
+            }
+            .onEnded { value in
+                guard let drag, drag.source == index else {
+                    self.drag = nil
+                    return
+                }
+                let destination = QueueDragMetrics.destination(
+                    from: index,
+                    translation: value.translation.height,
+                    count: playbackService.queue.tracks.count
+                )
+                self.drag = nil
+                guard destination != index else { return }
+                playbackService.moveQueueItems(
+                    fromOffsets: IndexSet(integer: index),
+                    toOffset: QueueDragMetrics.insertionOffset(from: index, to: destination)
+                )
+            }
+    }
+
+    private var queueFade: some View {
+        LinearGradient(
+            stops: [
+                .init(color: .clear, location: 0),
+                .init(color: .black, location: 0.05),
+                .init(color: .black, location: 0.94),
+                .init(color: .clear, location: 1),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "music.note.list")
+                .font(.system(size: 34, weight: .regular))
+            Text("播放列表为空")
+                .font(.system(size: 14, weight: .medium))
+        }
+        .foregroundStyle(NCMDesignTokens.Player.tertiaryInk)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func cycleMode() {
+        let mode = playbackService.playbackMode.next
+        playbackService.setPlaybackMode(mode)
+        toastCenter.show(mode.title)
     }
 }
 
-private struct QueuePlayingBars: View {
-    let isPlaying: Bool
-
-    @Environment(\.playerPalette) private var palette
-    @Environment(\.sonarReduceMotion) private var reduceMotion
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30, paused: !isPlaying || reduceMotion)) { timeline in
-            HStack(alignment: .bottom, spacing: 1.5) {
-                ForEach(0..<5, id: \.self) { index in
-                    let base = [12.0, 19.0, 15.0, 20.0, 11.0][index]
-                    Capsule()
-                        .fill(palette.ink)
-                        .frame(width: 2.6, height: base * scale(index: index, date: timeline.date))
-                }
-            }
-        }
-        .frame(width: 24, height: 24, alignment: .bottom)
-    }
-
-    private func scale(index: Int, date: Date) -> Double {
-        guard isPlaying, !reduceMotion else { return 0.55 }
-        let wave = (sin(date.timeIntervalSinceReferenceDate / 0.92 * 2 * .pi + Double(index) * 1.18) + 1) / 2
-        return 0.32 + wave * 0.68
+private extension QueueFace {
+    struct DragState {
+        let source: Int
+        var translation: CGFloat
     }
 }

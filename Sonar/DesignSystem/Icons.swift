@@ -1,37 +1,22 @@
 import SwiftUI
 
 enum ShellTab: Int, CaseIterable, Identifiable {
-    case discover
-    case songs
-    case player
-    case settings
+    case home
+    case library
 
     var id: Self { self }
 
     var title: String {
         switch self {
-        case .discover: "发现"
-        case .songs: "歌曲"
-        case .player: "播放"
-        case .settings: "设置"
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .discover: "safari"
-        case .songs: "music.note.list"
-        case .player: "waveform"
-        case .settings: "slider.horizontal.3"
+        case .home: "首页"
+        case .library: "我的"
         }
     }
 
     var accessibilityIdentifier: String {
         switch self {
-        case .discover: "bottom-tab-discover"
-        case .songs: "bottom-tab-songs"
-        case .player: "bottom-tab-player"
-        case .settings: "bottom-tab-settings"
+        case .home: "bottom-tab-home"
+        case .library: "bottom-tab-library"
         }
     }
 }

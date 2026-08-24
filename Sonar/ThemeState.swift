@@ -128,7 +128,7 @@ final class SonarThemeState {
     }
 
     var accent: Color {
-        Color(hex: resolvedSeedHex) ?? Color(hex: Self.fallbackHex) ?? .blue
+        Color(hex: NCMDesignTokens.Palette.light.accent) ?? .red
     }
 
     var ambient: [Color] {
@@ -137,7 +137,7 @@ final class SonarThemeState {
 
     func scheme(for systemColorScheme: ColorScheme) -> M3Scheme {
         let resolved = appearanceMode.resolved(using: systemColorScheme)
-        return .tonalSpot(seedHex: resolvedSeedHex, dark: resolved == .dark)
+        return .tonalSpot(seedHex: Self.fallbackHex, dark: resolved == .dark)
     }
 
     func update(accentHex: String?) {

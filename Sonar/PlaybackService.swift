@@ -15,6 +15,12 @@ public final class PlaybackService {
         case failed(String)
     }
 
+    public enum PlaybackMode: Int, CaseIterable, Sendable {
+        case sequence
+        case shuffle
+        case repeatOne
+    }
+
     /// 切换音质的结果。界面据此给出不同提示，不允许「点了没反应」。
     public enum QualityChange: Equatable, Sendable {
         case unchanged
@@ -27,6 +33,7 @@ public final class PlaybackService {
 
     public private(set) var queue = PlaybackQueue()
     public private(set) var state: State = .idle
+    public private(set) var playbackMode: PlaybackMode = .sequence
     public private(set) var elapsed: TimeInterval = 0
     public private(set) var duration: TimeInterval = 0
     /// 用户选定的音质**上限**：解析器从这一档起逐级下降，所以它是起点而不是锁死值。
@@ -94,6 +101,10 @@ public final class PlaybackService {
         if state == .playing { pause() } else { await play() }
     }
 
+    public func setPlaybackMode(_ mode: PlaybackMode) {
+        playbackMode = mode
+    }
+
     public func seek(to seconds: TimeInterval) async {
         let target = CMTime(seconds: max(0, min(seconds, duration)), preferredTimescale: 600)
         await player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero)
@@ -140,6 +151,29 @@ public final class PlaybackService {
 
     public func clearUpcoming() {
         queue.clearUpcoming()
+    }
+
+    func handlePlaybackEnded() async {
+        guard let currentIndex = queue.currentIndex else { return }
+
+        switch playbackMode {
+        case .sequence:
+            guard queue.advance() != nil else {
+                pause()
+                return
+            }
+            await loadCurrent(autoplay: true)
+        case .shuffle:
+            guard queue.tracks.count > 1 else {
+                await restartCurrent()
+                return
+            }
+            let offset = Int.random(in: 1..<queue.tracks.count)
+            queue.select(index: (currentIndex + offset) % queue.tracks.count)
+            await loadCurrent(autoplay: true)
+        case .repeatOne:
+            await restartCurrent()
+        }
     }
 
     public func updateNowPlayingArtwork(_ image: UIImage?) {
@@ -219,6 +253,12 @@ public final class PlaybackService {
         }
     }
 
+    private func restartCurrent() async {
+        await player.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
+        elapsed = 0
+        await play()
+    }
+
     private func configureAudioSession() throws {
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.playback, mode: .default, options: [])
@@ -242,7 +282,7 @@ public final class PlaybackService {
         endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: nil, queue: .main) { [weak self] notification in
             Task { @MainActor [weak self] in
                 guard let self, notification.object as? AVPlayerItem === player.currentItem else { return }
-                await next()
+                await handlePlaybackEnded()
             }
         }
     }

@@ -1,606 +1,1033 @@
+import SwiftData
 import SwiftUI
-
-private struct DiscoveryPagerOffsetPreferenceKey: PreferenceKey {
-    static let defaultValue: [MusicSource: CGFloat] = [:]
-
-    static func reduce(value: inout [MusicSource: CGFloat], nextValue: () -> [MusicSource: CGFloat]) {
-        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
-    }
-}
-
-private struct DiscoveryScrollOffsetPreferenceKey: PreferenceKey {
-    static let defaultValue: [MusicSource: CGFloat] = [:]
-
-    static func reduce(value: inout [MusicSource: CGFloat], nextValue: () -> [MusicSource: CGFloat]) {
-        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
-    }
-}
-
-private struct DiscoveryLoadMoreOffsetPreferenceKey: PreferenceKey {
-    static let defaultValue: [MusicSource: CGFloat] = [:]
-
-    static func reduce(value: inout [MusicSource: CGFloat], nextValue: () -> [MusicSource: CGFloat]) {
-        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
-    }
-}
 
 struct DiscoverView: View {
     let isActive: Bool
     private let runtime: SourceRuntime
 
     @Environment(PlaybackService.self) private var playbackService
+    @Environment(ToastCenter.self) private var toastCenter
+    @Environment(\.modelContext) private var modelContext
     @Environment(\.m3Scheme) private var scheme
     @Environment(\.sonarReduceMotion) private var reduceMotion
-    @Environment(\.capsuleScrollReporter) private var capsuleScrollReporter
+
+    @Query(sort: \TrackRecord.title) private var allRecords: [TrackRecord]
+    @Query(filter: #Predicate<Playlist> { !$0.isSystem }, sort: \Playlist.sortIndex)
+    private var playlists: [Playlist]
 
     @State private var discoveryModel: DiscoveryViewModel
-    @State private var searchModel: SearchViewModel
-    @State private var selectedSource: MusicSource = .wy
-    @State private var scrollTarget: MusicSource? = .wy
-    @State private var pagerProgress: CGFloat = 0
-    @State private var previewPlaylist: PlaylistSummary?
-    @State private var isCategoryFabExpanded = false
-    @State private var selectedTrackForPlaylist: Track?
-    @State private var lastScrollMarkerY: CGFloat?
-    @State private var scrollSettleTask: Task<Void, Never>?
-    @FocusState private var searchFocused: Bool
+    @State private var bannerIndex = 0
+    @State private var freshTracks: [Track] = []
+    @State private var recentTracks: [Track] = []
+    @State private var freshError: String?
+    @State private var isLoadingFresh = false
+    @State private var playingPlaylistKey: String?
+    @State private var likedPlaylist: Playlist?
+    @State private var actionError: String?
+    @State private var showPlaylistSquare = false
+    @State private var showRecent = false
+    @State private var showLocal = false
+    @State private var showLiked = false
+    @State private var showPlaylists = false
+    @State private var showQuality = false
+    @State private var showSettings = false
 
     init(runtime: SourceRuntime, isActive: Bool) {
         self.isActive = isActive
         self.runtime = runtime
         _discoveryModel = State(initialValue: DiscoveryViewModel(runtime: runtime))
-        _searchModel = State(initialValue: SearchViewModel(runtime: runtime))
     }
 
-    private var isSearching: Bool {
-        !searchModel.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    private var playlistsBySource: [MusicSource: [PlaylistSummary]] {
+        Dictionary(uniqueKeysWithValues: MusicSource.allCases.map {
+            ($0, discoveryModel.state(for: $0).items)
+        })
+    }
+
+    private var mergedPlaylists: [PlaylistSummary] {
+        DiscoveryContent.merged(playlistsBySource)
+    }
+
+    private var banners: [PlaylistSummary] { Array(mergedPlaylists.prefix(3)) }
+    private var featured: [PlaylistSummary] { Array(mergedPlaylists.prefix(8)) }
+
+    private var isInitialLoading: Bool {
+        MusicSource.allCases.contains { discoveryModel.state(for: $0).isLoading }
+    }
+
+    private var initialErrors: [String] {
+        MusicSource.allCases.compactMap { discoveryModel.state(for: $0).errorMessage }
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            Text("发现")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(scheme.onSurface)
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                .padding(.horizontal, 18)
-                .padding(.top, 10)
-
-            searchField
-
-            if isSearching {
-                searchResults
-            } else {
-                DiscoverySourceSelector(
-                    selectedSource: selectedSource,
-                    progress: pagerProgress,
-                    onSelect: selectSource
-                )
-                .padding(.horizontal, 12)
-                .padding(.bottom, 6)
-
-                discoveryPager
-            }
+            header
+            homeContent
         }
         .background(scheme.appSurface.ignoresSafeArea())
-        .overlay {
-            if !isSearching, selectedSource.playlistCategories.count > 1 {
-                DiscoveryCategoryFabLayer(
-                    source: selectedSource,
-                    selectedCategory: discoveryModel.selectedCategory(for: selectedSource),
-                    isExpanded: $isCategoryFabExpanded,
-                    onSelect: { category in
-                        Task { await discoveryModel.selectCategory(category, for: selectedSource) }
-                    }
-                )
+        .toolbar(.hidden, for: .navigationBar)
+        .navigationDestination(isPresented: $showPlaylistSquare) {
+            PlaylistSquareView(model: discoveryModel, runtime: runtime)
+        }
+        .navigationDestination(isPresented: $showRecent) {
+            PlaylistDetailView(
+                title: "最近播放",
+                subtitle: "最近播放",
+                description: "按最近成功播放的顺序排列。",
+                tracks: recentTracks
+            )
+        }
+        .navigationDestination(isPresented: $showLiked) {
+            if let likedPlaylist {
+                PlaylistDetailView(playlist: likedPlaylist)
+            } else {
+                ContentUnavailableView("无法打开我喜欢", systemImage: "heart.slash")
             }
         }
-        .sheet(item: $previewPlaylist) { playlist in
-            PlaylistPreviewSheet(playlist: playlist)
+        .navigationDestination(isPresented: $showPlaylists) {
+            PlaylistsView(playlists: playlists)
+        }
+        .sheet(isPresented: $showLocal) {
+            NavigationStack { LocalSongsView() }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showQuality) {
+            QualitySheet(track: playbackService.queue.current)
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
         }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
+        .alert("操作失败", isPresented: Binding(
+            get: { actionError != nil },
+            set: { if !$0 { actionError = nil } }
+        )) {
+            Button("好", role: .cancel) { actionError = nil }
+        } message: {
+            Text(actionError ?? "未知错误")
+        }
+        .task {
+            await loadCatalogs()
+            loadRecentTracks()
+        }
+        .task(id: mergedPlaylists.first?.key) { await loadFreshTracks() }
+        .task(id: banners.map(\.key).joined(separator: "|")) { await rotateBanners() }
+    }
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            Text("首页")
+                .font(.system(size: NCMDesignTokens.Typography.homeTitle, weight: .bold))
+                .foregroundStyle(scheme.onSurface)
+            Spacer()
+            NavigationLink {
+                NCMSearchView(runtime: runtime)
+            } label: {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(scheme.onSurface)
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("搜索")
+            .accessibilityIdentifier("home-search-button")
+        }
+        .frame(minHeight: NCMDesignTokens.Layout.navigationHeight)
+        .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
+        .padding(.top, 10)
+    }
+
+    @ViewBuilder
+    private var homeContent: some View {
+        if mergedPlaylists.isEmpty, isInitialLoading {
+            ProgressView("正在加载首页…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if mergedPlaylists.isEmpty, !initialErrors.isEmpty {
+            ContentUnavailableView {
+                Label("首页加载失败", systemImage: "wifi.exclamationmark")
+            } description: {
+                Text(initialErrors.first ?? "网络不可用")
+            } actions: {
+                Button("重试") { Task { await refreshCatalogs() } }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    bannerSection
+                    shortcuts
+                    featuredSection
+                    freshSection
+                    if !recentTracks.isEmpty { recentSection }
+                    Color.clear.frame(height: 28)
+                }
+            }
+            .scrollIndicators(.hidden)
+            .refreshable {
+                await refreshCatalogs()
+                loadRecentTracks()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var bannerSection: some View {
+        if !banners.isEmpty {
+            let index = min(bannerIndex, banners.count - 1)
+            let banner = banners[index]
+            NavigationLink {
+                OnlinePlaylistDetailView(playlist: banner, runtime: runtime)
+            } label: {
+                ZStack(alignment: .bottomLeading) {
+                    RemotePlaylistArtwork(urlString: banner.img)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: NCMDesignTokens.Layout.bannerHeight)
+                    LinearGradient(
+                        colors: [.black.opacity(0.62), .black.opacity(0.30), .clear],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(banner.name)
+                            .font(.system(size: NCMDesignTokens.Typography.bannerTitle, weight: .bold))
+                            .lineLimit(1)
+                        Text(bannerSubtitle(for: banner))
+                            .font(.system(size: NCMDesignTokens.Typography.bannerSubtitle))
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.45), radius: 3, y: 1)
+                    .padding(12)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: NCMDesignTokens.Layout.bannerCornerRadius, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("home-banner-\(banner.key)")
+            .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
+            .padding(.top, 6)
+
+            NCMPagingDots(count: banners.count, selected: index)
+                .padding(.top, 7)
+        }
+    }
+
+    private var shortcuts: some View {
+        let items: [(String, String, String)] = [
+            ("square", "歌单广场", "square.grid.2x2"),
+            ("recent", "最近播放", "clock.arrow.circlepath"),
+            ("local", "本地歌曲", "music.note.list"),
+            ("liked", "我喜欢", "heart"),
+            ("playlists", "我的歌单", "text.badge.plus"),
+            ("shuffle", "随机播放", "shuffle"),
+            ("quality", "音质", "slider.horizontal.3"),
+            ("settings", "设置", "gearshape"),
+        ]
+        return VStack(spacing: NCMDesignTokens.Layout.shortcutSpacing) {
+            ForEach(0..<2, id: \.self) { row in
+                HStack(spacing: NCMDesignTokens.Layout.shortcutSpacing) {
+                    ForEach(Array(items[(row * 4)..<(row * 4 + 4)]), id: \.0) { item in
+                        Button { openShortcut(item.0) } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: item.2)
+                                    .font(.system(size: 17, weight: .regular))
+                                Text(item.1)
+                                    .font(.system(size: NCMDesignTokens.Typography.shortcut, weight: .medium))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.88)
+                            }
+                            .foregroundStyle(scheme.onSurface)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: NCMDesignTokens.Layout.shortcutHeight)
+                            .background(
+                                scheme.surfaceContainer,
+                                in: RoundedRectangle(cornerRadius: NCMDesignTokens.Layout.shortcutCornerRadius, style: .continuous)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("home-shortcut-\(item.0)")
+                    }
+                }
+            }
+            NCMPagingDots(count: 2, selected: 0)
+                .padding(.top, 1)
+        }
+        .padding(.horizontal, 15)
+        .padding(.top, 14)
+    }
+
+    private var featuredSection: some View {
+        VStack(spacing: 0) {
+            NCMSectionHeader(title: "甄选歌单", action: "更多") { showPlaylistSquare = true }
+            ScrollView(.horizontal) {
+                LazyHStack(alignment: .top, spacing: 10) {
+                    ForEach(featured, id: \.key) { playlist in
+                        NCMPlaylistCard(
+                            playlist: playlist,
+                            runtime: runtime,
+                            isLoading: playingPlaylistKey == playlist.key,
+                            onPlay: { playPlaylist(playlist) }
+                        )
+                    }
+                }
+                .scrollTargetLayout()
+                .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
+            }
+            .scrollIndicators(.hidden)
+            .scrollTargetBehavior(.viewAligned(limitBehavior: .always))
+        }
+    }
+
+    private var freshSection: some View {
+        VStack(spacing: 0) {
+            NCMSectionHeader(title: "新歌新碟", action: "更多") { showLocal = true }
+            if isLoadingFresh, freshTracks.isEmpty {
+                ForEach(0..<4, id: \.self) { _ in NCMHomeSongSkeleton() }
+            } else if let freshError, freshTracks.isEmpty {
+                Button { Task { await loadFreshTracks() } } label: {
+                    Label("加载失败，点击重试", systemImage: "arrow.clockwise")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(scheme.onSurfaceVariant)
+                        .frame(maxWidth: .infinity, minHeight: 60)
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint(freshError)
+            } else {
+                ForEach(Array(freshTracks.prefix(4).enumerated()), id: \.element.musicID) { index, track in
+                    NCMHomeSongRow(
+                        track: track,
+                        isCurrent: playbackService.queue.current?.musicID == track.musicID,
+                        isPlaying: playbackService.state == .playing,
+                        showDivider: index < min(freshTracks.count, 4) - 1,
+                        onPlay: { Task { await playbackService.replaceQueue(freshTracks, startingAt: index) } }
+                    )
+                }
+            }
+        }
+    }
+
+    private var recentSection: some View {
+        VStack(spacing: 0) {
+            NCMSectionHeader(title: "最近播放", action: "更多") { showRecent = true }
+            ForEach(Array(recentTracks.prefix(3).enumerated()), id: \.element.musicID) { index, track in
+                NCMHomeSongRow(
+                    track: track,
+                    isCurrent: playbackService.queue.current?.musicID == track.musicID,
+                    isPlaying: playbackService.state == .playing,
+                    showDivider: index < min(recentTracks.count, 3) - 1,
+                    onPlay: { Task { await playbackService.replaceQueue(recentTracks, startingAt: index) } }
+                )
+            }
+        }
+    }
+
+    private func bannerSubtitle(for playlist: PlaylistSummary) -> String {
+        let author = playlist.author.trimmingCharacters(in: .whitespacesAndNewlines)
+        return [author.isEmpty ? nil : author, playlist.playCount.isEmpty ? nil : "\(playlist.playCount) 次播放"]
+            .compactMap { $0 }
+            .joined(separator: " · ")
+    }
+
+    private func loadCatalogs() async {
+        for source in MusicSource.allCases { await discoveryModel.loadInitial(for: source) }
+    }
+
+    private func refreshCatalogs() async {
+        for source in MusicSource.allCases { await discoveryModel.refresh(source) }
+    }
+
+    private func loadFreshTracks() async {
+        guard let playlist = mergedPlaylists.first else {
+            freshTracks = []
+            return
+        }
+        isLoadingFresh = true
+        freshError = nil
+        defer { isLoadingFresh = false }
+        do {
+            let detail = try await runtime.playlistDetail(source: playlist.source, id: playlist.id, page: 1)
+            freshTracks = Array(DiscoveryContent.deduplicatedTracks(detail.list).prefix(4))
+        } catch is CancellationError {
+            return
+        } catch {
+            freshError = error.localizedDescription
+        }
+    }
+
+    private func loadRecentTracks() {
+        do {
+            recentTracks = try LibraryStore(context: modelContext).recentTracks()
+        } catch {
+            actionError = error.localizedDescription
+        }
+    }
+
+    private func rotateBanners() async {
+        bannerIndex = 0
+        guard banners.count > 1 else { return }
+        while !Task.isCancelled {
+            do { try await Task.sleep(for: .seconds(5.2)) } catch { return }
+            guard !Task.isCancelled else { return }
+            withAnimation(AppMotion.emphasized(duration: AppMotion.medium, reduceMotion: reduceMotion)) {
+                bannerIndex = (bannerIndex + 1) % banners.count
+            }
+        }
+    }
+
+    private func playPlaylist(_ playlist: PlaylistSummary) {
+        guard playingPlaylistKey == nil else { return }
+        playingPlaylistKey = playlist.key
+        Task {
+            defer { playingPlaylistKey = nil }
+            do {
+                let model = OnlinePlaylistDetailViewModel(playlist: playlist, runtime: runtime)
+                let tracks = try await model.allTracks()
+                guard !tracks.isEmpty else {
+                    actionError = "这个歌单还没有可播放的曲目"
+                    return
+                }
+                await playbackService.replaceQueue(tracks)
+            } catch {
+                actionError = error.localizedDescription
+            }
+        }
+    }
+
+    private func openShortcut(_ key: String) {
+        switch key {
+        case "square": showPlaylistSquare = true
+        case "recent":
+            loadRecentTracks()
+            showRecent = true
+        case "local": showLocal = true
+        case "liked": openLikedPlaylist()
+        case "playlists": showPlaylists = true
+        case "shuffle": playShuffledLibrary()
+        case "quality": showQuality = true
+        case "settings": showSettings = true
+        default: break
+        }
+    }
+
+    private func openLikedPlaylist() {
+        do {
+            let store = LibraryStore(context: modelContext)
+            likedPlaylist = try store.playlists(includeSystem: false).first { $0.name == "我喜欢" }
+                ?? store.createPlaylist(named: "我喜欢")
+            showLiked = true
+        } catch {
+            actionError = error.localizedDescription
+        }
+    }
+
+    private func playShuffledLibrary() {
+        var seen = Set<String>()
+        let tracks = allRecords.compactMap(\.track).filter { seen.insert($0.musicID).inserted }.shuffled()
+        guard !tracks.isEmpty else {
+            actionError = "曲库里还没有歌曲，先搜索并播放一首歌。"
+            return
+        }
+        Task { await playbackService.replaceQueue(tracks) }
+    }
+}
+
+private struct NCMSearchView: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(PlaybackService.self) private var playbackService
+    @Environment(\.m3Scheme) private var scheme
+
+    @State private var model: SearchViewModel
+    @State private var history = NCMSearchHistory.load()
+    @State private var selectedTrackForPlaylist: Track?
+    @FocusState private var focused: Bool
+
+    private let hotSearches = ["晴天", "一路向北", "起风了", "海阔天空", "稻香", "富士山下"]
+
+    init(runtime: SourceRuntime) {
+        _model = State(initialValue: SearchViewModel(runtime: runtime))
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            searchBar
+            searchContent
+        }
+        .background(scheme.appSurface.ignoresSafeArea())
+        .toolbar(.hidden, for: .navigationBar)
+        .navigationBarBackButtonHidden(true)
+        .ncmEdgeSwipeBack()
+        .onAppear { focused = true }
         .sheet(item: $selectedTrackForPlaylist) { track in
             AddToPlaylistSheet(track: track)
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
         }
-        .onChange(of: isActive) { _, _ in finishScrollTracking() }
-        .onChange(of: selectedSource) { _, _ in isCategoryFabExpanded = false }
-        .onChange(of: isSearching) { _, _ in isCategoryFabExpanded = false }
-        .toolbar(.hidden, for: .navigationBar)
     }
 
-    private var searchField: some View {
+    private var searchBar: some View {
         HStack(spacing: 10) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 20, weight: .medium))
-            TextField("搜索曲目、歌手或专辑", text: $searchModel.query)
-                .font(.system(size: 16))
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .focused($searchFocused)
-                .submitLabel(.search)
-                .onSubmit {
-                    searchFocused = false
-                    Task { await searchModel.search() }
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 16, weight: .medium))
+                TextField("搜索歌曲、歌手或专辑", text: $model.query)
+                    .font(.system(size: 15))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .focused($focused)
+                    .submitLabel(.search)
+                    .onSubmit(submitSearch)
+                    .accessibilityIdentifier("search-field")
+                if !model.query.isEmpty {
+                    Button(action: clearSearch) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 17))
+                            .frame(width: 28, height: 28)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("清空")
                 }
-                .accessibilityIdentifier("discover-search-field")
-            if !searchModel.query.isEmpty {
-                Button {
-                    searchModel.query = ""
-                    searchModel.queryChanged()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 18))
-                        .frame(width: 32, height: 32)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("清空")
             }
+            .foregroundStyle(scheme.onSurfaceVariant)
+            .padding(.horizontal, 12)
+            .frame(height: 36)
+            .background(scheme.appInputFill, in: Capsule())
+
+            Button("取消") {
+                if model.query.isEmpty {
+                    dismiss()
+                } else {
+                    clearSearch()
+                    focused = true
+                }
+            }
+            .font(.system(size: 15))
+            .foregroundStyle(scheme.onSurface)
+            .buttonStyle(.plain)
+            .frame(minWidth: 44, minHeight: 44)
+            .accessibilityIdentifier("search-cancel-button")
         }
-        .foregroundStyle(scheme.onSurfaceVariant)
-        .padding(.horizontal, 16)
-        .frame(minHeight: 48)
-        .background(scheme.appInputFill, in: Capsule())
-        .overlay {
-            Capsule()
-                .stroke(searchFocused ? scheme.primary : scheme.outlineVariant, lineWidth: searchFocused ? 1.6 : 1)
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 2)
-        .padding(.bottom, 10)
-        .onChange(of: searchModel.query) { _, _ in searchModel.queryChanged() }
+        .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
+        .padding(.top, 6)
+        .padding(.bottom, 8)
+        .onChange(of: model.query) { _, _ in model.queryChanged() }
     }
 
-    private var discoveryPager: some View {
-        GeometryReader { proxy in
-            let pageWidth = max(proxy.size.width, 1)
-            ScrollView(.horizontal) {
-                HStack(spacing: 0) {
-                    ForEach(MusicSource.allCases, id: \.self) { source in
-                        DiscoverySourcePage(
-                            source: source,
-                            pageWidth: pageWidth,
-                            viewportHeight: proxy.size.height,
-                            model: discoveryModel,
-                            runtime: runtime,
-                            onPreview: { previewPlaylist = $0 }
-                        )
-                        .frame(width: pageWidth)
-                        .id(source)
-                        .background {
-                            GeometryReader { pageProxy in
-                                Color.clear.preference(
-                                    key: DiscoveryPagerOffsetPreferenceKey.self,
-                                    value: [source: pageProxy.frame(in: .named("discovery-pager")).minX]
-                                )
+    @ViewBuilder
+    private var searchContent: some View {
+        if model.query.isEmpty {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    if !history.isEmpty {
+                        HStack {
+                            Text("搜索历史").font(.system(size: 17, weight: .bold))
+                            Spacer()
+                            Button("清空") {
+                                history.removeAll()
+                                NCMSearchHistory.save(history)
+                            }
+                                .font(.system(size: 13))
+                                .foregroundStyle(scheme.onSurfaceVariant)
+                        }
+                        chipGrid(history)
+                    }
+                    Text("热门搜索").font(.system(size: 17, weight: .bold))
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(hotSearches.enumerated()), id: \.element) { index, value in
+                            Button {
+                                model.query = value
+                                submitSearch()
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Text("\(index + 1)")
+                                        .font(.system(size: 15, weight: .semibold))
+                                        .foregroundStyle(index < 3 ? scheme.primary : scheme.onSurfaceVariant)
+                                        .frame(width: 16, alignment: .trailing)
+                                    Text(value)
+                                        .font(.system(size: 15))
+                                        .foregroundStyle(scheme.onSurface)
+                                    Spacer(minLength: 0)
+                                }
+                                .frame(height: 44)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .foregroundStyle(scheme.onSurface)
+                .padding(16)
+            }
+        } else if !model.suggestions.isEmpty && !model.hasSearched {
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(model.suggestions, id: \.self) { suggestion in
+                        Button {
+                            model.query = suggestion
+                            submitSearch()
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "magnifyingglass")
+                                    .foregroundStyle(scheme.onSurfaceVariant)
+                                highlightedSuggestion(suggestion)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 16)
+                            .frame(height: 46)
+                            .overlay(alignment: .bottom) {
+                                Rectangle().fill(scheme.outlineVariant).frame(height: 0.5).padding(.leading, 26)
                             }
                         }
-                    }
-                }
-                .scrollTargetLayout()
-            }
-            .coordinateSpace(name: "discovery-pager")
-            .scrollIndicators(.hidden)
-            .scrollTargetBehavior(.paging)
-            .scrollPosition(id: $scrollTarget)
-            .onPreferenceChange(DiscoveryPagerOffsetPreferenceKey.self) { offsets in
-                guard let firstOffset = offsets[.wy] else { return }
-                pagerProgress = min(max(-firstOffset / pageWidth, 0), 1)
-            }
-            .onPreferenceChange(DiscoveryScrollOffsetPreferenceKey.self) { offsets in
-                guard let marker = offsets[selectedSource] else { return }
-                reportScrollOffset(marker)
-            }
-            .onChange(of: scrollTarget) { _, target in
-                guard let target else { return }
-                selectedSource = target
-            }
-        }
-    }
-
-    private var searchResults: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                if !searchModel.suggestions.isEmpty && !searchModel.hasSearched {
-                    sectionTitle("搜索建议")
-                    ForEach(searchModel.suggestions, id: \.self) { suggestion in
-                        Button {
-                            searchFocused = false
-                            searchModel.query = suggestion
-                            Task { await searchModel.search() }
-                        } label: {
-                            Label(suggestion, systemImage: "magnifyingglass")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(scheme.onSurface)
-                                .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
-                                .padding(.horizontal, 18)
-                        }
                         .buttonStyle(.plain)
                     }
-                } else if searchModel.isLoading {
-                    ProgressView("正在搜索…")
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 72)
-                } else if let errorMessage = searchModel.errorMessage {
-                    ContentUnavailableView("搜索不可用", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
-                        .padding(.top, 52)
-                } else if searchModel.hasSearched, searchModel.results.isEmpty {
-                    ContentUnavailableView("未找到结果", systemImage: "music.note.list")
-                        .padding(.top, 52)
-                } else if !searchModel.results.isEmpty {
-                    sectionTitle("单曲 · \(searchModel.results.count)")
-                    ForEach(Array(searchModel.results.enumerated()), id: \.element.musicID) { index, track in
+                }
+            }
+        } else if model.isLoading {
+            ProgressView("正在搜索…").frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let errorMessage = model.errorMessage {
+            ContentUnavailableView("搜索不可用", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
+        } else if model.hasSearched, model.results.isEmpty {
+            ContentUnavailableView("未找到结果", systemImage: "music.note.list")
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(Array(model.results.enumerated()), id: \.element.musicID) { index, track in
                         SongRow(
                             track: track,
+                            trailing: .more,
+                            showDivider: index < model.results.count - 1,
                             isCurrent: playbackService.queue.current?.musicID == track.musicID,
                             isPlaying: playbackService.state == .playing,
-                            onPlay: {
-                                Task { await playbackService.replaceQueue(searchModel.results, startingAt: index) }
-                            },
+                            onPlay: { Task { await playbackService.replaceQueue(model.results, startingAt: index) } },
                             onAction: { selectedTrackForPlaylist = track }
                         )
-                        .padding(.horizontal, 14)
                     }
-                } else {
-                    ContentUnavailableView("输入关键词后搜索", systemImage: "magnifyingglass")
-                        .padding(.top, 52)
                 }
             }
+            .scrollDismissesKeyboard(.immediately)
         }
-        .scrollDismissesKeyboard(.immediately)
-        .scrollIndicators(.hidden)
     }
 
-    private func sectionTitle(_ title: String) -> some View {
-        Text(title)
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(scheme.onSurfaceVariant)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 18)
-            .padding(.top, 18)
-            .padding(.bottom, 8)
-    }
-
-    private func selectSource(_ source: MusicSource) {
-        searchFocused = false
-        selectedSource = source
-        if reduceMotion {
-            scrollTarget = source
-        } else {
-            withAnimation(AppMotion.emphasized(duration: AppMotion.medium, reduceMotion: false)) {
-                scrollTarget = source
+    private func chipGrid(_ values: [String]) -> some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 84), spacing: 8)], alignment: .leading, spacing: 8) {
+            ForEach(values, id: \.self) { value in
+                Button(value) {
+                    model.query = value
+                    submitSearch()
+                }
+                .font(.system(size: 13))
+                .foregroundStyle(scheme.onSurface)
+                .frame(height: 32)
+                .padding(.horizontal, 14)
+                .background(scheme.surfaceContainer, in: Capsule())
+                .buttonStyle(.plain)
             }
         }
     }
 
-    private func reportScrollOffset(_ markerY: CGFloat) {
-        guard isActive else {
-            lastScrollMarkerY = nil
-            return
+    private func highlightedSuggestion(_ suggestion: String) -> Text {
+        let query = model.query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty,
+              let range = suggestion.range(of: query, options: .caseInsensitive) else {
+            return Text(suggestion).foregroundColor(scheme.onSurface)
         }
-        if let lastScrollMarkerY { capsuleScrollReporter.update(lastScrollMarkerY - markerY) }
-        self.lastScrollMarkerY = markerY
-        scrollSettleTask?.cancel()
-        scrollSettleTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(120))
-            guard !Task.isCancelled else { return }
-            capsuleScrollReporter.settle()
-        }
+        return Text(String(suggestion[..<range.lowerBound])).foregroundColor(scheme.onSurface)
+            + Text(String(suggestion[range])).foregroundColor(scheme.primary)
+            + Text(String(suggestion[range.upperBound...])).foregroundColor(scheme.onSurface)
     }
 
-    private func finishScrollTracking() {
-        scrollSettleTask?.cancel()
-        scrollSettleTask = nil
-        lastScrollMarkerY = nil
-        if isActive { capsuleScrollReporter.settle() }
+    private func clearSearch() {
+        model.query = ""
+        model.queryChanged()
+    }
+
+    private func submitSearch() {
+        let keyword = model.query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !keyword.isEmpty else { return }
+        history.removeAll { $0 == keyword }
+        history.insert(keyword, at: 0)
+        history = Array(history.prefix(10))
+        NCMSearchHistory.save(history)
+        focused = false
+        Task { await model.search() }
     }
 }
 
-private struct DiscoverySourceSelector: View {
-    @Environment(\.m3Scheme) private var scheme
+private enum NCMSearchHistory {
+    private static let key = "ncmSearchHistory"
 
-    let selectedSource: MusicSource
-    let progress: CGFloat
-    let onSelect: (MusicSource) -> Void
+    static func load(defaults: UserDefaults = .standard) -> [String] {
+        defaults.stringArray(forKey: key) ?? []
+    }
 
-    var body: some View {
-        GeometryReader { proxy in
-            let innerWidth = max(proxy.size.width - 4, 0)
-            let segmentWidth = innerWidth / CGFloat(MusicSource.allCases.count)
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(scheme.secondaryContainer)
-                    .frame(width: segmentWidth, height: 34)
-                    .offset(x: 2 + segmentWidth * progress)
-
-                HStack(spacing: 0) {
-                    ForEach(MusicSource.allCases, id: \.self) { source in
-                        Button {
-                            onSelect(source)
-                        } label: {
-                            Text(source.displayName)
-                                .font(.system(size: 11.5, weight: selectedSource == source ? .semibold : .medium))
-                                .foregroundStyle(selectedSource == source ? scheme.onSecondaryContainer : scheme.onSurfaceVariant)
-                                .tracking(0)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("discovery-source-\(source.rawValue)")
-                    }
-                }
-                .padding(2)
-            }
-        }
-        .frame(height: 38)
-        .background(scheme.surfaceContainer, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay {
-            ZStack {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(scheme.outlineVariant.opacity(0.22), lineWidth: 1)
-
-                Color.clear
-                    .accessibilityElement()
-                    .accessibilityLabel("音源筛选")
-                    .accessibilityIdentifier("discovery-source-filter")
-                    .accessibilityRespondsToUserInteraction(false)
-                    .allowsHitTesting(false)
-            }
-        }
+    static func save(_ values: [String], defaults: UserDefaults = .standard) {
+        defaults.set(values, forKey: key)
     }
 }
 
-private struct DiscoverySourcePage: View {
+private struct PlaylistSquareView: View {
+    private enum Category: String, CaseIterable, Identifiable {
+        case all = "全部"
+        case hot = "最热"
+        case new = "最新"
+        var id: String { rawValue }
+    }
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(PlaybackService.self) private var playbackService
     @Environment(\.m3Scheme) private var scheme
 
-    @State private var lastAutomaticLoadToken: String?
-
-    let source: MusicSource
-    let pageWidth: CGFloat
-    let viewportHeight: CGFloat
     let model: DiscoveryViewModel
     let runtime: SourceRuntime
-    let onPreview: (PlaylistSummary) -> Void
+
+    @State private var category: Category = .all
+    @State private var playingPlaylistKey: String?
+    @State private var actionError: String?
+
+    private var merged: [PlaylistSummary] {
+        let pages = Dictionary(uniqueKeysWithValues: MusicSource.allCases.map {
+            ($0, model.state(for: $0).items)
+        })
+        let values = DiscoveryContent.merged(pages)
+        switch category {
+        case .all: return values
+        case .hot:
+            return values.sorted { DiscoveryContent.playCountValue($0.playCount) > DiscoveryContent.playCountValue($1.playCount) }
+        case .new: return Array(values.reversed())
+        }
+    }
 
     var body: some View {
-        let state = model.state(for: source)
-        ScrollView {
-            Color.clear
-                .frame(height: 0)
-                .background {
-                    GeometryReader { proxy in
-                        Color.clear.preference(
-                            key: DiscoveryScrollOffsetPreferenceKey.self,
-                            value: [source: proxy.frame(in: .named("discovery-scroll-\(source.rawValue)")).minY]
-                        )
+        VStack(spacing: 0) {
+            HStack(spacing: 4) {
+                Button { dismiss() } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 19, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("返回")
+                Text("歌单广场").font(.system(size: 20, weight: .bold))
+                Spacer()
+            }
+            .foregroundStyle(scheme.onSurface)
+            .padding(.horizontal, 8)
+            .padding(.top, 6)
+
+            HStack(spacing: 26) {
+                ForEach(Category.allCases) { value in
+                    Button { category = value } label: {
+                        Text(value.rawValue)
+                            .font(.system(size: 16, weight: category == value ? .semibold : .regular))
+                            .foregroundStyle(category == value ? scheme.onSurface : scheme.onSurfaceVariant)
+                            .frame(height: 38)
+                            .overlay(alignment: .bottom) {
+                                if category == value { Capsule().fill(scheme.primary).frame(width: 22, height: 3) }
+                            }
                     }
+                    .buttonStyle(.plain)
                 }
+                Spacer()
+            }
+            .padding(.horizontal, 16)
 
-            if state.isLoading, state.items.isEmpty {
-                ProgressView("正在加载歌单…")
-                    .frame(maxWidth: .infinity, minHeight: viewportHeight)
-            } else if let error = state.errorMessage, state.items.isEmpty {
-                ContentUnavailableView {
-                    Label("加载失败", systemImage: "wifi.exclamationmark")
-                } description: {
-                    Text(error)
-                } actions: {
-                    Button("重试") { Task { await model.loadInitial(for: source) } }
-                }
-                .frame(minHeight: viewportHeight)
-            } else if state.items.isEmpty {
-                ContentUnavailableView {
-                    Label("暂无在线歌单", systemImage: "music.note.list")
-                } actions: {
-                    Button("刷新") { Task { await model.refresh(source) } }
-                }
-                .frame(minHeight: viewportHeight)
-            } else {
-                MasonryPlaylistGrid(items: state.items, availableWidth: pageWidth, runtime: runtime, onPreview: onPreview)
-
-                if state.isLoadingMore {
-                    ProgressView()
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 18)
-                } else if state.loadMoreError != nil {
-                    Button {
-                        Task { await model.loadMore(for: source) }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 14)
-                    .accessibilityLabel("重试加载更多")
-                }
-
-                Color.clear
-                    .frame(height: 1)
-                    .background {
-                        GeometryReader { proxy in
-                            Color.clear.preference(
-                                key: DiscoveryLoadMoreOffsetPreferenceKey.self,
-                                value: [source: proxy.frame(in: .named("discovery-scroll-\(source.rawValue)")).minY]
+            ScrollView {
+                if merged.isEmpty {
+                    ContentUnavailableView("暂无在线歌单", systemImage: "music.note.list")
+                        .frame(minHeight: 420)
+                } else {
+                    LazyVGrid(
+                        columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)],
+                        spacing: 16
+                    ) {
+                        ForEach(merged, id: \.key) { playlist in
+                            NCMPlaylistGridCard(
+                                playlist: playlist,
+                                runtime: runtime,
+                                isLoading: playingPlaylistKey == playlist.key,
+                                onPlay: { playPlaylist(playlist) }
                             )
                         }
                     }
-                Color.clear.frame(height: 156)
-            }
-        }
-        .coordinateSpace(name: "discovery-scroll-\(source.rawValue)")
-        .scrollIndicators(.hidden)
-        .refreshable { await model.refresh(source) }
-        .onPreferenceChange(DiscoveryLoadMoreOffsetPreferenceKey.self) { offsets in
-            guard let triggerY = offsets[source], triggerY - viewportHeight <= 600 else { return }
-            let token = "\(model.selectedCategory(for: source).id):\(state.page)"
-            Task { @MainActor in
-                await Task.yield()
-                guard lastAutomaticLoadToken != token else { return }
-                lastAutomaticLoadToken = token
-                await model.loadMore(for: source)
-            }
-        }
-        .background(scheme.appSurface)
-        .task { await model.loadInitial(for: source) }
-    }
-}
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
 
-private struct MasonryPlaylistGrid: View {
-    let items: [PlaylistSummary]
-    let availableWidth: CGFloat
-    let runtime: SourceRuntime
-    let onPreview: (PlaylistSummary) -> Void
-
-    private let gap: CGFloat = 10
-
-    var body: some View {
-        let contentWidth = min(max(availableWidth - 24, 0), 960)
-        let columnWidth = max((contentWidth - gap) / 2, 1)
-        let assignments = DiscoveryMasonry.columnAssignments(
-            for: items.map(\.key),
-            columnWidth: columnWidth,
-            gap: gap
-        )
-
-        HStack(alignment: .top, spacing: gap) {
-            ForEach(0..<2, id: \.self) { column in
-                LazyVStack(spacing: gap) {
-                    ForEach(Array(items.enumerated()).filter { assignments[$0.offset] == column }, id: \.element.key) { _, item in
-                        NavigationLink {
-                            OnlinePlaylistDetailView(playlist: item, runtime: runtime)
-                        } label: {
-                            PlaylistDiscoveryCard(item: item, width: columnWidth)
+                    if MusicSource.allCases.contains(where: { model.state(for: $0).hasMore }) {
+                        Button { Task { await loadMore() } } label: {
+                            Label("加载更多", systemImage: "chevron.down")
+                                .font(.system(size: 14, weight: .medium))
+                                .frame(minWidth: 120, minHeight: 44)
                         }
                         .buttonStyle(.plain)
-                        .simultaneousGesture(LongPressGesture().onEnded { _ in onPreview(item) })
-                        .accessibilityIdentifier("discovery-card-\(item.key)")
+                        .foregroundStyle(scheme.primary)
+                        .padding(.vertical, 18)
                     }
                 }
-                .frame(width: columnWidth)
+                Color.clear.frame(height: 120)
+            }
+            .scrollIndicators(.hidden)
+            .refreshable {
+                for source in MusicSource.allCases { await model.refresh(source) }
             }
         }
-        .frame(width: contentWidth, alignment: .top)
-        .padding(.top, 2)
-        .padding(.horizontal, 12)
-        .frame(maxWidth: .infinity)
+        .background(scheme.appSurface.ignoresSafeArea())
+        .toolbar(.hidden, for: .navigationBar)
+        .ncmEdgeSwipeBack()
+        .alert("操作失败", isPresented: Binding(
+            get: { actionError != nil },
+            set: { if !$0 { actionError = nil } }
+        )) {
+            Button("好", role: .cancel) { actionError = nil }
+        } message: {
+            Text(actionError ?? "未知错误")
+        }
+        .task {
+            for source in MusicSource.allCases { await model.loadInitial(for: source) }
+        }
+    }
+
+    private func loadMore() async {
+        for source in MusicSource.allCases where model.state(for: source).hasMore {
+            await model.loadMore(for: source)
+        }
+    }
+
+    private func playPlaylist(_ playlist: PlaylistSummary) {
+        guard playingPlaylistKey == nil else { return }
+        playingPlaylistKey = playlist.key
+        Task {
+            defer { playingPlaylistKey = nil }
+            do {
+                let detailModel = OnlinePlaylistDetailViewModel(playlist: playlist, runtime: runtime)
+                let tracks = try await detailModel.allTracks()
+                guard !tracks.isEmpty else {
+                    actionError = "这个歌单还没有可播放的曲目"
+                    return
+                }
+                await playbackService.replaceQueue(tracks)
+            } catch {
+                actionError = error.localizedDescription
+            }
+        }
     }
 }
 
-private struct DiscoveryCategoryFabLayer: View {
-    @Environment(\.m3Scheme) private var scheme
-    @Environment(\.sonarReduceMotion) private var reduceMotion
+private struct NCMPagingDots: View {
+    let count: Int
+    let selected: Int
 
-    let source: MusicSource
-    let selectedCategory: PlaylistCategory
-    @Binding var isExpanded: Bool
-    let onSelect: (PlaylistCategory) -> Void
+    @Environment(\.m3Scheme) private var scheme
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            if isExpanded {
-                Color.clear
-                    .contentShape(Rectangle())
-                    .onTapGesture { setExpanded(false) }
-                    .ignoresSafeArea()
+        HStack(spacing: 5) {
+            ForEach(0..<max(count, 1), id: \.self) { index in
+                Capsule()
+                    .fill(index == selected ? scheme.primary : scheme.outlineVariant)
+                    .frame(width: index == selected ? 10 : 4, height: 4)
             }
+        }
+        .frame(height: 4)
+        .accessibilityHidden(true)
+    }
+}
 
-            VStack(alignment: .trailing, spacing: 10) {
-                if isExpanded {
-                    ForEach(source.playlistCategories) { category in
-                        Button {
-                            onSelect(category)
-                            setExpanded(false)
-                        } label: {
-                            Label {
-                                Text(category.name)
-                            } icon: {
-                                Image(systemName: category == selectedCategory ? "checkmark" : icon(for: category))
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(category == selectedCategory ? scheme.secondary : scheme.surfaceContainerHigh)
-                        .foregroundStyle(category == selectedCategory ? scheme.onSecondaryContainer : scheme.onSurface)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
-                        .accessibilityIdentifier("discovery-category-\(source.rawValue)-\(category.id)")
-                    }
+private struct NCMSectionHeader: View {
+    let title: String
+    let action: String
+    let onAction: () -> Void
+
+    @Environment(\.m3Scheme) private var scheme
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.system(size: NCMDesignTokens.Typography.sectionTitle, weight: .bold))
+                .foregroundStyle(scheme.onSurface)
+            Spacer()
+            Button(action: onAction) {
+                HStack(spacing: 2) {
+                    Text(action)
+                    Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
                 }
+                .font(.system(size: NCMDesignTokens.Typography.sectionAction, weight: .medium))
+                .foregroundStyle(scheme.onSurfaceVariant)
+                .frame(minWidth: 52, minHeight: 44, alignment: .trailing)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
+        .padding(.top, 18)
+        .padding(.bottom, 10)
+    }
+}
 
-                Button {
-                    setExpanded(!isExpanded)
+private struct NCMPlaylistCard: View {
+    let playlist: PlaylistSummary
+    let runtime: SourceRuntime
+    let isLoading: Bool
+    let onPlay: () -> Void
+
+    @Environment(\.m3Scheme) private var scheme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ZStack(alignment: .bottomTrailing) {
+                NavigationLink {
+                    OnlinePlaylistDetailView(playlist: playlist, runtime: runtime)
                 } label: {
-                    Label(
-                        isExpanded ? "关闭" : selectedCategory.name,
-                        systemImage: isExpanded ? "xmark" : "line.3.horizontal.decrease"
-                    )
+                    RemotePlaylistArtwork(urlString: playlist.img)
+                        .frame(width: NCMDesignTokens.Layout.playlistCardWidth, height: NCMDesignTokens.Layout.playlistCardWidth)
+                        .clipShape(RoundedRectangle(cornerRadius: NCMDesignTokens.Layout.playlistArtworkCornerRadius, style: .continuous))
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(scheme.primary)
-                .foregroundStyle(scheme.onPrimary)
-                .accessibilityIdentifier("discovery-category-fab")
+                .buttonStyle(.plain)
+
+                Text(playlist.playCount.isEmpty ? "播放" : "▶  \(playlist.playCount)")
+                    .font(.system(size: NCMDesignTokens.Typography.playCount, weight: .medium))
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.6), radius: 2, y: 1)
+                    .padding(.horizontal, 6)
+                    .frame(height: 18)
+                    .background(.black.opacity(0.28), in: Capsule())
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .padding(5)
+                    .allowsHitTesting(false)
+
+                Button(action: onPlay) {
+                    Group {
+                        if isLoading { ProgressView().tint(.white).controlSize(.small) }
+                        else { Image(systemName: "play.fill").font(.system(size: 12, weight: .bold)).offset(x: 1) }
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: 26, height: 26)
+                    .background(scheme.primary, in: Circle())
+                    .shadow(color: .black.opacity(0.28), radius: 4, y: 1)
+                }
+                .buttonStyle(.plain)
+                .disabled(isLoading)
+                .padding(6)
+                .accessibilityLabel("播放整个歌单")
             }
-            .padding(.trailing, 18)
-            .padding(.bottom, 82)
-        }
-    }
+            .frame(width: NCMDesignTokens.Layout.playlistCardWidth, height: NCMDesignTokens.Layout.playlistCardWidth)
 
-    private func setExpanded(_ expanded: Bool) {
-        let animation = expanded
-            ? AppMotion.emphasizedDecelerate(duration: AppMotion.medium, reduceMotion: reduceMotion)
-            : AppMotion.emphasizedAccelerate(duration: AppMotion.medium, reduceMotion: reduceMotion)
-        withAnimation(animation) { isExpanded = expanded }
-    }
-
-    private func icon(for category: PlaylistCategory) -> String {
-        switch category.id {
-        case "hot", "5": "flame.fill"
-        case "2": "sparkles"
-        default: "line.3.horizontal.decrease"
+            NavigationLink {
+                OnlinePlaylistDetailView(playlist: playlist, runtime: runtime)
+            } label: {
+                Text(playlist.name)
+                    .font(.system(size: NCMDesignTokens.Typography.playlistCardTitle))
+                    .foregroundStyle(scheme.onSurface)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2, reservesSpace: true)
+                    .frame(width: NCMDesignTokens.Layout.playlistCardWidth, alignment: .topLeading)
+            }
+            .buttonStyle(.plain)
         }
+        .frame(width: NCMDesignTokens.Layout.playlistCardWidth, alignment: .top)
+        .accessibilityIdentifier("home-playlist-card-\(playlist.key)")
     }
 }
 
-private struct PlaylistDiscoveryCard: View {
+private struct NCMPlaylistGridCard: View {
+    let playlist: PlaylistSummary
+    let runtime: SourceRuntime
+    let isLoading: Bool
+    let onPlay: () -> Void
+
     @Environment(\.m3Scheme) private var scheme
 
-    let item: PlaylistSummary
-    let width: CGFloat
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ZStack(alignment: .bottomTrailing) {
+                NavigationLink {
+                    OnlinePlaylistDetailView(playlist: playlist, runtime: runtime)
+                } label: {
+                    RemotePlaylistArtwork(urlString: playlist.img)
+                        .aspectRatio(1, contentMode: .fit)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+
+                Text(playlist.playCount.isEmpty ? "播放" : "▶  \(playlist.playCount)")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.6), radius: 2, y: 1)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .padding(7)
+                    .allowsHitTesting(false)
+
+                Button(action: onPlay) {
+                    Group {
+                        if isLoading { ProgressView().tint(.white).controlSize(.small) }
+                        else { Image(systemName: "play.fill").font(.system(size: 12, weight: .bold)).offset(x: 1) }
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: 26, height: 26)
+                    .background(scheme.primary, in: Circle())
+                    .shadow(color: .black.opacity(0.28), radius: 4, y: 1)
+                }
+                .buttonStyle(.plain)
+                .disabled(isLoading)
+                .padding(6)
+                .accessibilityLabel("播放整个歌单")
+            }
+            .aspectRatio(1, contentMode: .fit)
+
+            NavigationLink {
+                OnlinePlaylistDetailView(playlist: playlist, runtime: runtime)
+            } label: {
+                Text(playlist.name)
+                    .font(.system(size: 13))
+                    .foregroundStyle(scheme.onSurface)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2, reservesSpace: true)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            .buttonStyle(.plain)
+        }
+        .accessibilityIdentifier("playlist-square-card-\(playlist.key)")
+    }
+}
+
+private struct NCMHomeSongRow: View {
+    let track: Track
+    let isCurrent: Bool
+    let isPlaying: Bool
+    let showDivider: Bool
+    let onPlay: () -> Void
 
     var body: some View {
-        let ratio = DiscoveryMasonry.ratio(for: item.key)
-        VStack(alignment: .leading, spacing: 0) {
-            RemotePlaylistArtwork(urlString: item.img)
-                .frame(width: width, height: width / ratio)
-            VStack(alignment: .leading, spacing: 5) {
-                Text(item.name)
-                    .font(.system(size: 13.5, weight: .semibold))
-                    .foregroundStyle(scheme.onSurface)
-                    .tracking(0)
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, minHeight: 38, maxHeight: 38, alignment: .topLeading)
-                Text(item.author.isEmpty ? item.source.displayName : item.author)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(scheme.onSurfaceVariant)
-                    .tracking(0)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+        SongRow(
+            track: track,
+            leading: .cover,
+            trailing: .play,
+            showDivider: showDivider,
+            isCurrent: isCurrent,
+            isPlaying: isPlaying,
+            onPlay: onPlay
+        )
+    }
+}
+
+private struct NCMHomeSongSkeleton: View {
+    @Environment(\.m3Scheme) private var scheme
+
+    var body: some View {
+        HStack(spacing: 10) {
+            RoundedRectangle(cornerRadius: 6).fill(scheme.surfaceContainerHigh).frame(width: 44, height: 44)
+            VStack(alignment: .leading, spacing: 8) {
+                Capsule().fill(scheme.surfaceContainerHigh).frame(width: 150, height: 11)
+                Capsule().fill(scheme.surfaceContainer).frame(width: 110, height: 9)
             }
-            .padding(.init(top: 9, leading: 10, bottom: 10, trailing: 10))
-            .frame(height: 82, alignment: .top)
+            Spacer()
         }
-        .frame(width: width)
-        .background(scheme.surfaceContainer)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(scheme.outlineVariant.opacity(0.24), lineWidth: 1)
-        }
-        .contentShape(Rectangle())
+        .padding(.horizontal, 16)
+        .frame(height: 60)
+        .accessibilityHidden(true)
     }
 }
 
 struct RemotePlaylistArtwork: View {
     @Environment(\.m3Scheme) private var scheme
-
     let urlString: String?
 
     private var url: URL? {
@@ -614,14 +1041,10 @@ struct RemotePlaylistArtwork: View {
     var body: some View {
         AsyncImage(url: url) { phase in
             switch phase {
-            case let .success(image):
-                image.resizable().scaledToFill()
-            case .failure:
-                placeholder(systemImage: "exclamationmark.triangle")
-            case .empty:
-                placeholder(systemImage: "music.note")
-            @unknown default:
-                placeholder(systemImage: "music.note")
+            case let .success(image): image.resizable().scaledToFill()
+            case .failure: placeholder(systemImage: "exclamationmark.triangle")
+            case .empty: placeholder(systemImage: "music.note")
+            @unknown default: placeholder(systemImage: "music.note")
             }
         }
         .clipped()
@@ -634,41 +1057,6 @@ struct RemotePlaylistArtwork: View {
                 .font(.system(size: 24, weight: .medium))
                 .foregroundStyle(scheme.onSurfaceVariant)
         }
-    }
-}
-
-private struct PlaylistPreviewSheet: View {
-    @Environment(\.m3Scheme) private var scheme
-
-    let playlist: PlaylistSummary
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 14) {
-                RemotePlaylistArtwork(urlString: playlist.img)
-                    .frame(width: 96, height: 96)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(playlist.name)
-                        .font(.headline)
-                        .foregroundStyle(scheme.onSurface)
-                        .lineLimit(3)
-                    Text("\(playlist.source.displayName) · \(playlist.author)")
-                        .font(.subheadline)
-                        .foregroundStyle(scheme.onSurfaceVariant)
-                        .lineLimit(2)
-                }
-            }
-            if let description = playlist.desc, !description.isEmpty {
-                Text(description)
-                    .font(.subheadline)
-                    .foregroundStyle(scheme.onSurfaceVariant)
-                    .lineLimit(5)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(20)
-        .background(scheme.surface)
     }
 }
 

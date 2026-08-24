@@ -135,6 +135,28 @@ public final class LibraryStore {
         return sortedItems(in: playlist).compactMap { $0.track.track }
     }
 
+    public func deleteTrack(_ track: Track) throws {
+        let musicID = track.musicID
+        var descriptor = FetchDescriptor<TrackRecord>(predicate: #Predicate { $0.musicId == musicID })
+        descriptor.fetchLimit = 1
+        guard let record = try context.fetch(descriptor).first else { return }
+
+        let matchingItems = try context.fetch(FetchDescriptor<PlaylistItem>()).filter {
+            $0.track.musicId == musicID
+        }
+        let affectedPlaylists = matchingItems.compactMap(\.playlist).reduce(into: [UUID: Playlist]()) {
+            $0[$1.id] = $1
+        }
+
+        for item in matchingItems { context.delete(item) }
+        for playlist in affectedPlaylists.values {
+            let remaining = sortedItems(in: playlist).filter { $0.track.musicId != musicID }
+            for (index, item) in remaining.enumerated() { item.sortIndex = index }
+        }
+        context.delete(record)
+        try context.save()
+    }
+
     public func cacheAccentHex(_ accentHex: String?, for track: Track) throws {
         let record = try upsert(track)
         record.accentHex = accentHex

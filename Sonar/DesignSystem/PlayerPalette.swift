@@ -16,15 +16,11 @@ struct PlayerPalette {
     var queueBackground: Color { Color(hex: hex.queueBackground) ?? .clear }
 
     init(scheme: M3Scheme) {
-        let surface = scheme.isDark ? scheme.hex.surfaceContainerLow : "#E2E2DF"
-        let ink = scheme.isDark ? scheme.hex.onSurface : "#07111E"
-        let muted = scheme.isDark ? scheme.hex.onSurfaceVariant : "#70757C"
-        let queueBase = scheme.isDark ? "#000000" : "#FFFFFF"
         hex = HexValues(
-            surface: surface,
-            ink: ink,
-            muted: muted,
-            queueBackground: M3Scheme.mixHex(top: queueBase, bottom: surface, alpha: 0.32)
+            surface: scheme.isDark ? "#3D392F" : "#575142",
+            ink: "#FFFFFF",
+            muted: "#B8B5AE",
+            queueBackground: scheme.isDark ? "#24221D" : "#37342C"
         )
     }
 }

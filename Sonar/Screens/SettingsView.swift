@@ -1,170 +1,108 @@
 import SwiftUI
 
 struct SettingsView: View {
+    private enum PresentedSheet: String, Identifiable {
+        case quality
+        var id: String { rawValue }
+    }
+
+    @Environment(\.dismiss) private var dismiss
     @Environment(SonarThemeState.self) private var themeState
     @Environment(UIPlaybackPreferences.self) private var preferences
     @Environment(PlaybackService.self) private var playbackService
     @Environment(\.m3Scheme) private var scheme
 
-    @State private var qualityTrack: Track?
+    @State private var presentedSheet: PresentedSheet?
 
     var body: some View {
         @Bindable var themeState = themeState
         @Bindable var preferences = preferences
 
         VStack(spacing: 0) {
-            Text("设置")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(scheme.onSurface)
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                .padding(.horizontal, 18)
-                .padding(.top, 10)
-                .padding(.bottom, 8)
-
+            header
             ScrollView {
-                VStack(spacing: 0) {
+                LazyVStack(spacing: 0) {
                     sectionTitle("外观")
-                    VStack(spacing: 22) {
-                        SettingsLabel(
-                            icon: "paintpalette",
-                            title: "主题模式",
-                            subtitle: "浅色 / 深色 / 跟随系统"
-                        )
-
-                        Picker("主题模式", selection: $themeState.appearanceMode) {
-                            Label("浅色", systemImage: "sun.max").tag(AppearanceMode.light)
-                            Label("深色", systemImage: "moon").tag(AppearanceMode.dark)
-                            Label("跟随系统", systemImage: "circle.lefthalf.filled").tag(AppearanceMode.system)
+                    VStack(spacing: 14) {
+                        Picker("外观", selection: $themeState.appearanceMode) {
+                            Text("浅色").tag(AppearanceMode.light)
+                            Text("深色").tag(AppearanceMode.dark)
+                            Text("跟随").tag(AppearanceMode.system)
                         }
                         .pickerStyle(.segmented)
                         .accessibilityIdentifier("settings-appearance-mode")
 
-                        SettingsLabel(
-                            icon: "checkmark",
-                            title: "主题颜色",
-                            subtitle: "用于生成应用的静态 Material 3 配色",
-                            bubbleColor: themeState.accent,
-                            bubbleForeground: .white
-                        )
-
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 10) {
-                                ForEach(ThemeSeedPreset.allCases) { preset in
-                                    Button {
-                                        themeState.usePreset(preset)
-                                    } label: {
-                                        Circle()
-                                            .fill(Color(hex: preset.hex) ?? .blue)
-                                            .frame(width: 38, height: 38)
-                                            .overlay {
-                                                if themeState.seedSource == .preset,
-                                                   themeState.selectedPreset == preset {
-                                                    Image(systemName: "checkmark")
-                                                        .font(.system(size: 16, weight: .bold))
-                                                        .foregroundStyle(.white)
-                                                }
-                                            }
-                                            .overlay {
-                                                Circle().stroke(.black.opacity(0.12), lineWidth: 1)
-                                            }
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityLabel(preset.name)
-                                    .accessibilityIdentifier("settings-seed-\(preset.rawValue)")
-                                }
-                            }
-                        }
-
-                        HStack(spacing: 18) {
-                            SettingsLabel(
-                                icon: "wand.and.stars",
-                                title: "封面动态色",
-                                subtitle: themeState.seedSource == .artwork
-                                    ? "从当前曲目封面取色生成完整主题"
-                                    : "使用上面选定的主题色"
-                            )
-                            Toggle("封面动态色", isOn: artworkSeedBinding)
+                        settingRow(
+                            icon: "photo.on.rectangle.angled",
+                            title: "播放页封面取色",
+                            subtitle: "用当前封面生成播放器背景"
+                        ) {
+                            Toggle("播放页封面取色", isOn: $preferences.coverAccentEnabled)
                                 .labelsHidden()
-                                .accessibilityIdentifier("settings-artwork-color-toggle")
+                                .accessibilityIdentifier("settings-cover-accent-toggle")
                         }
                     }
-                    .settingsCard(scheme: scheme)
+                    .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
 
                     sectionTitle("播放")
-                    VStack(spacing: 22) {
-                        HStack(spacing: 18) {
-                            SettingsLabel(
-                                icon: "captions.bubble",
-                                title: "显示迷你歌词",
-                                subtitle: "在封面页左下角显示三行歌词"
-                            )
-                            Toggle("显示迷你歌词", isOn: $preferences.miniLyricsEnabled)
-                                .labelsHidden()
-                                .accessibilityIdentifier("settings-mini-lyrics-toggle")
-                        }
-
-                        HStack(spacing: 18) {
-                            SettingsLabel(
-                                icon: "waveform.badge.magnifyingglass",
-                                title: "播放音质",
-                                subtitle: "\(playbackService.preferredQuality.title) 起，自动选可用的最高档"
-                            )
-                            Button("切换") {
-                                qualityTrack = playbackService.queue.current
-                            }
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundStyle(scheme.onSecondaryContainer)
-                            .padding(.horizontal, 18)
-                            .frame(minHeight: 40)
-                            .background(scheme.secondaryContainer, in: Capsule())
-                            .disabled(playbackService.queue.current == nil)
-                        }
-
-                        HStack(spacing: 18) {
-                            SettingsLabel(
-                                icon: "sparkles",
-                                title: "动效",
-                                subtitle: "关掉后所有过渡与弹簧立即到位"
-                            )
-                            Toggle("动效", isOn: $preferences.motionEnabled)
-                                .labelsHidden()
-                                .accessibilityIdentifier("settings-motion-toggle")
+                    Button {
+                        presentedSheet = .quality
+                    } label: {
+                        settingRow(
+                            icon: "waveform",
+                            title: "播放音质",
+                            subtitle: playbackService.preferredQuality.title
+                        ) {
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(scheme.outline)
                         }
                     }
-                    .settingsCard(scheme: scheme)
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
+                    .accessibilityIdentifier("settings-quality-button")
 
                     sectionTitle("关于")
-                    SettingsLabel(
+                    settingRow(
                         icon: "music.note",
                         title: "Sonar",
-                        subtitle: "在深水里靠声音辨路 · 版本 1.0"
-                    )
-                    .settingsCard(scheme: scheme)
-                    .padding(.bottom, 24)
+                        subtitle: "版本 1.0"
+                    ) {
+                        EmptyView()
+                    }
+                    .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
+                    .padding(.bottom, 30)
                 }
             }
             .scrollIndicators(.hidden)
         }
         .background(scheme.appSurface.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
-        .sheet(item: $qualityTrack) { track in
-            QualitySheet(track: track)
-                .presentationDetents([.fraction(0.72)])
+        .sheet(item: $presentedSheet) { _ in
+            QualitySheet(track: playbackService.queue.current)
+                .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
         }
     }
 
-    private var artworkSeedBinding: Binding<Bool> {
-        Binding(
-            get: { themeState.seedSource == .artwork },
-            set: { enabled in
-                if enabled {
-                    themeState.useArtworkSeed()
-                } else {
-                    themeState.usePreset(themeState.selectedPreset)
-                }
+    private var header: some View {
+        HStack(spacing: 0) {
+            Button { dismiss() } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(scheme.onSurface)
+                    .frame(width: 44, height: 44)
             }
-        )
+            .buttonStyle(.plain)
+            .accessibilityLabel("返回")
+            Text("设置")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(scheme.onSurface)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Color.clear.frame(width: 44, height: 44)
+        }
+        .padding(.horizontal, 4)
+        .padding(.top, 6)
     }
 
     private func sectionTitle(_ title: String) -> some View {
@@ -172,56 +110,39 @@ struct SettingsView: View {
             .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(scheme.onSurfaceVariant)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 18)
-            .padding(.top, 18)
-            .padding(.bottom, 8)
+            .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
+            .padding(.top, 22)
+            .padding(.bottom, 10)
     }
-}
 
-private struct SettingsLabel: View {
-    let icon: String
-    let title: String
-    let subtitle: String
-    var bubbleColor: Color?
-    var bubbleForeground: Color?
-
-    @Environment(\.m3Scheme) private var scheme
-
-    var body: some View {
-        HStack(spacing: 18) {
+    private func settingRow<Trailing: View>(
+        icon: String,
+        title: String,
+        subtitle: String,
+        @ViewBuilder trailing: () -> Trailing
+    ) -> some View {
+        HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 20, weight: .medium))
-                .foregroundStyle(bubbleForeground ?? scheme.onSecondaryContainer)
-                .frame(width: 42, height: 42)
-                .background(bubbleColor ?? scheme.secondaryContainer, in: Circle())
-                .overlay {
-                    if bubbleColor != nil {
-                        Circle().stroke(scheme.outlineVariant, lineWidth: 1)
-                    }
-                }
-            VStack(alignment: .leading, spacing: 5) {
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(scheme.primary)
+                .frame(width: 30)
+            VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.system(size: 16))
                     .foregroundStyle(scheme.onSurface)
                 Text(subtitle)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(scheme.outline)
+                    .font(.system(size: 12))
+                    .foregroundStyle(scheme.onSurfaceVariant)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            trailing()
         }
-    }
-}
-
-private extension View {
-    func settingsCard(scheme: M3Scheme) -> some View {
-        padding(.horizontal, 16)
-            .padding(.vertical, 18)
-            .background(scheme.surfaceContainerLow, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(scheme.outlineVariant.opacity(0.46), lineWidth: 1)
-            }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 14)
+        .frame(minHeight: 58)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(scheme.outlineVariant)
+                .frame(height: 0.5)
+                .padding(.leading, 42)
+        }
     }
 }

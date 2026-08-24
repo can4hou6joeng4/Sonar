@@ -3,6 +3,11 @@ import Observation
 @MainActor
 @Observable
 final class SearchViewModel {
+    private struct SourceResult: Sendable {
+        let tracks: [Track]
+        let errorMessage: String?
+    }
+
     var query = ""
     var results: [Track] = []
     var suggestions: [String] = []
@@ -83,45 +88,36 @@ final class SearchViewModel {
         isLoading = true
         errorMessage = nil
 
+        async let wyResult = search(keyword, source: .wy)
+        async let txResult = search(keyword, source: .tx)
+        let sourceResults = await [wyResult, txResult]
+        guard isCurrentSearch(generation, keyword: keyword) else { return }
+
+        var seen = Set<String>()
+        let merged = sourceResults
+            .flatMap(\.tracks)
+            .filter { seen.insert($0.musicID).inserted }
+        let failures = sourceResults.compactMap(\.errorMessage)
+        finishSearch(
+            merged,
+            errorMessage: merged.isEmpty && !failures.isEmpty
+                ? "搜索失败：\(failures.joined(separator: "；"))"
+                : nil,
+            generation: generation,
+            keyword: keyword
+        )
+    }
+
+    private func search(_ keyword: String, source: MusicSource) async -> SourceResult {
         do {
-            let primary = try await runtime.search(keyword, source: .wy, page: 1).list
-            guard isCurrentSearch(generation, keyword: keyword) else { return }
-            if !primary.isEmpty {
-                finishSearch(primary, errorMessage: nil, generation: generation, keyword: keyword)
-                return
-            }
-            do {
-                let fallback = try await runtime.search(keyword, source: .tx, page: 1).list
-                finishSearch(fallback, errorMessage: nil, generation: generation, keyword: keyword)
-            } catch {
-                finishSearch(
-                    [],
-                    errorMessage: "搜索失败：\(error.localizedDescription)",
-                    generation: generation,
-                    keyword: keyword
-                )
-            }
+            return SourceResult(
+                tracks: try await runtime.search(keyword, source: source, page: 1).list,
+                errorMessage: nil
+            )
+        } catch is CancellationError {
+            return SourceResult(tracks: [], errorMessage: nil)
         } catch {
-            let primaryFailure = error.localizedDescription
-            guard isCurrentSearch(generation, keyword: keyword) else { return }
-            do {
-                let fallback = try await runtime.search(keyword, source: .tx, page: 1).list
-                finishSearch(
-                    fallback,
-                    errorMessage: fallback.isEmpty
-                        ? "未找到结果；首选渠道 \(primaryFailure)"
-                        : nil,
-                    generation: generation,
-                    keyword: keyword
-                )
-            } catch {
-                finishSearch(
-                    [],
-                    errorMessage: "搜索失败：首选渠道 \(primaryFailure)；备用渠道 \(error.localizedDescription)",
-                    generation: generation,
-                    keyword: keyword
-                )
-            }
+            return SourceResult(tracks: [], errorMessage: error.localizedDescription)
         }
     }
 

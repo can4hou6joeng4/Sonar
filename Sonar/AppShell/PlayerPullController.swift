@@ -3,30 +3,43 @@ import QuartzCore
 import SwiftUI
 
 enum PlayerPullMetrics {
-    static let flingVelocity: CGFloat = 400
-    static let revealThreshold = 0.28
-    static let hideThreshold = 0.72
-    static let toolbarFadeProgress = 0.15
+    static let dismissVelocity: CGFloat = 550
+    static let dismissDistance: CGFloat = 140
+    static let upwardResistance: CGFloat = 0.28
+    static let maximumUpwardTravel: CGFloat = 46
+    static let feedbackDistance: CGFloat = 560
 
-    static func settleDuration(remaining: Double) -> TimeInterval {
-        (140 + 180 * min(max(remaining, 0), 1)) / 1_000
+    static func shouldDismiss(translationY: CGFloat, velocityY: CGFloat) -> Bool {
+        translationY > 0 && (velocityY > dismissVelocity || translationY > dismissDistance)
     }
 
-    static func settleTarget(
-        pull: Double,
-        velocityY: CGFloat,
-        lastDeltaY: CGFloat
-    ) -> Double {
-        if abs(velocityY) > flingVelocity {
-            return velocityY < 0 ? 1 : 0
-        }
-        if lastDeltaY < 0 {
-            return pull >= revealThreshold ? 1 : 0
-        }
-        if lastDeltaY > 0 {
-            return pull > hideThreshold ? 1 : 0
-        }
-        return pull >= 0.5 ? 1 : 0
+    static func resistedTranslation(_ translationY: CGFloat) -> CGFloat {
+        guard translationY < 0 else { return translationY }
+        return max(translationY * upwardResistance, -maximumUpwardTravel)
+    }
+
+    static func feedback(for translationY: CGFloat) -> (scale: CGFloat, opacity: Double) {
+        let progress = min(max(translationY / feedbackDistance, 0), 1)
+        return (
+            scale: 1 - progress * 0.05,
+            opacity: Double(1 - progress * 0.28)
+        )
+    }
+}
+
+enum EdgeBackMetrics {
+    static let activationWidth: CGFloat = 26
+    static let dismissVelocity: CGFloat = 500
+    static let dismissDistanceRatio: CGFloat = 0.32
+    static let backgroundParallaxRatio: CGFloat = 0.22
+
+    static func canStart(at x: CGFloat) -> Bool {
+        x < activationWidth
+    }
+
+    static func shouldDismiss(translationX: CGFloat, velocityX: CGFloat, containerWidth: CGFloat) -> Bool {
+        translationX > 0
+            && (velocityX > dismissVelocity || translationX > containerWidth * dismissDistanceRatio)
     }
 }
 
@@ -35,97 +48,95 @@ enum PlayerPullMetrics {
 final class PlayerPullController {
     private(set) var pull = 0.0
     private(set) var playerMounted = false
-    private var interactionStartPull = 0.0
+    private(set) var translationY: CGFloat = 0
     @ObservationIgnored private var pendingOpenTask: Task<Void, Never>?
 
-    var toolbarReveal: Double {
-        min(max(1 - pull / PlayerPullMetrics.toolbarFadeProgress, 0), 1)
-    }
+    var toolbarReveal: Double { min(max(1 - pull, 0), 1) }
+    var scale: CGFloat { PlayerPullMetrics.feedback(for: translationY).scale }
+    var opacity: Double { PlayerPullMetrics.feedback(for: translationY).opacity }
 
     func warm() {
-        // 播放层一旦预热就常驻，避免反复触发后续流光背景的冷启动。
         playerMounted = true
     }
 
-    func beginInteraction() {
+    func beginDismissInteraction() {
         pendingOpenTask?.cancel()
         pendingOpenTask = nil
         warm()
-        interactionStartPull = pull
     }
 
-    func update(translationY: CGFloat, viewportHeight: CGFloat) {
-        guard viewportHeight > 0 else { return }
-        pull = min(max(interactionStartPull - Double(translationY / viewportHeight), 0), 1)
+    func updateDismiss(translationY: CGFloat) {
+        self.translationY = PlayerPullMetrics.resistedTranslation(translationY)
     }
 
-    func endInteraction(
-        velocityY: CGFloat,
-        lastDeltaY: CGFloat,
-        reduceMotion: Bool
-    ) {
-        let target = PlayerPullMetrics.settleTarget(
-            pull: pull,
-            velocityY: velocityY,
-            lastDeltaY: lastDeltaY
-        )
-        settle(to: target, reduceMotion: reduceMotion)
-    }
-
-    func cancelInteraction(reduceMotion: Bool) {
-        settle(to: interactionStartPull >= 0.5 ? 1 : 0, reduceMotion: reduceMotion)
+    func endDismissInteraction(velocityY: CGFloat, reduceMotion: Bool) {
+        if PlayerPullMetrics.shouldDismiss(translationY: translationY, velocityY: velocityY) {
+            close(reduceMotion: reduceMotion)
+        } else {
+            resetTranslation(reduceMotion: reduceMotion)
+        }
     }
 
     func open(reduceMotion: Bool) {
         warm()
         pendingOpenTask?.cancel()
         guard !reduceMotion else {
-            settle(to: 1, reduceMotion: true)
+            setPresented(true, disablesAnimations: true)
             return
         }
-
-        // 首次点击会在同一轮事件里挂载图层并提交位移动画；先让离屏图层完成一次布局，
-        // 否则 SwiftUI 可能只保留初始 transform，最终 pull 已到 1 但画面仍停在 Shell。
         pendingOpenTask = Task { @MainActor [weak self] in
             await Task.yield()
             guard !Task.isCancelled, let self else { return }
             pendingOpenTask = nil
-            settle(to: 1, reduceMotion: false)
+            withAnimation(.timingCurve(0.32, 0.72, 0, 1, duration: AppMotion.long)) {
+                self.pull = 1
+                self.translationY = 0
+            }
         }
     }
 
     func close(reduceMotion: Bool) {
         pendingOpenTask?.cancel()
         pendingOpenTask = nil
-        settle(to: 0, reduceMotion: reduceMotion)
-    }
-
-    private func settle(to target: Double, reduceMotion: Bool) {
-        let remaining = abs(pull - target)
-        guard !reduceMotion, remaining >= 0.001 else {
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) { pull = target }
+        guard !reduceMotion else {
+            setPresented(false, disablesAnimations: true)
             return
         }
+        withAnimation(.timingCurve(0.32, 0.72, 0, 1, duration: AppMotion.long)) {
+            pull = 0
+            translationY = 0
+        }
+    }
 
-        let duration = PlayerPullMetrics.settleDuration(remaining: remaining)
-        let animation = target > pull
-            ? AppMotion.emphasizedDecelerate(duration: duration, reduceMotion: false)
-            : AppMotion.emphasizedAccelerate(duration: duration, reduceMotion: false)
-        withAnimation(animation) { pull = target }
+    private func resetTranslation(reduceMotion: Bool) {
+        guard !reduceMotion else {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { translationY = 0 }
+            return
+        }
+        withAnimation(.timingCurve(0.32, 0.72, 0, 1, duration: AppMotion.long)) {
+            translationY = 0
+        }
+    }
+
+    private func setPresented(_ presented: Bool, disablesAnimations: Bool) {
+        var transaction = Transaction()
+        transaction.disablesAnimations = disablesAnimations
+        withTransaction(transaction) {
+            pull = presented ? 1 : 0
+            translationY = 0
+        }
     }
 }
 
-private struct PlayerPullHandleModifier: ViewModifier {
+private struct PlayerDismissGestureModifier: ViewModifier {
     @Environment(\.sonarReduceMotion) private var reduceMotion
 
     let controller: PlayerPullController
-    let viewportHeight: CGFloat
 
     @State private var lastTranslationY: CGFloat?
     @State private var lastTimestamp: CFTimeInterval?
-    @State private var lastDeltaY: CGFloat = 0
     @State private var velocityY: CGFloat = 0
 
     func body(content: Content) -> some View {
@@ -139,53 +150,105 @@ private struct PlayerPullHandleModifier: ViewModifier {
     private func handleChanged(_ value: DragGesture.Value) {
         let now = CACurrentMediaTime()
         if lastTranslationY == nil {
-            controller.beginInteraction()
+            controller.beginDismissInteraction()
             lastTranslationY = 0
             lastTimestamp = now
         }
-
-        let previousTranslation = lastTranslationY ?? 0
-        let delta = value.translation.height - previousTranslation
+        let previous = lastTranslationY ?? 0
+        let delta = value.translation.height - previous
         if let lastTimestamp {
             let interval = now - lastTimestamp
-            if interval > 0 {
-                velocityY = delta / interval
-            }
+            if interval > 0 { velocityY = delta / interval }
         }
-        lastDeltaY = delta
-        self.lastTranslationY = value.translation.height
+        lastTranslationY = value.translation.height
         lastTimestamp = now
-        controller.update(translationY: value.translation.height, viewportHeight: viewportHeight)
+        controller.updateDismiss(translationY: value.translation.height)
     }
 
     private func handleEnded(_ value: DragGesture.Value) {
-        if let lastTranslationY {
-            let finalDelta = value.translation.height - lastTranslationY
-            if abs(finalDelta) > 0.01 {
-                lastDeltaY = finalDelta
-            }
+        let finalDelta = value.translation.height - (lastTranslationY ?? value.translation.height)
+        if abs(finalDelta) > 0.01, let lastTimestamp {
+            let interval = CACurrentMediaTime() - lastTimestamp
+            if interval > 0 { velocityY = finalDelta / interval }
         }
-        controller.endInteraction(
-            velocityY: velocityY,
-            lastDeltaY: lastDeltaY,
-            reduceMotion: reduceMotion
-        )
-        resetSamples()
-    }
-
-    private func resetSamples() {
+        controller.endDismissInteraction(velocityY: velocityY, reduceMotion: reduceMotion)
         lastTranslationY = nil
         lastTimestamp = nil
-        lastDeltaY = 0
         velocityY = 0
     }
 }
 
 extension View {
-    func playerPullHandle(
-        controller: PlayerPullController,
-        viewportHeight: CGFloat
-    ) -> some View {
-        modifier(PlayerPullHandleModifier(controller: controller, viewportHeight: viewportHeight))
+    func playerDismissGesture(controller: PlayerPullController) -> some View {
+        modifier(PlayerDismissGestureModifier(controller: controller))
+    }
+
+    func ncmEdgeSwipeBack() -> some View {
+        modifier(EdgeSwipeBackModifier())
+    }
+}
+
+private struct EdgeSwipeBackModifier: ViewModifier {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.sonarReduceMotion) private var reduceMotion
+
+    @State private var isActive = false
+    @State private var translationX: CGFloat = 0
+    @State private var lastTranslationX: CGFloat = 0
+    @State private var lastTimestamp: CFTimeInterval?
+    @State private var velocityX: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        GeometryReader { proxy in
+            content
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                .offset(x: translationX)
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 5, coordinateSpace: .global)
+                        .onChanged { value in handleChanged(value) }
+                        .onEnded { value in handleEnded(value, width: proxy.size.width) }
+                )
+        }
+    }
+
+    private func handleChanged(_ value: DragGesture.Value) {
+        guard isActive || EdgeBackMetrics.canStart(at: value.startLocation.x) else { return }
+        let now = CACurrentMediaTime()
+        if !isActive {
+            isActive = true
+            lastTranslationX = 0
+            lastTimestamp = now
+        }
+        let current = max(value.translation.width, 0)
+        let delta = current - lastTranslationX
+        if let lastTimestamp {
+            let interval = now - lastTimestamp
+            if interval > 0 { velocityX = delta / interval }
+        }
+        translationX = current
+        lastTranslationX = current
+        lastTimestamp = now
+    }
+
+    private func handleEnded(_ value: DragGesture.Value, width: CGFloat) {
+        guard isActive else { return }
+        let shouldDismiss = EdgeBackMetrics.shouldDismiss(
+            translationX: max(value.translation.width, translationX),
+            velocityX: velocityX,
+            containerWidth: width
+        )
+        if shouldDismiss {
+            dismiss()
+        } else if reduceMotion {
+            translationX = 0
+        } else {
+            withAnimation(.timingCurve(0.32, 0.72, 0, 1, duration: AppMotion.medium)) {
+                translationX = 0
+            }
+        }
+        isActive = false
+        lastTranslationX = 0
+        lastTimestamp = nil
+        velocityX = 0
     }
 }

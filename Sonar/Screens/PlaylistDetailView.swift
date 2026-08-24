@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct PlaylistDetailView: View {
     private struct Entry: Identifiable {
@@ -16,21 +17,18 @@ struct PlaylistDetailView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.artworkService) private var artworkService
-    @Environment(\.m3Scheme) private var globalScheme
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.shellSafeAreaInsets) private var shellSafeAreaInsets
-    @Environment(\.sonarReduceMotion) private var reduceMotion
+    @Environment(\.m3Scheme) private var scheme
+    @Environment(\.shellSafeAreaInsets) private var safeAreaInsets
     @Environment(PlaybackService.self) private var playbackService
     @Environment(ToastCenter.self) private var toastCenter
 
-    @State private var localScheme: M3Scheme?
     @State private var selectedTrackForPlaylist: Track?
+    @State private var selectedEntry: Entry?
     @State private var showingRename = false
     @State private var showingDelete = false
-    @State private var showingDescription = false
     @State private var renameText = ""
     @State private var errorMessage: String?
+    @State private var navIsSolid = false
 
     init(playlist: Playlist) {
         self.playlist = playlist
@@ -49,146 +47,65 @@ struct PlaylistDetailView: View {
     }
 
     private var title: String { playlist?.name ?? fallbackTitle }
-
+    private var tracks: [Track] { entries.map(\.track) }
     private var entries: [Entry] {
         if let playlist {
-            return playlist.items.sorted { $0.sortIndex < $1.sortIndex }.enumerated().compactMap { index, item -> Entry? in
+            return playlist.items.sorted { $0.sortIndex < $1.sortIndex }.enumerated().compactMap { index, item in
                 guard let track = item.track.track else { return nil }
-                return Entry(id: String(describing: item.persistentModelID), track: track, playlistIndex: index)
+                return Entry(id: track.musicID, track: track, playlistIndex: index)
             }
         }
-        return fallbackTracks.enumerated().map { index, track in
-            Entry(id: "\(track.musicID)-\(index)", track: track, playlistIndex: nil)
-        }
+        return fallbackTracks.enumerated().map { Entry(id: $0.element.musicID, track: $0.element, playlistIndex: nil) }
     }
-
-    private var tracks: [Track] { entries.map(\.track) }
-
-    private var subtitle: String {
-        let duration = tracks.compactMap(\.durationSeconds).reduce(0, +)
-        let minutes = Int(duration / 60)
-        let prefix = playlist == nil ? fallbackSubtitle : "我的歌单"
-        return "\(prefix) · \(tracks.count) 首 · 约 \(minutes) 分钟"
-    }
-
-    private var detailDescription: String {
-        if !fallbackDescription.isEmpty { return fallbackDescription }
-        return playlist == nil ? "" : "收藏声音，也收藏它出现时的那段时间。"
-    }
-
     var body: some View {
-        let scheme = localScheme ?? globalScheme
-
-        List {
-            hero(scheme: scheme)
-                .listRowInsets(EdgeInsets())
-                .listRowSeparator(.hidden)
-                .listRowBackground(scheme.surface)
-
-            VStack(alignment: .leading, spacing: 0) {
-                Text(title)
-                    .font(.system(size: 27, weight: .bold))
-                    .foregroundStyle(scheme.onSurface)
-                    .lineLimit(2)
-                Text(subtitle)
-                    .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(scheme.onSurfaceVariant)
-                    .padding(.top, 8)
-                if !detailDescription.isEmpty {
-                    Text(detailDescription)
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(scheme.onSurfaceVariant.opacity(0.9))
-                        .lineSpacing(2)
-                        .lineLimit(2)
-                        .frame(height: 40, alignment: .topLeading)
-                        .padding(.top, 10)
-                        .onLongPressGesture { showingDescription = true }
+        ZStack(alignment: .top) {
+            ScrollView {
+                VStack(spacing: 0) {
+                    hero
+                    trackList.offset(y: -12)
+                }
+                .background {
+                    NCMScrollThresholdObserver(threshold: 120) { navIsSolid = $0 }
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 20)
-            .padding(.bottom, 8)
-            .listRowInsets(EdgeInsets())
-            .listRowSeparator(.hidden)
-            .listRowBackground(scheme.surface)
-
-            PlaylistDetailActions(
-                isLoading: false,
-                isFavoriteInProgress: false,
-                isFavorite: false,
-                showFavorite: false,
-                onPlayAll: {
-                    guard !tracks.isEmpty else { return }
-                    Task { await playbackService.replaceQueue(tracks) }
-                },
-                onFavorite: {}
-            )
-            .listRowInsets(EdgeInsets())
-            .listRowSeparator(.hidden)
-            .listRowBackground(scheme.surface)
-
-            Text("歌曲  \(entries.count)")
-                .font(.title3.weight(.bold))
-                .foregroundStyle(scheme.onSurface)
-                .frame(maxWidth: 900, minHeight: 24, alignment: .leading)
-                .padding(.init(top: 16, leading: 16, bottom: 8, trailing: 16))
-                .listRowInsets(EdgeInsets())
-                .listRowSeparator(.hidden)
-                .listRowBackground(scheme.surface)
-                .accessibilityIdentifier("playlist-track-count")
-
-            if entries.isEmpty {
-                ContentUnavailableView("这个歌单还没有曲目", systemImage: "music.note.list")
-                    .listRowBackground(scheme.surface)
-                    .listRowSeparator(.hidden)
-            } else {
-                ForEach(Array(entries.enumerated()), id: \.element.id) { queueIndex, entry in
-                    detailRow(entry: entry, queueIndex: queueIndex, scheme: scheme)
-                        .listRowInsets(EdgeInsets())
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(scheme.surface)
-                }
-            }
+            .scrollIndicators(.hidden)
+            navigationBar
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .background(scheme.surface.ignoresSafeArea())
-        .environment(\.m3Scheme, scheme)
+        .background(scheme.appSurface.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .ignoresSafeArea(edges: .top)
-        .animation(
-            AppMotion.emphasized(duration: AppMotion.long, reduceMotion: reduceMotion),
-            value: localScheme?.seedHex
-        )
-        .task(id: tracks.first?.musicID) { await updateLocalScheme() }
+        .navigationBarBackButtonHidden(true)
+        .ncmEdgeSwipeBack()
         .sheet(item: $selectedTrackForPlaylist) { track in
             AddToPlaylistSheet(track: track)
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
         }
-        .alert("歌单简介", isPresented: $showingDescription) {
-            Button("好", role: .cancel) {}
-        } message: {
-            Text(detailDescription)
+        .confirmationDialog("歌曲操作", isPresented: Binding(
+            get: { selectedEntry != nil },
+            set: { if !$0 { selectedEntry = nil } }
+        )) {
+            Button("加入歌单", systemImage: "text.badge.plus") {
+                selectedTrackForPlaylist = selectedEntry?.track
+                selectedEntry = nil
+            }
+            if let entry = selectedEntry, let playlist, !playlist.isSystem, entry.playlistIndex != nil {
+                Button("移出歌单", systemImage: "text.badge.minus", role: .destructive) {
+                    remove(entry, from: playlist)
+                }
+            }
+            Button("取消", role: .cancel) { selectedEntry = nil }
         }
         .alert("重命名歌单", isPresented: $showingRename) {
             TextField("歌单名称", text: $renameText)
             Button("取消", role: .cancel) {}
-            Button("保存") {
-                guard let playlist else { return }
-                perform { try LibraryStore(context: modelContext).rename(playlist, to: renameText) }
-            }
+            Button("保存", action: renamePlaylist)
         }
-        .confirmationDialog("确定删除“\(title)”？", isPresented: $showingDelete, titleVisibility: .visible) {
-            Button("删除歌单", role: .destructive) {
-                guard let playlist else { return }
-                perform {
-                    try LibraryStore(context: modelContext).delete(playlist)
-                    dismiss()
-                }
-            }
+        .confirmationDialog("删除「\(title)」？", isPresented: $showingDelete, titleVisibility: .visible) {
+            Button("删除歌单", role: .destructive, action: deletePlaylist)
+            Button("取消", role: .cancel) {}
         } message: {
-            Text("曲目本身不会被删除。")
+            Text("曲目仍会保留在本地曲库中。")
         }
         .alert("操作失败", isPresented: Binding(
             get: { errorMessage != nil },
@@ -200,127 +117,291 @@ struct PlaylistDetailView: View {
         }
     }
 
-    private func hero(scheme: M3Scheme) -> some View {
+    private var hero: some View {
         GeometryReader { proxy in
             ZStack {
-                PlayerArtwork(track: tracks.first, size: max(proxy.size.width, proxy.size.height))
-                    .frame(width: proxy.size.width, height: proxy.size.height)
-                    .clipped()
+                PlayerArtwork(track: tracks.first, size: max(proxy.size.width, proxy.size.height) + 120, cornerRadius: 0)
+                    .blur(radius: 40)
+                    .saturation(1.5)
+                    .scaleEffect(1.25)
                 LinearGradient(
-                    colors: [.black.opacity(0.54), .clear],
-                    startPoint: .top,
-                    endPoint: .center
-                )
-                LinearGradient(
-                    stops: [
-                        .init(color: .clear, location: 0.68),
-                        .init(color: scheme.surface.opacity(0.18), location: 1),
-                    ],
+                    colors: [.black.opacity(0.46), .black.opacity(0.32), .black.opacity(0.50)],
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                VStack {
-                    HStack(spacing: 4) {
-                        heroButton(systemImage: "chevron.left", label: "返回") { dismiss() }
-                        Text(playlist == nil ? "歌单详情" : title)
+                HStack(alignment: .center, spacing: 14) {
+                    PlayerArtwork(track: tracks.first, size: 120, cornerRadius: 8)
+                        .shadow(color: .black.opacity(0.35), radius: 9, y: 6)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(title)
                             .font(.system(size: 17, weight: .semibold))
                             .foregroundStyle(.white)
-                            .shadow(color: .black.opacity(0.52), radius: 8)
+                            .lineLimit(2)
+                        Text(playlist == nil ? fallbackSubtitle : "歌单 · \(tracks.count) 首")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.white.opacity(0.76))
                             .lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        Menu {
-                            Button("播放全部", systemImage: "play.fill") {
-                                guard !tracks.isEmpty else { return }
-                                Task { await playbackService.replaceQueue(tracks) }
-                            }
+                        if !fallbackDescription.isEmpty {
+                            Text(fallbackDescription)
+                                .font(.system(size: 12))
+                                .foregroundStyle(.white.opacity(0.72))
+                                .lineLimit(1)
+                        }
+                        Button {
                             if let playlist, !playlist.isSystem {
-                                Button("重命名", systemImage: "pencil") {
-                                    renameText = playlist.name
-                                    showingRename = true
-                                }
-                                Button("删除歌单", systemImage: "trash", role: .destructive) {
-                                    showingDelete = true
-                                }
+                                renameText = playlist.name
+                                showingRename = true
+                            } else {
+                                playShuffled()
                             }
                         } label: {
-                            Image(systemName: "ellipsis")
-                                .font(.system(size: 20, weight: .medium))
+                            Label(playlist == nil || playlist?.isSystem == true ? "随机播放" : "编辑歌单", systemImage: playlist == nil || playlist?.isSystem == true ? "shuffle" : "pencil")
+                                .font(.system(size: 12.5, weight: .medium))
                                 .foregroundStyle(.white)
-                                .frame(width: 44, height: 44)
-                                .background(.black.opacity(0.19), in: Circle())
+                                .padding(.horizontal, 12)
+                                .frame(height: 30)
+                                .overlay(Capsule().stroke(.white.opacity(0.45), lineWidth: 1))
                         }
-                        .accessibilityLabel("更多")
-                        .accessibilityIdentifier("playlist-detail-more")
+                        .buttonStyle(.plain)
                     }
-                    .padding(.horizontal, 12)
-                    // List 忽略顶部安全区后，行内 GeometryReader 读到的 inset 会归零。
-                    // 使用 Shell 的真实 inset，避免沉浸头图顶栏被状态栏裁掉。
-                    .padding(.top, shellSafeAreaInsets.top + 4)
-                    Spacer()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
+                .padding(.top, safeAreaInsets.top + 60)
+                .padding(.bottom, 24)
+            }
+            .clipped()
+        }
+        .frame(height: safeAreaInsets.top + 244)
+    }
+
+    private var navigationBar: some View {
+        HStack(spacing: 0) {
+            Button { dismiss() } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 19, weight: .semibold))
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("返回")
+            .accessibilityIdentifier("playlist-detail-back")
+            Text(title)
+                .font(.system(size: 17, weight: .semibold))
+                .lineLimit(1)
+                .opacity(navIsSolid ? 1 : 0)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let playlist, !playlist.isSystem {
+                Menu {
+                    Button("重命名", systemImage: "pencil") {
+                        renameText = playlist.name
+                        showingRename = true
+                    }
+                    Button("删除歌单", systemImage: "trash", role: .destructive) { showingDelete = true }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 19, weight: .medium))
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("更多")
+            } else {
+                Color.clear.frame(width: 44, height: 44)
+            }
+        }
+        .foregroundStyle(navIsSolid ? scheme.onSurface : Color.white)
+        .padding(.horizontal, 4)
+        .padding(.top, safeAreaInsets.top)
+        .background(navIsSolid ? scheme.appSurface : Color.clear)
+        .animation(.easeOut(duration: 0.18), value: navIsSolid)
+    }
+
+    private var trackList: some View {
+        LazyVStack(spacing: 0) {
+            Button {
+                guard !tracks.isEmpty else { return }
+                Task { await playbackService.replaceQueue(tracks) }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 20))
+                        .foregroundStyle(scheme.primary)
+                    Text("播放全部")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(scheme.onSurface)
+                    Text("(\(tracks.count))")
+                        .font(.system(size: 12))
+                        .foregroundStyle(scheme.onSurfaceVariant)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
+                .frame(height: 50)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(tracks.isEmpty)
+            .accessibilityIdentifier("playlist-play-all")
+
+            if entries.isEmpty {
+                ContentUnavailableView("这个歌单还没有曲目", systemImage: "music.note.list")
+                    .frame(minHeight: 260)
+            } else {
+                ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                    SongRow(
+                        track: entry.track,
+                        leading: .index(index + 1),
+                        trailing: .more,
+                        showAlbum: false,
+                        showDivider: index < entries.count - 1,
+                        isCurrent: playbackService.queue.current?.musicID == entry.track.musicID,
+                        isPlaying: playbackService.state == .playing,
+                        onPlay: { Task { await playbackService.replaceQueue(tracks, startingAt: index) } },
+                        onAction: { selectedEntry = entry }
+                    )
                 }
             }
+            Color.clear.frame(height: 146)
         }
-        .frame(height: min(max(UIScreen.main.bounds.height * 0.4, 320), 460))
-        .clipped()
+        .background(scheme.appSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    private func heroButton(systemImage: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 44, height: 44)
-                .background(.black.opacity(0.19), in: Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
-        .accessibilityIdentifier("playlist-detail-back")
+    private func playShuffled() {
+        let shuffled = tracks.shuffled()
+        guard !shuffled.isEmpty else { return }
+        Task { await playbackService.replaceQueue(shuffled) }
+        toastCenter.show("随机播放")
     }
 
-    private func detailRow(entry: Entry, queueIndex: Int, scheme: M3Scheme) -> some View {
-        SongRow(
-            track: entry.track,
-            isCurrent: playbackService.queue.current?.musicID == entry.track.musicID,
-            isPlaying: playbackService.state == .playing,
-            onPlay: { Task { await playbackService.replaceQueue(tracks, startingAt: queueIndex) } },
-            onAction: { selectedTrackForPlaylist = entry.track }
-        )
-        .padding(.horizontal, 14)
-        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-            if let playlist, !playlist.isSystem, let index = entry.playlistIndex {
-                Button("移出歌单", systemImage: "text.badge.minus", role: .destructive) {
-                    perform { try LibraryStore(context: modelContext).removeItem(at: index, from: playlist) }
-                    toastCenter.show("已移出歌单")
-                }
+    private func remove(_ entry: Entry, from playlist: Playlist) {
+        guard let index = entry.playlistIndex else { return }
+        do {
+            try LibraryStore(context: modelContext).removeItem(at: index, from: playlist)
+            selectedEntry = nil
+            toastCenter.show("已移出歌单")
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func renamePlaylist() {
+        guard let playlist else { return }
+        do {
+            try LibraryStore(context: modelContext).rename(playlist, to: renameText)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func deletePlaylist() {
+        guard let playlist else { return }
+        do {
+            try LibraryStore(context: modelContext).delete(playlist)
+            FavoritePlaylistRegistry().unregister(playlistID: playlist.id)
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+}
+
+struct NCMScrollThresholdObserver: UIViewRepresentable {
+    let threshold: CGFloat
+    let onChange: (Bool) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(threshold: threshold, onChange: onChange)
+    }
+
+    func makeUIView(context: Context) -> NCMScrollThresholdProbeView {
+        let view = NCMScrollThresholdProbeView()
+        view.onAttach = { scrollView in context.coordinator.attach(to: scrollView) }
+        return view
+    }
+
+    func updateUIView(_ uiView: NCMScrollThresholdProbeView, context: Context) {
+        context.coordinator.update(threshold: threshold, onChange: onChange)
+        uiView.findScrollView()
+    }
+
+    static func dismantleUIView(_ uiView: NCMScrollThresholdProbeView, coordinator: Coordinator) {
+        coordinator.detach()
+    }
+
+    @MainActor
+    final class Coordinator: NSObject {
+        private weak var scrollView: UIScrollView?
+        private var observation: NSKeyValueObservation?
+        private var lastValue: Bool?
+        private var threshold: CGFloat
+        private var onChange: (Bool) -> Void
+
+        init(threshold: CGFloat, onChange: @escaping (Bool) -> Void) {
+            self.threshold = threshold
+            self.onChange = onChange
+        }
+
+        func attach(to scrollView: UIScrollView) {
+            guard self.scrollView !== scrollView else { return }
+            detach()
+            self.scrollView = scrollView
+            observation = scrollView.observe(\.contentOffset, options: [.initial, .new]) { [weak self] _, _ in
+                Task { @MainActor [weak self] in self?.publish() }
             }
-            Button("歌单", systemImage: "text.badge.plus") {
-                selectedTrackForPlaylist = entry.track
+        }
+
+        func update(threshold: CGFloat, onChange: @escaping (Bool) -> Void) {
+            self.threshold = threshold
+            self.onChange = onChange
+            publish()
+        }
+
+        func detach() {
+            observation?.invalidate()
+            observation = nil
+            scrollView = nil
+            lastValue = nil
+        }
+
+        private func publish() {
+            guard let scrollView else { return }
+            let offset = scrollView.contentOffset.y + scrollView.adjustedContentInset.top
+            let value = offset > threshold
+            guard value != lastValue else { return }
+            lastValue = value
+            onChange(value)
+        }
+    }
+}
+
+@MainActor
+final class NCMScrollThresholdProbeView: UIView {
+    var onAttach: ((UIScrollView) -> Void)?
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        findScrollView()
+    }
+
+    func findScrollView() {
+        var candidate = superview
+        while let view = candidate {
+            if let scrollView = view as? UIScrollView {
+                onAttach?(scrollView)
+                return
             }
-            .tint(scheme.secondary)
+            candidate = view.superview
         }
+        DispatchQueue.main.async { [weak self] in self?.findScrollViewIfAttached() }
     }
 
-    private func updateLocalScheme() async {
-        guard let track = tracks.first else {
-            localScheme = nil
-            return
+    private func findScrollViewIfAttached() {
+        guard window != nil else { return }
+        var candidate = superview
+        while let view = candidate {
+            if let scrollView = view as? UIScrollView {
+                onAttach?(scrollView)
+                return
+            }
+            candidate = view.superview
         }
-        let cachedHex = playlist?.items
-            .sorted { $0.sortIndex < $1.sortIndex }
-            .first?.track.accentHex
-        let accentHex: String?
-        if let cachedHex {
-            accentHex = cachedHex
-        } else if let artworkService {
-            accentHex = try? await artworkService.accentHex(for: track)
-        } else {
-            accentHex = nil
-        }
-        guard !Task.isCancelled, let accentHex else { return }
-        localScheme = .tonalSpot(seedHex: accentHex, dark: colorScheme == .dark)
-    }
-
-    private func perform(_ operation: () throws -> Void) {
-        do { try operation() } catch { errorMessage = error.localizedDescription }
     }
 }
