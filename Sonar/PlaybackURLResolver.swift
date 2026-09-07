@@ -64,6 +64,21 @@ public struct KeychainCredentialStore: CredentialStore {
 
 public protocol PlaybackHTTPClient: Sendable {
     func send(_ request: URLRequest) async throws -> PlaybackHTTPResponse
+    func probe(_ request: URLRequest, maxBytes: Int, timeout: TimeInterval) async throws -> PlaybackHTTPResponse
+}
+
+public extension PlaybackHTTPClient {
+    /// Compatibility for injected clients that already return an in-memory response.
+    /// Network transports must override this to bound consumption before EOF.
+    func probe(_ request: URLRequest, maxBytes: Int, timeout: TimeInterval) async throws -> PlaybackHTTPResponse {
+        try Task.checkCancellation()
+        let response = try await send(request)
+        try Task.checkCancellation()
+        return PlaybackHTTPResponse(
+            statusCode: response.statusCode, headers: response.headers,
+            body: Data(response.body.prefix(max(1, maxBytes)))
+        )
+    }
 }
 
 public struct PlaybackHTTPResponse: Sendable {
@@ -79,11 +94,39 @@ public struct PlaybackHTTPResponse: Sendable {
 }
 
 public struct URLSessionPlaybackHTTPClient: PlaybackHTTPClient {
-    public init() {}
+    private let session: URLSession
+
+    public init(session: URLSession = .shared) {
+        self.session = session
+    }
+
+    public func probe(
+        _ request: URLRequest, maxBytes: Int = 64, timeout: TimeInterval = 8
+    ) async throws -> PlaybackHTTPResponse {
+        let probe = PlaybackMediaPrefixProbe(maxBytes: maxBytes)
+        do {
+            let result = try await withTaskCancellationHandler {
+                try Task.checkCancellation()
+                return try await withCheckedThrowingContinuation { continuation in
+                    probe.start(request, configuration: session.configuration, timeout: timeout, continuation: continuation)
+                }
+            } onCancel: {
+                probe.cancel()
+            }
+            try Task.checkCancellation()
+            return result
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
+        } catch {
+            throw SourceError.network(underlying: error)
+        }
+    }
 
     public func send(_ request: URLRequest) async throws -> PlaybackHTTPResponse {
         do {
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse else {
                 throw URLError(.badServerResponse)
             }
@@ -100,6 +143,134 @@ public struct URLSessionPlaybackHTTPClient: PlaybackHTTPClient {
         } catch {
             throw SourceError.network(underlying: error)
         }
+    }
+}
+
+/// The delegate never retains more than the requested prefix. Reaching that prefix is
+/// success, so the cancellation used to stop a long response must not escape as an error.
+private final class PlaybackMediaPrefixProbe: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    private let maxBytes: Int
+    private let lock = NSLock()
+    private var completed = false
+    private var continuation: CheckedContinuation<PlaybackHTTPResponse, Error>?
+    private var session: URLSession?
+    private var task: URLSessionDataTask?
+    private var deadline: DispatchWorkItem?
+    private var response: HTTPURLResponse?
+    private var body = Data()
+
+    init(maxBytes: Int) {
+        self.maxBytes = max(1, maxBytes)
+    }
+
+    func start(
+        _ request: URLRequest,
+        configuration: URLSessionConfiguration,
+        timeout: TimeInterval,
+        continuation: CheckedContinuation<PlaybackHTTPResponse, Error>
+    ) {
+        lock.lock()
+        guard !completed else {
+            lock.unlock()
+            continuation.resume(throwing: CancellationError())
+            return
+        }
+        self.continuation = continuation
+        let boundedTimeout = timeout.isFinite ? min(max(timeout, 0.01), 30) : 8
+        var request = request
+        request.timeoutInterval = boundedTimeout
+        // A media prefix is deliberately incomplete and must not enter the URL cache.
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        configuration.urlCache = nil
+        configuration.timeoutIntervalForResource = boundedTimeout
+        let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+        let task = session.dataTask(with: request)
+        let deadline = DispatchWorkItem { [weak self] in
+            self?.finish(.failure(URLError(.timedOut)))
+        }
+        self.session = session
+        self.task = task
+        self.deadline = deadline
+        lock.unlock()
+        DispatchQueue.global().asyncAfter(deadline: .now() + boundedTimeout, execute: deadline)
+        task.resume()
+    }
+
+    func cancel() {
+        finish(.failure(CancellationError()))
+    }
+
+    private func finish(_ result: Result<PlaybackHTTPResponse, Error>) {
+        lock.lock()
+        guard !completed else { lock.unlock(); return }
+        completed = true
+        let continuation = self.continuation
+        let session = self.session
+        let task = self.task
+        let deadline = self.deadline
+        self.continuation = nil
+        self.session = nil
+        self.task = nil
+        self.deadline = nil
+        lock.unlock()
+        deadline?.cancel()
+        task?.cancel()
+        session?.invalidateAndCancel()
+        continuation?.resume(with: result)
+    }
+
+    private func makeResponse(_ response: HTTPURLResponse) -> PlaybackHTTPResponse {
+        let headers = response.allHeaderFields.reduce(into: [String: String]()) {
+            $0[String(describing: $1.key).lowercased()] = String(describing: $1.value)
+        }
+        return PlaybackHTTPResponse(statusCode: response.statusCode, headers: headers, body: body)
+    }
+
+    func urlSession(
+        _ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
+        completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
+    ) {
+        guard let http = response as? HTTPURLResponse else {
+            finish(.failure(URLError(.badServerResponse)))
+            completionHandler(.cancel)
+            return
+        }
+        lock.lock()
+        guard !completed else { lock.unlock(); completionHandler(.cancel); return }
+        self.response = http
+        let rejected = ![200, 206].contains(http.statusCode)
+        let result = makeResponse(http)
+        lock.unlock()
+        if rejected {
+            finish(.success(result))
+            completionHandler(.cancel)
+        } else {
+            completionHandler(.allow)
+        }
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        lock.lock()
+        guard !completed, let response else { lock.unlock(); return }
+        body.append(contentsOf: data.prefix(maxBytes - body.count))
+        let result = body.count == maxBytes ? makeResponse(response) : nil
+        lock.unlock()
+        if let result { finish(.success(result)) }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        lock.lock()
+        guard !completed else { lock.unlock(); return }
+        let result: Result<PlaybackHTTPResponse, Error>
+        if let error {
+            result = .failure(error)
+        } else if let response {
+            result = .success(makeResponse(response))
+        } else {
+            result = .failure(URLError(.badServerResponse))
+        }
+        lock.unlock()
+        finish(result)
     }
 }
 
@@ -348,7 +519,7 @@ public final class PlaybackURLResolver: PlaybackURLRefreshing, @unchecked Sendab
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("bytes=0-1", forHTTPHeaderField: "Range")
-        let response = try await client.send(request)
+        let response = try await client.probe(request, maxBytes: 64, timeout: 8)
         guard [200, 206].contains(response.statusCode) else {
             throw SourceError.source(message: "ChKSz 播放链接失效（HTTP \(response.statusCode)）")
         }

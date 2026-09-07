@@ -129,6 +129,7 @@ struct RootView: View {
     @State private var drawerIsOpen = false
     @State private var drawerDragTranslation: CGFloat = 0
     @State private var edgeDrawerDragIsActive = false
+    @State private var artworkRequests = ArtworkRequestGate()
     private var hasCurrentTrack: Bool {
         playbackService.queue.current != nil
     }
@@ -382,6 +383,8 @@ struct RootView: View {
     }
 
     private func updateArtworkAndTheme() async {
+        guard !Task.isCancelled else { return }
+        let request = artworkRequests.begin(trackID: playbackService.queue.current?.musicID)
         guard let track = playbackService.queue.current else {
             playbackService.updateNowPlayingArtwork(nil)
             withAnimation(AppMotion.emphasized(duration: AppMotion.long, reduceMotion: reduceMotion)) {
@@ -398,21 +401,29 @@ struct RootView: View {
         } else {
             image = nil
         }
-        playbackService.updateNowPlayingArtwork(image)
-        let accentHex = image.flatMap(ArtworkPalette.accentHex(from:))
-        try? store.cacheAccentHex(accentHex, for: track)
-        withAnimation(AppMotion.emphasized(duration: AppMotion.long, reduceMotion: reduceMotion)) {
-            themeState.update(accentHex: accentHex)
+        let committed = artworkRequests.commit(request, currentTrackID: playbackService.queue.current?.musicID) {
+            playbackService.updateNowPlayingArtwork(image)
+            let accentHex = image.flatMap(ArtworkPalette.accentHex(from:))
+            try? store.cacheAccentHex(accentHex, for: track)
+            withAnimation(AppMotion.emphasized(duration: AppMotion.long, reduceMotion: reduceMotion)) {
+                themeState.update(accentHex: accentHex)
+            }
         }
+        guard committed else { return }
 
-        await refreshCurrentTrackMetadataIfNeeded(track, store: store)
+        await refreshCurrentTrackMetadataIfNeeded(track, store: store, request: request)
     }
 
-    private func refreshCurrentTrackMetadataIfNeeded(_ track: Track, store: LibraryStore) async {
+    private func refreshCurrentTrackMetadataIfNeeded(
+        _ track: Track,
+        store: LibraryStore,
+        request: ArtworkRequestGate.Request
+    ) async {
         guard track.highestKnownQuality == .standard else { return }
-        guard let refreshed = try? await sourceRuntime.trackDetail(track) else { return }
+        guard let refreshed = try? await sourceRuntime.trackDetail(track),
+              refreshed.musicID == track.musicID else { return }
         if refreshed.highestKnownQuality != .standard || TrackQualityOption.available(for: refreshed).count > 1 {
-            await MainActor.run {
+            artworkRequests.commit(request, currentTrackID: playbackService.queue.current?.musicID) {
                 playbackService.updateTrackMetadata(refreshed)
                 _ = try? store.updateTrack(refreshed)
             }

@@ -1,6 +1,31 @@
 import SwiftUI
 import UIKit
 
+/// Owns the commit boundary for view-scoped artwork and its derived metadata.
+/// A new generation also rejects A -> B -> A completions for the first A.
+@MainActor
+final class ArtworkRequestGate {
+    struct Request: Equatable {
+        fileprivate let generation = UUID()
+        let trackID: String?
+    }
+
+    private var latest: Request?
+
+    func begin(trackID: String?) -> Request {
+        let request = Request(trackID: trackID)
+        latest = request
+        return request
+    }
+
+    @discardableResult
+    func commit(_ request: Request, currentTrackID: String?, updates: () -> Void) -> Bool {
+        guard !Task.isCancelled, latest == request, request.trackID == currentTrackID else { return false }
+        updates()
+        return true
+    }
+}
+
 private struct ArtworkServiceKey: EnvironmentKey {
     static let defaultValue: ArtworkService? = nil
 }
@@ -21,6 +46,7 @@ struct PlayerArtwork: View {
     @Environment(\.artworkService) private var artworkService
     @Environment(\.m3Scheme) private var scheme
     @State private var image: UIImage?
+    @State private var artworkRequests = ArtworkRequestGate()
 
     var body: some View {
         Group {
@@ -35,9 +61,14 @@ struct PlayerArtwork: View {
         .frame(width: size, height: size)
         .clipShape(circular ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)))
         .task(id: track?.musicID) {
+            guard !Task.isCancelled else { return }
+            let request = artworkRequests.begin(trackID: track?.musicID)
             image = nil
             guard let track, let artworkService else { return }
-            image = try? await artworkService.image(for: track)
+            let loadedImage = try? await artworkService.image(for: track)
+            artworkRequests.commit(request, currentTrackID: track.musicID) {
+                image = loadedImage
+            }
         }
         .accessibilityHidden(true)
     }

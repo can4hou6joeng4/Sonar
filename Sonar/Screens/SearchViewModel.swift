@@ -36,11 +36,6 @@ final class SearchViewModel {
         var hasMore: Bool
     }
 
-    private struct SubmittedSearchResult: Sendable {
-        let songs: [SourceResult]
-        let artists: [ArtistSourceResult]
-    }
-
     var query = ""
     var results: [Track] = []
     var artistResults: [ArtistSummary] = []
@@ -62,7 +57,8 @@ final class SearchViewModel {
     var retryingArtistExpansionSources: Set<MusicSource> = []
     var hotSearchErrorMessage: String?
     private var suggestionTask: Task<Void, Never>?
-    private var submittedSearchTask: Task<SubmittedSearchResult, Never>?
+    private var submittedSearchTask: Task<Void, Never>?
+    private var songFailures: [(MusicSource, String)] = []
     private var suggestionGeneration = 0
     private var hotSearchGeneration = 0
     private var searchGeneration = 0
@@ -80,6 +76,11 @@ final class SearchViewModel {
         return "\(failedSource.displayName) 搜索暂不可用，当前显示\(availableSource.displayName)结果"
     }
 
+
+    var songSearchErrorMessage: String? {
+        guard !isLoading, results.isEmpty, !songFailures.isEmpty else { return nil }
+        return "歌曲搜索失败：\(songFailures.map(\.1).joined(separator: "；"))"
+    }
 
     var artistSourceWarnings: [MusicSource] {
         failedArtistSources.sorted { $0.rawValue < $1.rawValue }
@@ -151,13 +152,14 @@ final class SearchViewModel {
 
     func queryChanged() {
         suggestionTask?.cancel()
-        submittedSearchTask?.cancel()
         suggestionGeneration += 1
         suggestions = []
         isLoadingSuggestions = false
         let keyword = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let changesSubmittedSearch = submittedKeyword != nil && submittedKeyword != keyword
         if (activeSearchKeyword != nil && activeSearchKeyword != keyword) || changesSubmittedSearch {
+            submittedSearchTask?.cancel()
+            songFailures = []
             searchGeneration += 1
             activeSearchKeyword = nil
             isLoading = false
@@ -237,6 +239,7 @@ final class SearchViewModel {
         submittedSearchTask?.cancel()
         searchGeneration += 1
         let generation = searchGeneration
+        songFailures = []
         suggestionTask?.cancel()
         suggestionGeneration += 1
         suggestions = []
@@ -269,54 +272,59 @@ final class SearchViewModel {
         failedArtistSources = []
         retryingArtistSources = []
 
-        let candidates = Self.candidateArtistKeywords(for: keyword)
         let task = Task {
-            async let wyResult = search(keyword, source: .wy)
-            async let txResult = search(keyword, source: .tx)
-            async let wyArtists = candidates.count > 1
-                ? searchArtists(candidates: candidates, source: .wy, page: 1, limit: Self.artistPreviewLimit)
-                : searchArtists(keyword, source: .wy, page: 1, limit: Self.artistPreviewLimit)
-            async let txArtists = candidates.count > 1
-                ? searchArtists(candidates: candidates, source: .tx, page: 1, limit: Self.artistPreviewLimit)
-                : searchArtists(keyword, source: .tx, page: 1, limit: Self.artistPreviewLimit)
-            return await SubmittedSearchResult(
-                songs: [wyResult, txResult],
-                artists: [wyArtists, txArtists]
-            )
+            async let songs: Void = loadSubmittedSongs(keyword, generation: generation)
+            async let artists: Void = loadSubmittedArtists(keyword, generation: generation)
+            _ = await (songs, artists)
         }
         submittedSearchTask = task
-        let submittedResult = await task.value
-        let sourceResults = submittedResult.songs
-        let artistSourceResults = submittedResult.artists
+        await task.value
         guard isCurrentSearch(generation, keyword: keyword) else { return }
         submittedSearchTask = nil
-        let merged = SearchResultRanker.rank(
-            deduplicated(sourceResults.flatMap(\.tracks)),
-            for: keyword
-        )
-        let failures = sourceResults.compactMap { result in
+        activeSearchKeyword = nil
+    }
+
+    private func loadSubmittedSongs(_ keyword: String, generation: Int) async {
+        async let wyResult = search(keyword, source: .wy)
+        async let txResult = search(keyword, source: .tx)
+        let sourceResults = await [wyResult, txResult]
+        guard !Task.isCancelled, isCurrentSearch(generation, keyword: keyword) else { return }
+        results = SearchResultRanker.rank(deduplicated(sourceResults.flatMap(\.tracks)), for: keyword)
+        songFailures = sourceResults.compactMap { result in
             result.errorMessage.map { (result.source, $0) }
         }
-        artistSourceStates = makeArtistSourceStates(from: artistSourceResults)
-        let artists = MusicSource.allCases.flatMap { artistSourceStates[$0]?.artists ?? [] }
-        let artistFailures = artistSourceResults.compactMap { result in
-            result.errorMessage.map { (result.source, $0) }
-        }
-        artistResults = ArtistResultRanker.rank(deduplicated(artists), for: keyword)
-        failedArtistSources = Set(artistFailures.map(\.0))
+        failedSource = results.isEmpty ? nil : songFailures.first?.0
+        isLoading = false
+        hasSearched = true
+        updateSearchError()
+    }
+
+    private func loadSubmittedArtists(_ keyword: String, generation: Int) async {
+        let candidates = Self.candidateArtistKeywords(for: keyword)
+        async let wyArtists = searchArtists(candidates: candidates, source: .wy, page: 1, limit: Self.artistPreviewLimit)
+        async let txArtists = searchArtists(candidates: candidates, source: .tx, page: 1, limit: Self.artistPreviewLimit)
+        let sourceResults = await [wyArtists, txArtists]
+        guard !Task.isCancelled, isCurrentSearch(generation, keyword: keyword) else { return }
+        artistSourceStates = makeArtistSourceStates(from: sourceResults)
+        artistResults = rankedArtists(for: keyword)
+        failedArtistSources = Set(sourceResults.filter { $0.errorMessage != nil }.map(\.source))
         isLoadingArtists = false
-        finishSearch(
-            merged,
-            errorMessage: searchError(
-                tracksAreEmpty: merged.isEmpty,
-                artistsAreEmpty: artists.isEmpty,
-                songFailures: failures,
-                artistFailures: artistFailures
-            ),
-            failedSource: merged.isEmpty ? nil : failures.first?.0,
-            generation: generation,
-            keyword: keyword
-        )
+        hasSearched = true
+        updateSearchError()
+    }
+
+    private func updateSearchError() {
+        // A still-pending section may produce usable results. Do not announce a
+        // whole-query failure or empty state before both sections have finished.
+        guard !isLoading, !isLoadingArtists, results.isEmpty, artistResults.isEmpty else {
+            errorMessage = nil
+            return
+        }
+        if !songFailures.isEmpty {
+            errorMessage = "搜索失败：\(songFailures.map(\.1).joined(separator: "；"))"
+        } else {
+            errorMessage = failedArtistSources.isEmpty ? nil : "歌手搜索暂不可用，请重试"
+        }
     }
 
     /// Expands the artist section and fetches exactly one bounded page per
@@ -433,6 +441,7 @@ final class SearchViewModel {
         artistSourceStates[source] = makeArtistSourceState(page)
         artistResults = rankedArtists(for: keyword)
         failedArtistSources.remove(source)
+        updateSearchError()
     }
 
     func retryFailedSource() async {
@@ -454,6 +463,8 @@ final class SearchViewModel {
                 for: keyword
             )
             failedSource = nil
+            songFailures.removeAll { $0.0 == source }
+            updateSearchError()
         }
     }
 
@@ -620,35 +631,6 @@ final class SearchViewModel {
     private func rankedArtists(for keyword: String) -> [ArtistSummary] {
         let artists = MusicSource.allCases.flatMap { artistSourceStates[$0]?.artists ?? [] }
         return ArtistResultRanker.rank(deduplicated(artists), for: keyword)
-    }
-
-    private func finishSearch(
-        _ tracks: [Track],
-        errorMessage: String?,
-        failedSource: MusicSource?,
-        generation: Int,
-        keyword: String
-    ) {
-        guard isCurrentSearch(generation, keyword: keyword) else { return }
-        results = tracks
-        self.errorMessage = errorMessage
-        self.failedSource = failedSource
-        isLoading = false
-        hasSearched = true
-        activeSearchKeyword = nil
-    }
-
-    private func searchError(
-        tracksAreEmpty: Bool,
-        artistsAreEmpty: Bool,
-        songFailures: [(MusicSource, String)],
-        artistFailures: [(MusicSource, String)]
-    ) -> String? {
-        guard tracksAreEmpty, artistsAreEmpty else { return nil }
-        if !songFailures.isEmpty {
-            return "搜索失败：\(songFailures.map(\.1).joined(separator: "；"))"
-        }
-        return artistFailures.isEmpty ? nil : "歌手搜索暂不可用，请重试"
     }
 
     private func normalizeHotSearches(_ values: [String]) -> [String] {

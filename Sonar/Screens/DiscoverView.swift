@@ -462,12 +462,6 @@ private struct NCMSearchView: View {
     private var searchContent: some View {
         if trimmedQuery.isEmpty {
             hotSearchContent
-        } else if model.isLoading {
-            ProgressView("正在搜索…").frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let errorMessage = model.errorMessage {
-            ContentUnavailableView("搜索不可用", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
-        } else if model.hasSearched, model.results.isEmpty, model.artistResults.isEmpty {
-            ContentUnavailableView("未找到结果", systemImage: "music.note.list")
         } else if model.hasSearched {
             searchResultsContent
         } else {
@@ -516,8 +510,35 @@ private struct NCMSearchView: View {
     private var searchResultsContent: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                if !model.artistResults.isEmpty || !model.artistSourceWarnings.isEmpty {
+                if model.isLoadingArtists || !model.artistResults.isEmpty || !model.artistSourceWarnings.isEmpty {
                     artistResultsSection
+                }
+
+                if model.isLoading {
+                    ProgressView("正在搜索歌曲…")
+                        .frame(maxWidth: .infinity, minHeight: 80)
+                        .accessibilityIdentifier("search-song-loading")
+                } else if let errorMessage = model.songSearchErrorMessage ?? model.errorMessage {
+                    ContentUnavailableView("搜索不可用", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
+                } else if model.results.isEmpty {
+                    ContentUnavailableView(
+                        model.isLoadingArtists || !model.artistResults.isEmpty ? "未找到歌曲" : "未找到结果",
+                        systemImage: "music.note.list"
+                    )
+                }
+
+                if let warning = model.partialSourceWarning {
+                    HStack {
+                        Text(warning)
+                            .font(.footnote)
+                            .foregroundStyle(scheme.onSurfaceVariant)
+                        Spacer()
+                        Button("重试") { Task { await model.retryFailedSource() } }
+                            .disabled(model.isRetryingFailedSource)
+                            .frame(minWidth: 44, minHeight: 44)
+                    }
+                    .padding(.horizontal, 16)
+                    .accessibilityIdentifier("search-song-source-warning")
                 }
 
                 ForEach(Array(model.results.enumerated()), id: \.element.musicID) { index, track in
@@ -544,6 +565,12 @@ private struct NCMSearchView: View {
                 .padding(.horizontal, 16)
                 .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 .accessibilityIdentifier("search-artist-section")
+
+            if model.isLoadingArtists {
+                ProgressView("正在搜索歌手…")
+                    .frame(maxWidth: .infinity, minHeight: 60)
+                    .accessibilityIdentifier("search-artist-loading")
+            }
 
             ForEach(model.visibleArtistResults, id: \.stableID) { artist in
                 NavigationLink {

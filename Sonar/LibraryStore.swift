@@ -81,16 +81,18 @@ public final class LibraryStore {
     }
 
     private func normalizePersonalPlaylist() throws -> (playlist: Playlist, didChange: Bool) {
-        let userPlaylists = try playlists(includeSystem: false, includeArchived: true)
+        // Archived playlists are retained migration sources, not ongoing mirrors.
+        // Reimporting them would resurrect songs the user removed from the primary.
+        let userPlaylists = try playlists(includeSystem: false)
         let primary: Playlist
         var didChange = false
 
         if let existing = userPlaylists.first(where: {
-            $0.isPrimaryPersonal && !$0.isArchived && $0.kind == .music
+            $0.isPrimaryPersonal && $0.kind == .music
         }) {
             primary = existing
         } else if let existing = userPlaylists.first(where: {
-            !$0.isArchived && $0.kind == .music
+            $0.kind == .music
         }) {
             primary = existing
         } else {
@@ -108,15 +110,6 @@ public final class LibraryStore {
             primary.isPrimaryPersonal = true
             didChange = true
         }
-        if primary.name == "我的歌单" {
-            primary.name = "我喜欢的音乐"
-            didChange = true
-        }
-        if primary.isArchived {
-            primary.isArchived = false
-            didChange = true
-        }
-
         var existingIDs = Set(primary.orderedItems.map(\.track.musicId))
         var nextItemIndex = (primary.orderedItems.map(\.sortIndex).max() ?? -1) + 1
         for playlist in userPlaylists where playlist !== primary {
