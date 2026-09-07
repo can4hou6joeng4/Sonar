@@ -1,3 +1,5 @@
+// Sonar adaptation of lx-music-mobile for the JavaScriptCore WY/TX runtime.
+// Modified distribution; see repository-root THIRD_PARTY_NOTICES.md and LICENSES/.
 import { weapi } from './utils/crypto'
 import { httpFetch } from '../../request'
 import musicDetailApi from './musicDetail'

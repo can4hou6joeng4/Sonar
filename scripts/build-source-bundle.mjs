@@ -1,5 +1,16 @@
 import { build } from 'esbuild'
-import { mkdir } from 'node:fs/promises'
+import { mkdir, readFile } from 'node:fs/promises'
+
+const licenseFiles = [
+  'lx-music-mobile', 'NeteaseCloudMusicApi', 'base64-js', 'buffer',
+  'ieee754', 'he', 'pako', 'pako-zlib', 'esbuild', 'lrc-file-parser', 'cc-by-sa-4.0',
+]
+const notices = [await readFile('THIRD_PARTY_NOTICES.md', 'utf8')]
+for (const name of licenseFiles) {
+  notices.push(`\n===== ${name} =====\n${await readFile(`LICENSES/${name}.txt`, 'utf8')}`)
+}
+const noticeText = notices.join('\n')
+if (noticeText.includes('*/')) throw new Error('License notice contains an unsafe block-comment terminator')
 
 await mkdir('Sonar/Resources', { recursive: true })
 
@@ -24,7 +35,8 @@ await build({
   },
   loader: { '.ts': 'ts' },
   sourcemap: false,
-  legalComments: 'none',
+  legalComments: 'inline',
+  banner: { js: `/*!\n${noticeText}\n*/` },
 })
 
 console.log('Built Sonar/Resources/source-bundle.js')

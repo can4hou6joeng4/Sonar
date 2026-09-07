@@ -1,3 +1,5 @@
+// Sonar adaptation of lx-music-mobile for the JavaScriptCore WY/TX runtime.
+// Modified distribution; see repository-root THIRD_PARTY_NOTICES.md and LICENSES/.
 // https://github.com/Binaryify/NeteaseCloudMusicApi/blob/master/module/song_detail.js
 import { httpFetch } from '../../request'
 import { weapi } from './utils/crypto'

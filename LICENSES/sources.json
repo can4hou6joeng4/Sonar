@@ -1,0 +1,140 @@
+{
+  "verified_on": "2026-09-07",
+  "lx_music_mobile": {
+    "status": "ok",
+    "license": "Apache-2.0",
+    "url": "https://github.com/lyswhut/lx-music-mobile/blob/d2956044533150057d65bfeaf2ae0fb5179433f5/LICENSE",
+    "bytes": 11357,
+    "repository_snapshot": "d2956044533150057d65bfeaf2ae0fb5179433f5",
+    "license_blob_sha": "261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64",
+    "license_sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+  },
+  "netease_cloud_music_api": {
+    "name": "NeteaseCloudMusicApi",
+    "version": "4.28.0",
+    "license": "MIT",
+    "repository": null,
+    "dist": {
+      "shasum": "ee9779227392492b1e3c68343348aff485ee7f31",
+      "tarball": "https://registry.npmjs.org/NeteaseCloudMusicApi/-/NeteaseCloudMusicApi-4.28.0.tgz",
+      "fileCount": 407,
+      "integrity": "sha512-cdYfANR+yEGMNFurs3WX8vNg8T8ZkqkGb8eQv2zTz/sXDY27Elu8S+nL9K4RXU4mDG8e5PF8HcJ3+EWaMSlc6A==",
+      "signatures": [
+        {
+          "sig": "MEUCIQCjw8wz6QzR++crVfPJL4FbJh9ciayRkNEG+yvwWIaIOgIgBb6Wpr5ilVdJv38PuBlzEoBafXkFtJ4YRexBhoEj3mM=",
+          "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+        }
+      ],
+      "unpackedSize": 8602991
+    }
+  },
+  "npm_packages": [
+    {
+      "name": "base64-js",
+      "version": "1.5.1",
+      "license": "MIT",
+      "license_file": "LICENSES/base64-js.txt",
+      "source_file": "node_modules/base64-js/LICENSE",
+      "sha256": "5b37224c080cdcc97c871ada971c224e9926370fe74f11b539aa1cf9f3b1aca1",
+      "distribution": "bundled runtime"
+    },
+    {
+      "name": "buffer",
+      "version": "6.0.3",
+      "license": "MIT",
+      "license_file": "LICENSES/buffer.txt",
+      "source_file": "node_modules/buffer/LICENSE",
+      "sha256": "06bafa45fdad2579ba0e43b0c9b2c6290287c99c4203c300254a462b38a307f6",
+      "distribution": "bundled runtime"
+    },
+    {
+      "name": "ieee754",
+      "version": "1.2.1",
+      "license": "BSD-3-Clause",
+      "license_file": "LICENSES/ieee754.txt",
+      "source_file": "node_modules/ieee754/LICENSE",
+      "sha256": "18d45466ba3253deae04667e267a91ea8de8548f18c1125264d1c9db28194cc1",
+      "distribution": "bundled runtime"
+    },
+    {
+      "name": "he",
+      "version": "1.2.0",
+      "license": "MIT",
+      "license_file": "LICENSES/he.txt",
+      "source_file": "node_modules/he/LICENSE-MIT.txt",
+      "sha256": "483acb265f182907d1caf6cff9c16c96f31325ed23792832cc5d8b12d5f88c8a",
+      "distribution": "bundled runtime"
+    },
+    {
+      "name": "pako",
+      "version": "2.2.0",
+      "license": "(MIT AND Zlib)",
+      "license_file": "LICENSES/pako.txt",
+      "source_file": "node_modules/pako/LICENSE",
+      "sha256": "a04665b3b2de56c66730c1f720f528175739e4104f79073614aa611da1e85539",
+      "distribution": "bundled runtime"
+    },
+    {
+      "name": "esbuild",
+      "version": "0.28.2",
+      "license": "MIT",
+      "license_file": "LICENSES/esbuild.txt",
+      "source_file": "node_modules/esbuild/LICENSE.md",
+      "sha256": "b40ec5baec7bb34fa5b1c09521fa3cd52d5fad7adafed74932a2010d3612a681",
+      "distribution": "development dependency"
+    },
+    {
+      "name": "lrc-file-parser",
+      "version": "1.2.7",
+      "license": "MIT",
+      "license_file": "LICENSES/lrc-file-parser.txt",
+      "source_file": "node_modules/lrc-file-parser/LICENSE",
+      "sha256": "99feaa133d4339c951c559c16b657c47d8afe7f84c3c53c89146530d7ac8a096",
+      "distribution": "development dependency"
+    }
+  ],
+  "pako_zlib_notice_file": "LICENSES/pako-zlib.txt",
+  "note": "The upstream snapshots verify license texts, not an exact provenance pin for the adapted source subset. Source comments identify additional upstream references.",
+  "additional_references": {
+    "stack_overflow": [
+      {
+        "answer_id": 2450976,
+        "url": "https://stackoverflow.com/a/2450976",
+        "author": "ChristopheD",
+        "author_url": "https://stackoverflow.com/users/81179/christophed",
+        "current_page_license": "CC BY-SA 4.0",
+        "imported_revision": "not established"
+      },
+      {
+        "answer_id": 53387532,
+        "url": "https://stackoverflow.com/a/53387532",
+        "author": "vanowm",
+        "author_url": "https://stackoverflow.com/users/2930038/vanowm",
+        "current_page_license": "CC BY-SA 4.0",
+        "imported_revision": "not established"
+      },
+      {
+        "answer_id": 64945178,
+        "url": "https://stackoverflow.com/a/64945178",
+        "author": "Chris Rice",
+        "author_url": "https://stackoverflow.com/users/1148118/chris-rice",
+        "current_page_license": "CC BY-SA 4.0",
+        "imported_revision": "not established"
+      }
+    ],
+    "gist": {
+      "url": "https://gist.github.com/thomseddon/3511330",
+      "description": "AngularJS byte format filter",
+      "files": [
+        "gistfile1.js"
+      ],
+      "owner": "thomseddon"
+    },
+    "unresolved": [
+      "Gist 3511330 has no separate license file in the inspected file list; permission remains unconfirmed.",
+      "CSDN article 77164126 permission has not been verified.",
+      "Stack Overflow imported revisions and associated license obligations require review before public distribution."
+    ],
+    "cc_by_sa_4_license_source": "https://api.github.com/licenses/cc-by-sa-4.0"
+  }
+}

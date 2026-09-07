@@ -3,8 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:source": "node scripts/build-source-bundle.mjs",
-    "smoke:runtime": "bash scripts/smoke-runtime.sh"
+    "build:source": "node scripts/build-source-bundle.mjs"
   },
   "devDependencies": {
     "buffer": "^6.0.3",

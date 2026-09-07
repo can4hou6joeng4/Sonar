@@ -27,17 +27,25 @@ targets:
       - path: Sonar/Resources
         excludes:
           - BuildCredentials.json
+    dependencies:
+      - target: SonarWidgetExtension
+        embed: true
     postBuildScripts:
       - name: Embed local build credentials
         script: |
           CREDENTIAL_OUTPUT="${DERIVED_FILE_DIR}/BuildCredentials.json"
-          node "${SRCROOT}/scripts/generate-build-credentials.mjs" "${CREDENTIAL_OUTPUT}"
+          if [ -f "${SRCROOT}/scripts/generate-build-credentials.mjs" ]; then
+            node "${SRCROOT}/scripts/generate-build-credentials.mjs" "${CREDENTIAL_OUTPUT}"
+          else
+            node "${SRCROOT}/scripts/generate-build-config.mjs" "${CREDENTIAL_OUTPUT}"
+          fi
           install -d "${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"
           install -m 600 "${CREDENTIAL_OUTPUT}" "${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/BuildCredentials.json"
         basedOnDependencyAnalysis: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cn.bobochang.sonar
+        CODE_SIGN_ENTITLEMENTS: Sonar/Sonar.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_FILE: Sonar/Info.plist
         INFOPLIST_KEY_CFBundleDisplayName: Sonar
@@ -46,17 +54,37 @@ targets:
         SUPPORTS_MACCATALYST: NO
         INFOPLIST_KEY_UIRequiresFullScreen: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
-    scheme:
-      testTargets:
-        - SonarTests
-  SonarTests:
-    type: bundle.unit-test
+  SonarWidgetExtension:
+    type: app-extension
     platform: iOS
     sources:
-      - path: SonarTests
-    dependencies:
-      - target: Sonar
+      - path: SonarWidgetExtension
+      - path: Sonar/WidgetShare/WidgetSnapshot.swift
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: cn.bobochang.sonar.tests
-        INFOPLIST_FILE: SonarTests/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: cn.bobochang.sonar.widget
+        PRODUCT_NAME: "$(TARGET_NAME)"
+        INFOPLIST_FILE: SonarWidgetExtension/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_KEY_CFBundleDisplayName: Sonar
+        CODE_SIGN_ENTITLEMENTS: SonarWidgetExtension/SonarWidgetExtension.entitlements
+        CURRENT_PROJECT_VERSION: 20
+        MARKETING_VERSION: "1.0"
+        SKIP_INSTALL: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_EMIT_LOC_STRINGS: YES
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/Frameworks"
+          - "@executable_path/../../Frameworks"
+schemes:
+  Sonar:
+    build:
+      targets:
+        Sonar: all
+    run:
+      config: Debug
+    profile:
+      config: Release
+    archive:
+      config: Release

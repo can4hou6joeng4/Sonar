@@ -1,3 +1,5 @@
+// Sonar adaptation of lx-music-mobile for the JavaScriptCore WY/TX runtime.
+// Modified distribution; see repository-root THIRD_PARTY_NOTICES.md and LICENSES/.
 export const requestMsg = {
   fail: '请求异常😮，可以多试几次，若还是不行就换一首吧。。。',
   unachievable: '哦No😱...接口无法访问了！',

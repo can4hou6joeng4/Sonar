@@ -25,3 +25,17 @@ dist/
 Secrets.xcconfig
 lx-custom-source-*.js
 Sonar/Resources/BuildCredentials.json
+
+# Local development workflow and verification (retained on this machine)
+.trellis/
+.agents/
+.codex/
+SonarTests/
+Sonar.local.xcodeproj/
+scripts/run-local-tests.sh
+scripts/RuntimeSmoke.swift
+scripts/smoke-runtime.sh
+scripts/setup_widget_extension.py
+docs/
+design/
+designs/
