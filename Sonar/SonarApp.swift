@@ -3,23 +3,46 @@ import SwiftData
 
 @main
 struct SonarApp: App {
-    private let modelContainer: ModelContainer
-    private let sourceRuntime: SourceRuntime
-    private let playbackService: PlaybackService
-    private let artworkService: ArtworkService?
-    private let themeState: SonarThemeState
-    private let uiPreferences: UIPlaybackPreferences
-    private let toastCenter: ToastCenter
-    private let confirmationCenter: ConfirmationCenter
+    @State private var bootstrap: SonarBootstrap
 
     init() {
-        let container: ModelContainer
-        do {
-            container = try SonarModelContainer.make()
-        } catch {
-            fatalError("无法初始化 Sonar 数据库: \(error)")
+        #if DEBUG
+        var failFirstOpen = ProcessInfo.processInfo.arguments.contains("-sonar-test-store-failure-once")
+        _bootstrap = State(initialValue: SonarBootstrap(open: {
+            if failFirstOpen {
+                failFirstOpen = false
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            return try SonarModelContainer.make()
+        }))
+        #else
+        _bootstrap = State(initialValue: SonarBootstrap())
+        #endif
+    }
+
+    var body: some Scene {
+        WindowGroup {
+            if let container = bootstrap.container {
+                ReadySonarView()
+                    .modelContainer(container)
+            } else {
+                LibraryRecoveryView(retry: bootstrap.retry)
+            }
         }
-        modelContainer = container
+    }
+}
+
+@MainActor @Observable
+private final class SonarServices {
+    let sourceRuntime: SourceRuntime
+    let playbackService: PlaybackService
+    let artworkService: ArtworkService?
+    let themeState: SonarThemeState
+    let uiPreferences: UIPlaybackPreferences
+    let toastCenter: ToastCenter
+    let confirmationCenter: ConfirmationCenter
+
+    init() {
         let credentials = BuildCredentialStore()
         let breaker = ChkszCircuitBreaker()
         let chkszAPI = ChkszAPIClient(credentials: credentials, breaker: breaker)
@@ -48,18 +71,20 @@ struct SonarApp: App {
         confirmationCenter = ConfirmationCenter()
     }
 
-    var body: some Scene {
-        WindowGroup {
-            ThemedRootView(sourceRuntime: sourceRuntime)
-                .environment(playbackService)
-                .environment(themeState)
-                .environment(uiPreferences)
-                .environment(toastCenter)
-                .environment(confirmationCenter)
-                .environment(\.artworkService, artworkService)
-                .environment(\.sourceRuntime, sourceRuntime)
-        }
-        .modelContainer(modelContainer)
+}
+
+private struct ReadySonarView: View {
+    @State private var services = SonarServices()
+
+    var body: some View {
+        ThemedRootView(sourceRuntime: services.sourceRuntime)
+            .environment(services.playbackService)
+            .environment(services.themeState)
+            .environment(services.uiPreferences)
+            .environment(services.toastCenter)
+            .environment(services.confirmationCenter)
+            .environment(\.artworkService, services.artworkService)
+            .environment(\.sourceRuntime, services.sourceRuntime)
     }
 }
 

@@ -133,6 +133,52 @@ public final class LibraryStore {
         return (primary, didChange)
     }
 
+    public func exportPersonalPlaylist() throws -> Data {
+        let playlist = try ensurePersonalPlaylist()
+        let tracks = try playlist.orderedItems.map { item in
+            guard let track = item.track.track else { throw PlaylistBackupError.invalidTrack }
+            return track
+        }
+        return try PlaylistBackup.encode(name: playlist.name, tracks: tracks)
+    }
+
+    @discardableResult
+    public func importPersonalPlaylist(from data: Data) throws -> PlaylistImportResult {
+        try importPersonalPlaylist(from: data, save: { try $0.save() })
+    }
+
+    // The save boundary is injectable so rollback is exercised without damaging a real store.
+    func importPersonalPlaylist(
+        from data: Data,
+        save: (ModelContext) throws -> Void
+    ) throws -> PlaylistImportResult {
+        let backup = try PlaylistBackup.decode(data)
+        guard !context.hasChanges else { throw PlaylistBackupError.pendingChanges }
+        do {
+            let normalization = try normalizePersonalPlaylist()
+            let playlist = normalization.playlist
+            if playlist.items.isEmpty { playlist.name = backup.name }
+            var existingIDs = Set(playlist.orderedItems.map(\.track.musicId))
+            var insertedCount = 0
+            for track in backup.tracks where existingIDs.insert(track.musicID).inserted {
+                _ = try insert(track, into: playlist)
+                insertedCount += 1
+            }
+            if context.hasChanges { try save(context) }
+            let result = PlaylistImportResult(
+                insertedCount: insertedCount,
+                skippedCount: backup.tracks.count - insertedCount,
+                totalCount: playlist.items.count,
+                playlistName: playlist.name
+            )
+            WidgetShareStore.shared.updateFavoritesCount(result.totalCount)
+            return result
+        } catch {
+            context.rollback()
+            throw PlaylistBackupError.saveFailed
+        }
+    }
+
     @discardableResult
     public func createPlaylist(
         named name: String,

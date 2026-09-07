@@ -89,6 +89,12 @@
 		F41CAAB893659495EEFFD012 /* PlayerArtwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 084822A4565C9A88078621FC /* PlayerArtwork.swift */; };
 		F5FD0195E6AF7728BE1CD0CD /* TransportBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E07FEE1C6FDFBA2097C6AAA /* TransportBar.swift */; };
 		F7E9F7607BD999EE802E71E9 /* ArtworkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A73EFD248035C9B528F3F9CB /* ArtworkService.swift */; };
+		966845E7ACF4114C221A0229 /* SonarBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = C59839DEB4ED86B6FE210FE4 /* SonarBootstrap.swift */; };
+		923F78A505478D9E49E529B4 /* BackupDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33754D3D0D385718FE481C9E /* BackupDocument.swift */; };
+		8D7F9B5B2809C3F143DCA6F4 /* PlaylistBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEBA50F9B966B3E7F5ECF43C /* PlaylistBackup.swift */; };
+		6DCD5420B632F4B34FF8104E /* SonarBootstrapTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F8E1CA36709F1EB43E03520 /* SonarBootstrapTests.swift */; };
+		DABE9F6FBD7AD4C3D17BD613 /* PlaylistBackupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A8B82346E36726688C226EA /* PlaylistBackupTests.swift */; };
+		FFCE50CA2212416ADB977772 /* ArtworkCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 192F0235DFEDB722787BBE7F /* ArtworkCacheTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -208,6 +214,12 @@
 		FB7FA3DD083707A1D97DCEB5 /* AddToPlaylistSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddToPlaylistSheet.swift; sourceTree = "<group>"; };
 		FBCDBA8A850047173492B69E /* Sonar.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Sonar.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FFC8F9394CC9701D9490C16A /* CommonCryptoBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonCryptoBridge.swift; sourceTree = "<group>"; };
+		C59839DEB4ED86B6FE210FE4 /* SonarBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonarBootstrap.swift; sourceTree = "<group>"; };
+		33754D3D0D385718FE481C9E /* BackupDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupDocument.swift; sourceTree = "<group>"; };
+		DEBA50F9B966B3E7F5ECF43C /* PlaylistBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistBackup.swift; sourceTree = "<group>"; };
+		4F8E1CA36709F1EB43E03520 /* SonarBootstrapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonarBootstrapTests.swift; sourceTree = "<group>"; };
+		7A8B82346E36726688C226EA /* PlaylistBackupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistBackupTests.swift; sourceTree = "<group>"; };
+		192F0235DFEDB722787BBE7F /* ArtworkCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtworkCacheTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -234,6 +246,9 @@
 		55E2A881C6E191B0E455A7C7 /* SonarTests */ = {
 			isa = PBXGroup;
 			children = (
+				192F0235DFEDB722787BBE7F /* ArtworkCacheTests.swift */,
+				7A8B82346E36726688C226EA /* PlaylistBackupTests.swift */,
+				4F8E1CA36709F1EB43E03520 /* SonarBootstrapTests.swift */,
 				6DB9F09A6A5358DB7F4657D2 /* ArtistDiscoveryTests.swift */,
 				63F91E43C674532E00D70D57 /* BuildCredentialStoreTests.swift */,
 				CA4B7955B028FD645A4D40E1 /* ChkszSourceRuntimeTests.swift */,
@@ -283,6 +298,9 @@
 		8E662CAFB732C9989839C8E8 /* Sonar */ = {
 			isa = PBXGroup;
 			children = (
+				DEBA50F9B966B3E7F5ECF43C /* PlaylistBackup.swift */,
+				33754D3D0D385718FE481C9E /* BackupDocument.swift */,
+				C59839DEB4ED86B6FE210FE4 /* SonarBootstrap.swift */,
 				E0EA2B04C18A56C9D4F2E6BC /* ArtworkPalette.swift */,
 				A73EFD248035C9B528F3F9CB /* ArtworkService.swift */,
 				6E5EED7134E31ACCC9993AB0 /* Assets.xcassets */,
@@ -540,6 +558,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				FFCE50CA2212416ADB977772 /* ArtworkCacheTests.swift in Sources */,
+				DABE9F6FBD7AD4C3D17BD613 /* PlaylistBackupTests.swift in Sources */,
+				6DCD5420B632F4B34FF8104E /* SonarBootstrapTests.swift in Sources */,
 				89749D3C58EFB8C553101E80 /* ArtistDiscoveryTests.swift in Sources */,
 				7A4F55FBD8C52EDB720EE20E /* BuildCredentialStoreTests.swift in Sources */,
 				18A62D7A65E49653C4E9771A /* ChkszSourceRuntimeTests.swift in Sources */,
@@ -567,6 +588,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8D7F9B5B2809C3F143DCA6F4 /* PlaylistBackup.swift in Sources */,
+				923F78A505478D9E49E529B4 /* BackupDocument.swift in Sources */,
+				966845E7ACF4114C221A0229 /* SonarBootstrap.swift in Sources */,
 				27B2E5179FE340020A5625CE /* AddToPlaylistSheet.swift in Sources */,
 				849E996CB5EA0C8A6FE0A1E2 /* AlbumDetailView.swift in Sources */,
 				43CD3AEBDDCBC0B4765C3E17 /* AlbumFace.swift in Sources */,
