@@ -30,7 +30,7 @@ struct QualitySheet: View {
                                         Text(quality.title)
                                             .font(.system(size: 15, weight: .semibold))
                                             .foregroundStyle(scheme.onSurface)
-                                        Text(option.map { "文件大小 \($0.sizeText)" } ?? unavailableText)
+                                        Text(option.map { $0.sizeText.isEmpty ? "音源支持" : "文件大小 \($0.sizeText)" } ?? unavailableText)
                                             .font(.system(size: 12.5))
                                             .foregroundStyle(scheme.onSurfaceVariant)
                                     }

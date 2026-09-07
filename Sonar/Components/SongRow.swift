@@ -31,16 +31,19 @@ struct SongRow: View {
                     leadingView
                     labels
                 }
+                .padding(.vertical, 4)
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.cellHighlight)
             .accessibilityIdentifier("song-row-play-\(track.musicID)")
 
             trailingButton
         }
         .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
-        .frame(height: NCMDesignTokens.Layout.songRowHeight)
+        .padding(.vertical, 2)
+        .frame(minHeight: NCMDesignTokens.Layout.songRowHeight)
         .background(rowBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(alignment: .bottomTrailing) {
             if showDivider {
                 Rectangle()
@@ -56,7 +59,7 @@ struct SongRow: View {
     private var leadingView: some View {
         switch leading {
         case .cover:
-            PlayerArtwork(track: track, size: 44, cornerRadius: 6)
+            PlayerArtwork(track: track, size: 44, cornerRadius: 8)
         case let .index(index):
             Group {
                 if isCurrent {
@@ -78,14 +81,14 @@ struct SongRow: View {
                     PlayingEqualizer(isAnimating: isPlaying, color: primaryForeground)
                 }
                 Text(track.title)
-                    .font(.system(size: NCMDesignTokens.Typography.songTitle))
+                    .font(.body)
                     .foregroundStyle(primaryForeground)
                     .lineLimit(1)
             }
             HStack(spacing: 5) {
                 QualityBadge(quality: track.highestKnownQuality)
                 Text(subtitle)
-                    .font(.system(size: NCMDesignTokens.Typography.songSubtitle))
+                    .font(.caption)
                     .foregroundStyle(secondaryForeground)
                     .lineLimit(1)
             }
@@ -101,7 +104,7 @@ struct SongRow: View {
                 Image(systemName: "play.fill")
                     .font(.system(size: 19, weight: .regular))
                     .foregroundStyle(scheme.onSurface)
-                    .frame(width: 34, height: 44)
+                    .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("播放 \(track.title)")
@@ -111,13 +114,13 @@ struct SongRow: View {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 18, weight: .medium))
                         .foregroundStyle(scheme.onSurfaceVariant)
-                        .frame(width: 32, height: 44)
+                        .frame(width: 44, height: 44)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.circleIcon(diameter: 34))
                 .accessibilityLabel("更多")
                 .accessibilityIdentifier("song-row-more-\(track.musicID)")
             } else {
-                Color.clear.frame(width: 32, height: 44)
+                Color.clear.frame(width: 44, height: 44)
             }
         }
     }

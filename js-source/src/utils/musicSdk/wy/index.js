@@ -7,9 +7,11 @@ import songList from './songList'
 import hotSearch from './hotSearch'
 import comment from './comment'
 import tipSearch from './tipSearch'
+import artist from './artist'
 
 const wy = {
   tipSearch,
+  artist,
   leaderboard,
   musicSearch,
   songList,

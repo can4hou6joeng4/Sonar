@@ -7058,6 +7058,7 @@
   };
 
   // js-source/src/utils/musicSdk/tx/musicSearch.js
+  var retryDelays = [250, 500, 1e3, 1500];
   var musicSearch_default = {
     limit: 50,
     total: 0,
@@ -7065,7 +7066,6 @@
     allPage: 1,
     successCode: 0,
     musicSearch(str, page, limit, retryNum = 0) {
-      if (retryNum > 5) return Promise.reject(new Error("\u641C\u7D22\u5931\u8D25"));
       const searchRequest = httpFetch("https://u.y.qq.com/cgi-bin/musicu.fcg", {
         method: "post",
         headers: {
@@ -7121,7 +7121,14 @@
         }
       });
       return searchRequest.promise.then(({ body }) => {
-        if (body.code != this.successCode || body.req.code != this.successCode) return this.musicSearch(str, page, limit, ++retryNum);
+        if (body?.code != this.successCode || body?.req?.code != this.successCode) {
+          if (retryNum >= retryDelays.length) {
+            const topCode = body?.code ?? "missing";
+            const requestCode = body?.req?.code ?? "missing";
+            throw new Error(`QQ \u641C\u7D22\u670D\u52A1\u6682\u65F6\u4E0D\u53EF\u7528\uFF08${topCode}/${requestCode}\uFF09`);
+          }
+          return new Promise((resolve) => setTimeout(resolve, retryDelays[retryNum])).then(() => this.musicSearch(str, page, limit, retryNum + 1));
+        }
         return body.req.data;
       });
     },
@@ -7693,6 +7700,174 @@
     }
   };
 
+  // js-source/src/utils/musicSdk/tx/artist.js
+  var comm = {
+    ct: "11",
+    cv: "14090508",
+    v: "14090508",
+    tmeAppID: "qqmusic",
+    phonetype: "EBG-AN10",
+    deviceScore: "553.47",
+    devicelevel: "50",
+    newdevicelevel: "20",
+    rom: "HuaWei/EMOTION/EmotionUI_14.2.0",
+    os_ver: "12",
+    OpenUDID: "0",
+    OpenUDID2: "0",
+    QIMEI36: "0",
+    udid: "0",
+    chid: "0",
+    aid: "0",
+    oaid: "0",
+    taid: "0",
+    tid: "0",
+    wid: "0",
+    uid: "0",
+    sid: "0",
+    modeSwitch: "6",
+    teenMode: "0",
+    ui_mode: "2",
+    nettype: "1020",
+    v4ip: ""
+  };
+  var request = async (module, method, param) => {
+    const { statusCode, body } = await httpFetch("https://u.y.qq.com/cgi-bin/musicu.fcg", {
+      method: "post",
+      headers: { "User-Agent": "QQMusic 14090508(android 12)" },
+      body: { comm, req: { module, method, param } }
+    }).promise;
+    if (statusCode !== 200 || body?.code !== 0 || body?.req?.code !== 0) {
+      throw new Error("QQ \u6B4C\u624B\u670D\u52A1\u6682\u65F6\u4E0D\u53EF\u7528");
+    }
+    return body.req.data || {};
+  };
+  var httpsImage = (value) => typeof value === "string" ? value.replace(/^http:\/\//i, "https://") : "";
+  var singerImage = (mid) => mid ? `https://y.gtimg.cn/music/photo_new/T001R500x500M000${mid}.jpg` : "";
+  var albumImage = (mid) => mid ? `https://y.gtimg.cn/music/photo_new/T002R500x500M000${mid}.jpg` : "";
+  var releaseDate = (value) => {
+    if (typeof value !== "string") return "";
+    const match = value.trim().match(/^(\d{4})[-./年](\d{1,2})[-./月](\d{1,2})/);
+    if (!match) return "";
+    return `${match[1]}-${match[2].padStart(2, "0")}-${match[3].padStart(2, "0")}`;
+  };
+  var track = (item) => {
+    const mid = item?.mid || item?.songmid;
+    const name = item?.name || item?.title;
+    if (!mid || !name) return null;
+    const album3 = item.album || {};
+    const file = item.file || {};
+    const types = [];
+    const typeMap = {};
+    [["128k", file.size_128mp3], ["320k", file.size_320mp3], ["flac", file.size_flac], ["flac24bit", file.size_hires]].forEach(([type, size]) => {
+      if (Number(size) > 0) {
+        const formatted = sizeFormate(Number(size));
+        types.push({ type, size: formatted });
+        typeMap[type] = { size: formatted };
+      }
+    });
+    if (types.length === 0) {
+      types.push({ type: "128k", size: null });
+      typeMap["128k"] = { size: null };
+    }
+    return {
+      source: "tx",
+      songmid: mid,
+      songId: item.id,
+      strMediaMid: file.media_mid || mid,
+      name,
+      singer: formatSingerName(item.singer || [], "name"),
+      albumName: album3.name || "",
+      albumId: album3.mid || "",
+      albumMid: album3.mid || "",
+      img: albumImage(album3.mid) || singerImage(item.singer?.[0]?.mid),
+      interval: Number(item.interval) > 0 ? formatPlayTime(Number(item.interval)) : null,
+      types,
+      _types: typeMap,
+      typeUrl: {}
+    };
+  };
+  var album = (item) => {
+    const mid = item?.albumMid || item?.mid;
+    const name = item?.albumName || item?.name;
+    if (!mid || !name) return null;
+    return {
+      id: String(mid),
+      source: "tx",
+      name,
+      artist: item.singerName || item.singer?.name || "",
+      img: httpsImage(item.albumPic) || albumImage(mid),
+      releaseDate: releaseDate(item.publishDate || item.publicTime),
+      trackCount: item.songCount == null && item.totalSongNum == null && item.totalNum == null ? null : Number(item.songCount ?? item.totalSongNum ?? item.totalNum) > 0 ? Number(item.songCount ?? item.totalSongNum ?? item.totalNum) : null
+    };
+  };
+  var artist_default = {
+    async search(keyword, page = 1, limit = 10) {
+      const data = await request("music.search.SearchCgiService", "DoSearchForQQMusicMobile", {
+        search_type: 1,
+        query: String(keyword),
+        page_num: Number(page),
+        num_per_page: Number(limit),
+        highlight: 0,
+        nqc_flag: 0,
+        multi_zhida: 0,
+        cat: 2,
+        grp: 1,
+        sin: 0,
+        sem: 0
+      });
+      const section = data.body?.singer || data.singer || {};
+      const values = Array.isArray(section) ? section : section.list || data.body?.singerList || [];
+      return {
+        list: values.map((item) => {
+          const mid = item.singerMID || item.singerMid || item.mid;
+          return {
+            id: String(mid || ""),
+            source: "tx",
+            name: item.singerName || item.name || "",
+            img: httpsImage(item.singerPic || item.pic) || singerImage(mid),
+            songCount: item.songNum == null && item.singerSongNum == null ? null : Number(item.songNum ?? item.singerSongNum),
+            albumCount: item.albumNum == null && item.singerAlbumNum == null ? null : Number(item.albumNum ?? item.singerAlbumNum)
+          };
+        }).filter((item) => item.id && item.name),
+        total: Number(section.totalNum ?? section.sum ?? values.length),
+        source: "tx"
+      };
+    },
+    async popular(artistId, limit = 100) {
+      const data = await request("musichall.song_list_server", "GetSingerSongList", {
+        singerMid: String(artistId),
+        begin: 0,
+        num: Number(limit),
+        order: 1
+      });
+      return (data.songList || []).map((value) => track(value.songInfo || value)).filter(Boolean);
+    },
+    async albums(artistId, page = 1, limit = 30) {
+      const begin = Math.max(0, Number(page) - 1) * Number(limit);
+      const data = await request("music.musichallAlbum.AlbumListServer", "GetAlbumList", {
+        singerMid: String(artistId),
+        begin,
+        num: Number(limit),
+        order: 0
+      });
+      const list = (data.albumList || []).map(album).filter(Boolean);
+      return { list, total: Number(data.total ?? list.length), source: "tx" };
+    },
+    async albumTracks(albumId, limit = 200) {
+      const data = await request("music.musichallAlbum.AlbumSongList", "GetAlbumSongList", {
+        albumMid: String(albumId),
+        begin: 0,
+        num: Number(limit),
+        order: 2
+      });
+      return {
+        info: album(data.albumInfo || data.album || { albumMid: albumId, albumName: "" }),
+        list: (data.songList || []).map((value) => track(value.songInfo || value)).filter(Boolean),
+        source: "tx"
+      };
+    }
+  };
+
   // js-source/src/utils/musicSdk/tx/index.js
   var tx = {
     // tipSearch,
@@ -7701,6 +7876,7 @@
     musicSearch: musicSearch_default,
     hotSearch: hotSearch_default,
     comment: comment_default,
+    artist: artist_default,
     getMusicUrl(songInfo, type) {
       return apis("tx").getMusicUrl(songInfo, type);
     },
@@ -8274,7 +8450,7 @@ ${result.lyric}`;
 
   // js-source/src/utils/musicSdk/wy/utils/index.js
   var eapiRequest2 = (url, data) => {
-    return httpFetch("http://interface.music.163.com/eapi/batch", {
+    return httpFetch("https://interface.music.163.com/eapi/batch", {
       method: "post",
       headers: {
         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36",
@@ -8930,9 +9106,120 @@ ${result.lyric}`;
     }
   };
 
+  // js-source/src/utils/musicSdk/wy/artist.js
+  var requestJSON = async (url, options) => {
+    const { statusCode, body } = await httpFetch(url, options).promise;
+    if (statusCode !== 200 || !body || body.code != null && body.code !== 200) {
+      throw new Error("\u7F51\u6613\u4E91\u6B4C\u624B\u670D\u52A1\u6682\u65F6\u4E0D\u53EF\u7528");
+    }
+    return body;
+  };
+  var track2 = (item) => {
+    const id = item?.id;
+    const name = item?.name;
+    if (id == null || typeof name !== "string" || name.length === 0) return null;
+    const album3 = item.al || item.album || {};
+    const artists = item.ar || item.artists || [];
+    const duration = Number(item.dt ?? item.duration ?? 0);
+    const types = [];
+    const _types = {};
+    let size;
+    const privilege = item.privilege || {};
+    const maxBrLevel = String(privilege.maxBrLevel || "").toLowerCase();
+    const maxbr = Number(privilege.maxbr || 0);
+    if (maxBrLevel === "hires" || item.hr) {
+      size = item.hr?.size ? sizeFormate(item.hr.size) : null;
+      types.push({ type: "flac24bit", size });
+      _types.flac24bit = { size };
+    }
+    if (maxBrLevel === "lossless" || maxbr >= 999e3 || item.sq) {
+      size = item.sq?.size ? sizeFormate(item.sq.size) : null;
+      types.push({ type: "flac", size });
+      _types.flac = { size };
+    }
+    if (item.h || maxbr >= 32e4) {
+      size = item.h?.size ? sizeFormate(item.h.size) : null;
+      types.push({ type: "320k", size });
+      _types["320k"] = { size };
+    }
+    if (item.l || item.m || maxbr >= 128e3 || types.length === 0) {
+      const lowItem = item.l || item.m;
+      size = lowItem?.size ? sizeFormate(lowItem.size) : null;
+      types.push({ type: "128k", size });
+      _types["128k"] = { size };
+    }
+    types.reverse();
+    return {
+      source: "wy",
+      songmid: id,
+      name,
+      singer: formatSingerName(artists, "name"),
+      albumName: album3.name || "",
+      albumId: album3.id,
+      img: album3.picUrl || "",
+      interval: duration > 0 ? formatPlayTime(duration / 1e3) : null,
+      types,
+      _types,
+      typeUrl: {}
+    };
+  };
+  var album2 = (item) => {
+    const id = item?.id;
+    const name = item?.name;
+    if (id == null || typeof name !== "string" || name.length === 0) return null;
+    return {
+      id: String(id),
+      source: "wy",
+      name,
+      artist: item.artist?.name || formatSingerName(item.artists || [], "name"),
+      img: item.picUrl || item.blurPicUrl || "",
+      releaseDate: item.publishTime ? new Date(item.publishTime).toISOString().slice(0, 10) : "",
+      trackCount: item.size == null ? null : Number(item.size)
+    };
+  };
+  var artist_default2 = {
+    async search(keyword, page = 1, limit = 10) {
+      const offset = Math.max(0, Number(page) - 1) * Number(limit);
+      const query = `s=${encodeURIComponent(String(keyword))}&type=100&limit=${Number(limit)}&offset=${offset}`;
+      const body = await requestJSON(`https://music.163.com/api/search/get?${query}`);
+      const values = body.result?.artists || [];
+      return {
+        list: values.map((item) => ({
+          id: String(item.id),
+          source: "wy",
+          name: item.name,
+          img: item.picUrl || item.img1v1Url || "",
+          songCount: item.musicSize == null ? null : Number(item.musicSize),
+          albumCount: item.albumSize == null ? null : Number(item.albumSize)
+        })).filter((item) => item.id && item.name),
+        total: Number(body.result?.artistCount ?? values.length),
+        source: "wy"
+      };
+    },
+    async popular(artistId) {
+      const body = await requestJSON(`https://music.163.com/api/artist/top/song?id=${encodeURIComponent(artistId)}`);
+      return (body.songs || []).map(track2).filter(Boolean);
+    },
+    async albums(artistId, page = 1, limit = 30) {
+      const offset = Math.max(0, Number(page) - 1) * Number(limit);
+      const body = await requestJSON(`https://music.163.com/api/artist/albums/${encodeURIComponent(artistId)}?limit=${limit}&offset=${offset}`);
+      const list = (body.hotAlbums || []).map(album2).filter(Boolean);
+      return { list, total: Number(body.artist?.albumSize ?? list.length), source: "wy" };
+    },
+    async albumTracks(albumId) {
+      const body = await requestJSON(`https://music.163.com/api/album/${encodeURIComponent(albumId)}`);
+      return {
+        info: album2(body.album || { id: albumId, name: "" }),
+        list: (body.songs || body.album?.songs || []).map(track2).filter(Boolean),
+        source: "wy"
+      };
+    }
+  };
+
   // js-source/src/utils/musicSdk/wy/index.js
   var wy = {
     tipSearch: tipSearch_default,
+    artist: artist_default2,
     leaderboard: leaderboard_default2,
     musicSearch: musicSearch_default2,
     songList: songList_default2,
@@ -9013,10 +9300,15 @@ ${result.lyric}`;
       }
       const page = await sdk.musicSearch.search(value, 1, 10);
       if (!page || !Array.isArray(page.list)) throw new Error("\u97F3\u6E90\u8FD4\u56DE\u8054\u60F3\u7ED3\u679C\u5F02\u5E38");
-      return [...new Set(page.list.map((track) => {
-        const artist = typeof track.singer === "string" ? track.singer : "";
-        return artist ? `${track.name} - ${artist}` : track.name;
+      return [...new Set(page.list.map((track3) => {
+        const artist = typeof track3.singer === "string" ? track3.singer : "";
+        return artist ? `${track3.name} - ${artist}` : track3.name;
       }).filter(Boolean))];
+    },
+    async hotSearch(source) {
+      const result = await unwrapRequest(sdkFor(source).hotSearch.getList());
+      if (!result || result.source !== source || !Array.isArray(result.list)) throw new Error("\u97F3\u6E90\u8FD4\u56DE\u70ED\u95E8\u641C\u7D22\u5F02\u5E38");
+      return [...new Set(result.list.map((value) => String(value).trim()).filter(Boolean))];
     },
     async playlistCatalog(source, sortId, tagId, page = 1) {
       const sdk = sdkFor(source);
@@ -9026,10 +9318,51 @@ ${result.lyric}`;
     },
     async playlistDetail(source, id, page = 1) {
       const sdk = sdkFor(source);
-      const request = source === "tx" ? sdk.songList.getListDetail(String(id)) : sdk.songList.getListDetail(String(id), Number(page));
-      const result = await unwrapRequest(request);
+      const request2 = source === "tx" ? sdk.songList.getListDetail(String(id)) : sdk.songList.getListDetail(String(id), Number(page));
+      const result = await unwrapRequest(request2);
       if (!result || !Array.isArray(result.list)) throw new Error("\u97F3\u6E90\u8FD4\u56DE\u6B4C\u5355\u8BE6\u60C5\u5F02\u5E38");
       return result;
+    },
+    async artistSearch(source, keyword, page = 1, limit = 10) {
+      const normalizedPage = Math.max(1, Number(page));
+      const normalizedLimit = Math.max(1, Number(limit));
+      const result = await sdkFor(source).artist.search(String(keyword), normalizedPage, normalizedLimit);
+      if (!result || !Array.isArray(result.list)) throw new Error("\u97F3\u6E90\u8FD4\u56DE\u6B4C\u624B\u641C\u7D22\u7ED3\u679C\u5F02\u5E38");
+      return {
+        ...result,
+        page: normalizedPage,
+        limit: normalizedLimit,
+        hasMore: result.hasMore == null ? result.list.length > 0 && normalizedPage * normalizedLimit < Number(result.total || 0) : Boolean(result.hasMore)
+      };
+    },
+    async artistPopular(source, artistId) {
+      const result = await sdkFor(source).artist.popular(String(artistId));
+      if (!Array.isArray(result)) throw new Error("\u97F3\u6E90\u8FD4\u56DE\u70ED\u95E8\u6B4C\u66F2\u5F02\u5E38");
+      return result;
+    },
+    async artistAlbums(source, artistId, page = 1, limit = 30) {
+      const result = await sdkFor(source).artist.albums(String(artistId), Number(page), Number(limit));
+      if (!result || !Array.isArray(result.list)) throw new Error("\u97F3\u6E90\u8FD4\u56DE\u6B4C\u624B\u4E13\u8F91\u5F02\u5E38");
+      return result;
+    },
+    async albumTracks(source, albumId) {
+      const result = await sdkFor(source).artist.albumTracks(String(albumId));
+      if (!result || !Array.isArray(result.list)) throw new Error("\u97F3\u6E90\u8FD4\u56DE\u4E13\u8F91\u66F2\u76EE\u5F02\u5E38");
+      return result;
+    },
+    async musicInfo(source, songmid) {
+      const normalized = normalizeSource(source);
+      const mid = String(songmid);
+      if (normalized === "tx") {
+        const result = await unwrapRequest(musicInfo_default(mid));
+        if (!result) throw new Error("\u97F3\u6E90\u8FD4\u56DE\u66F2\u76EE\u4FE1\u606F\u5F02\u5E38");
+        return result;
+      } else if (normalized === "wy") {
+        const result = await unwrapRequest(musicDetail_default.getList([mid]));
+        if (!result || !Array.isArray(result.list) || result.list.length === 0) throw new Error("\u97F3\u6E90\u8FD4\u56DE\u66F2\u76EE\u4FE1\u606F\u5F02\u5E38");
+        return result.list[0];
+      }
+      throw new Error(`Unsupported source: ${source}`);
     }
   });
 })();

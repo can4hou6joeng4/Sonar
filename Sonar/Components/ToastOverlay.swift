@@ -18,6 +18,51 @@ final class ToastCenter {
     }
 }
 
+struct AppConfirmation: Identifiable, Equatable {
+    let id = UUID()
+    let title: String
+    let message: String
+    let acknowledgment: String
+}
+
+@MainActor
+@Observable
+final class ConfirmationCenter {
+    private(set) var confirmation: AppConfirmation?
+    private var pendingConfirmation: AppConfirmation?
+
+    func show(title: String, message: String, acknowledgment: String = "好") {
+        confirmation = AppConfirmation(
+            title: title,
+            message: message,
+            acknowledgment: acknowledgment
+        )
+    }
+
+    func enqueueAfterPresentationDismissal(
+        title: String,
+        message: String,
+        acknowledgment: String = "好"
+    ) {
+        pendingConfirmation = AppConfirmation(
+            title: title,
+            message: message,
+            acknowledgment: acknowledgment
+        )
+    }
+
+    func presentPendingAfterDismissal() async {
+        guard let pendingConfirmation else { return }
+        self.pendingConfirmation = nil
+        await Task.yield()
+        confirmation = pendingConfirmation
+    }
+
+    func acknowledge() {
+        confirmation = nil
+    }
+}
+
 struct ToastOverlay: View {
     @Environment(ToastCenter.self) private var toastCenter
     @Environment(\.m3Scheme) private var scheme

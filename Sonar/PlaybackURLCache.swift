@@ -9,6 +9,11 @@ public actor PlaybackURLCache {
             musicID = "\(track.source.rawValue)_\(track.songmid)"
             self.quality = quality
         }
+
+        public init(musicID: String, quality: Quality) {
+            self.musicID = musicID
+            self.quality = quality
+        }
     }
 
     private struct Entry: Sendable {
@@ -36,8 +41,15 @@ public actor PlaybackURLCache {
     }
 
     public func insert(_ url: URL, actualQuality: Quality, for key: Key) {
-        guard actualQuality.rank >= key.quality.rank else { return }
-        entries[key] = Entry(url: url, actualQuality: actualQuality, expiresAt: now().addingTimeInterval(ttl))
+        if actualQuality.rank >= key.quality.rank {
+            entries[key] = Entry(url: url, actualQuality: actualQuality, expiresAt: now().addingTimeInterval(ttl))
+        }
+        let actualKey = Key(musicID: key.musicID, quality: actualQuality)
+        entries[actualKey] = Entry(url: url, actualQuality: actualQuality, expiresAt: now().addingTimeInterval(ttl))
+    }
+
+    public func removeValue(for key: Key) {
+        entries[key] = nil
     }
 
     public func removeAll() {

@@ -11,9 +11,8 @@ struct TrackQualityOption: Identifiable, Equatable {
         guard let rawTypes = track.rawPayload["types"] as? [[String: Any]] else { return [] }
         let values = rawTypes.compactMap { value -> TrackQualityOption? in
             guard let rawQuality = value["type"] as? String,
-                  let quality = Quality(rawValue: rawQuality),
-                  let size = value["size"] as? String,
-                  !size.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+                  let quality = Quality(rawValue: rawQuality) else { return nil }
+            let size = (value["size"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             return TrackQualityOption(quality: quality, sizeText: size)
         }
         return Quality.displayOrder.compactMap { quality in

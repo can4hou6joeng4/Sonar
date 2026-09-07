@@ -1,12 +1,13 @@
 import SwiftUI
 
 struct SettingsView: View {
+    let onClose: () -> Void
+
     private enum PresentedSheet: String, Identifiable {
         case quality
         var id: String { rawValue }
     }
 
-    @Environment(\.dismiss) private var dismiss
     @Environment(SonarThemeState.self) private var themeState
     @Environment(UIPlaybackPreferences.self) private var preferences
     @Environment(PlaybackService.self) private var playbackService
@@ -87,14 +88,16 @@ struct SettingsView: View {
 
     private var header: some View {
         HStack(spacing: 0) {
-            Button { dismiss() } label: {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 19, weight: .semibold))
+            Button(action: onClose) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(scheme.onSurface)
                     .frame(width: 44, height: 44)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("返回")
+            .accessibilityLabel("关闭设置")
+            .accessibilityHint("返回当前页面")
+            .accessibilityIdentifier("settings-drawer-close")
             Text("设置")
                 .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(scheme.onSurface)

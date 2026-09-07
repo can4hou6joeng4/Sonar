@@ -107,9 +107,14 @@ public protocol PlaybackURLResolving: Sendable {
     func musicURL(for track: Track, quality: Quality) async throws -> URL
 }
 
+public protocol PlaybackURLRefreshing: PlaybackURLResolving {
+    func refreshMusicURL(for track: Track, quality: Quality) async throws -> URL
+}
+
 public actor ChkszCircuitBreaker {
     private(set) var disabled = false
     private(set) var reason: String?
+    private var rateLimitedUntil: Date?
 
     public init() {}
 
@@ -117,33 +122,107 @@ public actor ChkszCircuitBreaker {
         disabled = true
         self.reason = reason
     }
+
+    public func deferAfterRateLimit(seconds: TimeInterval) {
+        let boundedDelay = min(max(seconds, 1), 60)
+        let proposedDeadline = Date().addingTimeInterval(boundedDelay)
+        rateLimitedUntil = max(rateLimitedUntil ?? proposedDeadline, proposedDeadline)
+    }
+
+    public func blockedMessage() -> String? {
+        if disabled {
+            return "ChKSz 已停用（\(reason ?? "未知原因")）"
+        }
+        guard let rateLimitedUntil else { return nil }
+        guard rateLimitedUntil > Date() else {
+            self.rateLimitedUntil = nil
+            return nil
+        }
+        return "ChKSz 限流冷却中（HTTP 429）"
+    }
 }
 
-public final class PlaybackURLResolver: PlaybackURLResolving, @unchecked Sendable {
+public final class PlaybackURLResolver: PlaybackURLRefreshing, @unchecked Sendable {
     private let client: PlaybackHTTPClient
     private let credentials: CredentialStore
-    private let breaker: ChkszCircuitBreaker
+    private let chkszAPI: ChkszAPIRequesting
+    private let wyFallback: ChkszNetEaseProviding?
     private let cache: PlaybackURLCache
 
-    public init(client: PlaybackHTTPClient = URLSessionPlaybackHTTPClient(), credentials: CredentialStore = KeychainCredentialStore(), breaker: ChkszCircuitBreaker = ChkszCircuitBreaker(), cache: PlaybackURLCache = PlaybackURLCache()) {
+    public init(
+        client: PlaybackHTTPClient = URLSessionPlaybackHTTPClient(),
+        credentials: CredentialStore = KeychainCredentialStore(),
+        breaker: ChkszCircuitBreaker = ChkszCircuitBreaker(),
+        cache: PlaybackURLCache = PlaybackURLCache(),
+        chkszAPI: ChkszAPIRequesting? = nil,
+        wyFallback: ChkszNetEaseProviding? = nil
+    ) {
         self.client = client
         self.credentials = credentials
-        self.breaker = breaker
+        self.chkszAPI = chkszAPI ?? ChkszAPIClient(client: client, credentials: credentials, breaker: breaker)
+        self.wyFallback = wyFallback
         self.cache = cache
     }
 
     public func musicURL(for track: Track, quality: Quality) async throws -> URL {
         let key = PlaybackURLCache.Key(track: track, quality: quality)
         if let cached = await cache.value(for: key) { return cached }
+        return try await resolveAndCache(track: track, quality: quality, key: key)
+    }
+
+    public func refreshMusicURL(for track: Track, quality: Quality) async throws -> URL {
+        let key = PlaybackURLCache.Key(track: track, quality: quality)
+        await cache.removeValue(for: key)
+        return try await resolveAndCache(track: track, quality: quality, key: key)
+    }
+
+    private func resolveAndCache(track: Track, quality: Quality, key: PlaybackURLCache.Key) async throws -> URL {
         let result: (URL, Quality)
         switch track.source {
         case .wy:
-            result = try await resolveWY(track: track, quality: quality)
+            result = try await resolveWYWithFallback(track: track, quality: quality)
         case .tx:
             result = try await resolveTX(track: track, quality: quality)
         }
         await cache.insert(result.0, actualQuality: result.1, for: key)
         return result.0
+    }
+
+    private func resolveWYWithFallback(track: Track, quality: Quality) async throws -> (URL, Quality) {
+        do {
+            return try await resolveWY(track: track, quality: quality)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let primaryError as SourceError {
+            return try await resolveWYFallback(track: track, quality: quality, primaryError: primaryError)
+        } catch {
+            return try await resolveWYFallback(track: track, quality: quality, primaryError: nil)
+        }
+    }
+
+    private func resolveWYFallback(
+        track: Track,
+        quality: Quality,
+        primaryError: SourceError?
+    ) async throws -> (URL, Quality) {
+        guard let wyFallback else {
+            if let primaryError { throw primaryError }
+            throw SourceError.source(message: "网易云播放解析失败")
+        }
+        do {
+            let result = try await wyFallback.musicURL(for: track, quality: quality)
+            try await validateChkszMediaURL(result.url)
+            return (result.url, result.actualQuality)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let fallbackError as SourceError {
+            if case .network = fallbackError,
+               let primaryError,
+               PlaybackFallbackPolicy.allowsQualityFallback(for: primaryError) {
+                throw primaryError
+            }
+            throw fallbackError
+        }
     }
 
     private func resolveWY(track: Track, quality: Quality) async throws -> (URL, Quality) {
@@ -208,16 +287,11 @@ public final class PlaybackURLResolver: PlaybackURLResolving, @unchecked Sendabl
 
     private func resolveTX(track: Track, quality: Quality) async throws -> (URL, Quality) {
         var errors: [SourceError] = []
-        if let key = credentials.chkszKey {
-            if await breaker.disabled {
-                let reason = await breaker.reason ?? "未知原因"
-                errors.append(.source(message: "ChKSz 已停用（\(reason)）"))
-            } else {
-                do {
-                    return (try await resolveTXChksz(track: track, quality: quality, key: key), quality)
-                } catch let error as SourceError {
-                    errors.append(error)
-                }
+        if credentials.chkszKey != nil {
+            do {
+                return (try await resolveTXChksz(track: track, quality: quality), quality)
+            } catch let error as SourceError {
+                errors.append(error)
             }
         }
         do {
@@ -246,7 +320,7 @@ public final class PlaybackURLResolver: PlaybackURLResolving, @unchecked Sendabl
         throw SourceError.source(message: errors.map { $0.localizedDescription }.joined(separator: "；"))
     }
 
-    private func resolveTXChksz(track: Track, quality: Quality, key: String) async throws -> URL {
+    private func resolveTXChksz(track: Track, quality: Quality) async throws -> URL {
         let size: String
         switch quality {
         case .standard: size = "128k"
@@ -254,42 +328,33 @@ public final class PlaybackURLResolver: PlaybackURLResolving, @unchecked Sendabl
         case .lossless: size = "flac"
         case .hiRes: size = "hires"
         }
-        var components = URLComponents(string: "https://api.chksz.com/api/qq_music")!
-        components.queryItems = [
-            URLQueryItem(name: "mid", value: track.songmid),
-            URLQueryItem(name: "size", value: size),
-            URLQueryItem(name: "type", value: "json"),
-            URLQueryItem(name: "apikey", value: key),
-        ]
-        var request = URLRequest(url: components.url!)
-        request.httpMethod = "GET"
-        var response = try await client.send(request)
-        if response.statusCode == 429 {
-            let retry = Double(response.headers["retry-after"] ?? "5") ?? 5
-            if retry <= 10 {
-                try await Task.sleep(for: .seconds(max(0, retry)))
-                response = try await client.send(request)
-            }
-        }
-        if [401, 403].contains(response.statusCode) {
-            await breaker.disable(reason: "HTTP \(response.statusCode)")
-            throw SourceError.source(message: "ChKSz 凭证无效或已过期（HTTP \(response.statusCode)）")
-        }
-        if response.statusCode == 402 {
-            await breaker.disable(reason: "HTTP 402")
-            throw SourceError.source(message: "ChKSz 额度已耗尽（HTTP 402）")
-        }
-        guard response.statusCode == 200 else {
-            throw SourceError.source(message: "ChKSz: HTTP \(response.statusCode)")
-        }
-        let object = try Self.jsonObject(response.body)
-        if let code = (object["code"] as? NSNumber)?.intValue, code != 200 {
-            throw SourceError.source(message: (object["msg"] as? String) ?? "ChKSz 返回异常")
-        }
+        let data = try await chkszAPI.request(
+            path: "/api/qq_music",
+            parameters: [
+                "mid": track.songmid,
+                "size": size,
+                "type": "json",
+            ]
+        )
+        let object = try Self.jsonObject(data)
         guard let rawURL = object["url"] as? String, let url = URL(string: rawURL), Self.isHTTP(url) else {
             throw SourceError.source(message: "未返回可用链接")
         }
+        try await validateChkszMediaURL(url)
         return url
+    }
+
+    private func validateChkszMediaURL(_ url: URL) async throws {
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("bytes=0-1", forHTTPHeaderField: "Range")
+        let response = try await client.send(request)
+        guard [200, 206].contains(response.statusCode) else {
+            throw SourceError.source(message: "ChKSz 播放链接失效（HTTP \(response.statusCode)）")
+        }
+        guard !response.body.isEmpty, Self.looksLikeMedia(response) else {
+            throw SourceError.source(message: "ChKSz 播放链接返回了非媒体内容")
+        }
     }
 
     private func resolveTXGuest(track: Track, quality: Quality) async throws -> URL {
@@ -342,6 +407,29 @@ public final class PlaybackURLResolver: PlaybackURLResolving, @unchecked Sendabl
 
     private static func isHTTP(_ url: URL) -> Bool {
         ["http", "https"].contains(url.scheme?.lowercased())
+    }
+
+    private static func looksLikeMedia(_ response: PlaybackHTTPResponse) -> Bool {
+        let contentType = response.headers.first {
+            $0.key.caseInsensitiveCompare("content-type") == .orderedSame
+        }?.value.lowercased() ?? ""
+        if contentType.hasPrefix("audio/") || contentType == "application/octet-stream" {
+            return true
+        }
+        if contentType.hasPrefix("text/")
+            || contentType.contains("html")
+            || contentType.contains("json")
+            || contentType.contains("xml") {
+            return false
+        }
+
+        let prefix = String(decoding: response.body.prefix(64), as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        return !prefix.hasPrefix("<")
+            && !prefix.hasPrefix("{")
+            && !prefix.hasPrefix("[")
+            && !prefix.hasPrefix("error")
     }
 
     private static func isEntitlementFailure(_ message: String) -> Bool {

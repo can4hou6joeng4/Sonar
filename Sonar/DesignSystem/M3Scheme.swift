@@ -23,9 +23,6 @@ enum NCMDesignTokens {
     }
 
     enum Typography {
-        static let homeTitle: CGFloat = 22
-        static let bannerTitle: CGFloat = 17
-        static let bannerSubtitle: CGFloat = 11.5
         static let sectionTitle: CGFloat = 18
         static let sectionAction: CGFloat = 12
         static let shortcut: CGFloat = 13
@@ -59,17 +56,15 @@ enum NCMDesignTokens {
         static let miniPlayerHorizontalInset: CGFloat = 8
         static let miniPlayerBottomSpacing: CGFloat = 2
         static let miniArtworkSize: CGFloat = 44
-        static let miniControlSize: CGFloat = 34
-        static let bannerHeight: CGFloat = 116
-        static let bannerCornerRadius: CGFloat = 10
-        static let shortcutHeight: CGFloat = 34
+        static let miniControlSize: CGFloat = 44
+        static let shortcutHeight: CGFloat = 44
         static let shortcutCornerRadius: CGFloat = 10
         static let shortcutSpacing: CGFloat = 9
         static let playlistCardWidth: CGFloat = 112
         static let playlistArtworkCornerRadius: CGFloat = 8
         static let playlistRowHeight: CGFloat = 66
         static let playlistArtworkSize: CGFloat = 50
-        static let queueRowHeight: CGFloat = 54
+        static let queueRowHeight: CGFloat = 68
     }
 
     enum Player {

@@ -1,6 +1,18 @@
 import Foundation
 
-public final class HighestAvailableQualityPlaybackURLResolver: PlaybackURLResolving, @unchecked Sendable {
+enum PlaybackResolverPipeline {
+    static func make(
+        primary: PlaybackURLResolving,
+        sourceRuntime: SourceRuntime
+    ) -> PlaybackURLResolving {
+        FallbackPlaybackURLResolver(
+            primary: HighestAvailableQualityPlaybackURLResolver(resolver: primary),
+            sourceRuntime: sourceRuntime
+        )
+    }
+}
+
+public final class HighestAvailableQualityPlaybackURLResolver: PlaybackURLRefreshing, @unchecked Sendable {
     private static let qualityOrder: [Quality] = [.hiRes, .lossless, .high, .standard]
 
     private let resolver: PlaybackURLResolving
@@ -10,15 +22,23 @@ public final class HighestAvailableQualityPlaybackURLResolver: PlaybackURLResolv
     }
 
     public func musicURL(for track: Track, quality: Quality) async throws -> URL {
+        try await resolve(track: track, quality: quality, refreshing: false)
+    }
+
+    public func refreshMusicURL(for track: Track, quality: Quality) async throws -> URL {
+        try await resolve(track: track, quality: quality, refreshing: true)
+    }
+
+    private func resolve(track: Track, quality: Quality, refreshing: Bool) async throws -> URL {
         guard let startingIndex = Self.qualityOrder.firstIndex(of: quality) else {
-            return try await resolver.musicURL(for: track, quality: quality)
+            return try await resolveCandidate(track: track, quality: quality, refreshing: refreshing)
         }
 
         var eligibleFailures: [SourceError] = []
         for candidate in Self.qualityOrder[startingIndex...] {
             try Task.checkCancellation()
             do {
-                return try await resolver.musicURL(for: track, quality: candidate)
+                return try await resolveCandidate(track: track, quality: candidate, refreshing: refreshing)
             } catch is CancellationError {
                 throw CancellationError()
             } catch let error as SourceError {
@@ -46,13 +66,21 @@ public final class HighestAvailableQualityPlaybackURLResolver: PlaybackURLResolv
         throw SourceError.source(message: "没有可用的播放音质")
     }
 
+    private func resolveCandidate(track: Track, quality: Quality, refreshing: Bool) async throws -> URL {
+        if refreshing, let refreshable = resolver as? PlaybackURLRefreshing {
+            return try await refreshable.refreshMusicURL(for: track, quality: quality)
+        }
+        return try await resolver.musicURL(for: track, quality: quality)
+    }
+
 }
 
-private enum PlaybackFallbackPolicy {
+enum PlaybackFallbackPolicy {
     /// `SourceError.source` intentionally keeps the public three-way error contract.
     /// Be conservative here: only known entitlement and quality failures may retry.
     static func allowsFallback(for message: String) -> Bool {
         let normalized = message.lowercased()
+        if normalized.contains("chksz") { return true }
         if normalized.contains("音质不可用") { return true }
         if normalized.contains("不支持") && (normalized.contains("音质") || normalized.contains("hi-res") || normalized.contains("hires")) {
             return true
@@ -66,9 +94,20 @@ private enum PlaybackFallbackPolicy {
             || normalized == "未返回可用链接"
             || normalized == "qq: 未返回可用链接"
     }
+
+    static func allowsQualityFallback(for error: SourceError) -> Bool {
+        switch error {
+        case .network:
+            return false
+        case .credentialRequired:
+            return true
+        case let .source(message):
+            return allowsFallback(for: message)
+        }
+    }
 }
 
-public final class FallbackPlaybackURLResolver: PlaybackURLResolving, @unchecked Sendable {
+public final class FallbackPlaybackURLResolver: PlaybackURLRefreshing, @unchecked Sendable {
     private let primary: PlaybackURLResolving
     private let sourceRuntime: SourceRuntime
 
@@ -78,21 +117,37 @@ public final class FallbackPlaybackURLResolver: PlaybackURLResolving, @unchecked
     }
 
     public func musicURL(for track: Track, quality: Quality) async throws -> URL {
+        try await resolve(track: track, quality: quality, refreshing: false)
+    }
+
+    public func refreshMusicURL(for track: Track, quality: Quality) async throws -> URL {
+        try await resolve(track: track, quality: quality, refreshing: true)
+    }
+
+    private func resolve(track: Track, quality: Quality, refreshing: Bool) async throws -> URL {
         do {
-            return try await primary.musicURL(for: track, quality: quality)
+            return try await resolvePrimary(track: track, quality: quality, refreshing: refreshing)
         } catch let primaryError as SourceError {
-            guard track.source == .wy, primaryError.allowsPlaybackFallback else { throw primaryError }
+            guard primaryError.allowsPlaybackFallback else { throw primaryError }
+            let alternateSource: MusicSource = track.source == .wy ? .tx : .wy
             do {
-                let page = try await sourceRuntime.search("\(track.title) \(track.artist)", source: .tx, page: 1)
+                let page = try await sourceRuntime.search("\(track.title) \(track.artist)", source: alternateSource, page: 1)
                 try Task.checkCancellation()
                 guard let replacement = bestMatch(for: track, candidates: page.list) else { throw primaryError }
-                return try await primary.musicURL(for: replacement, quality: quality)
+                return try await resolvePrimary(track: replacement, quality: quality, refreshing: refreshing)
             } catch is CancellationError {
                 throw CancellationError()
             } catch let alternateError as SourceError {
                 throw alternateError
             }
         }
+    }
+
+    private func resolvePrimary(track: Track, quality: Quality, refreshing: Bool) async throws -> URL {
+        if refreshing, let refreshable = primary as? PlaybackURLRefreshing {
+            return try await refreshable.refreshMusicURL(for: track, quality: quality)
+        }
+        return try await primary.musicURL(for: track, quality: quality)
     }
 
     func bestMatch(for track: Track, candidates: [Track]) -> Track? {

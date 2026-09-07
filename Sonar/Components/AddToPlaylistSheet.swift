@@ -6,23 +6,29 @@ struct AddToPlaylistSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @Environment(ToastCenter.self) private var toastCenter
+    @Environment(ConfirmationCenter.self) private var confirmationCenter
+    @Environment(PlaybackService.self) private var playbackService
     @Environment(\.m3Scheme) private var scheme
-    @Query(filter: #Predicate<Playlist> { !$0.isSystem }, sort: \Playlist.sortIndex)
+    @Query(
+        filter: #Predicate<Playlist> {
+            !$0.isSystem && $0.kindRaw == "music" && $0.isPrimaryPersonal && !$0.isArchived
+        },
+        sort: \Playlist.sortIndex
+    )
     private var playlists: [Playlist]
 
     @State private var errorMessage: String?
 
     var body: some View {
         VStack(spacing: 0) {
-            SheetHeader(title: "加入歌单", subtitle: track.title)
+            SheetHeader(title: "收藏到歌单", subtitle: track.title)
                 .accessibilityIdentifier("add-to-playlist-sheet")
 
             if playlists.isEmpty {
                 ContentUnavailableView(
-                    "还没有歌单",
+                    "歌单暂不可用",
                     systemImage: "music.note.list",
-                    description: Text("请先在歌曲页创建歌单。")
+                    description: Text("个人歌单正在准备，请稍后重试。")
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -35,23 +41,22 @@ struct AddToPlaylistSheet: View {
                                 HStack(spacing: 16) {
                                     PlayerArtwork(track: firstTrack(in: playlist), size: 36)
                                     VStack(alignment: .leading, spacing: 3) {
-                                        Text(playlist.name)
-                                            .font(.system(size: 15, weight: .semibold))
+                                        Text(playlist.isPrimaryPersonal ? "我喜欢的音乐" : playlist.name)
+                                            .font(.body.weight(.semibold))
                                             .foregroundStyle(scheme.onSurface)
                                         Text("\(playlist.items.count) 首")
-                                            .font(.system(size: 12.5))
+                                            .font(.caption)
                                             .foregroundStyle(scheme.onSurfaceVariant)
                                     }
                                     Spacer(minLength: 0)
                                     if containsTrack(playlist) {
                                         Text("已在其中")
-                                            .font(.system(size: 12.5))
+                                            .font(.caption)
                                             .foregroundStyle(scheme.onSurfaceVariant)
                                     }
                                 }
                                 .padding(.horizontal, 16)
                                 .frame(minHeight: 64)
-                                .background(scheme.surfaceContainer, in: RoundedRectangle(cornerRadius: 20))
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
@@ -65,6 +70,19 @@ struct AddToPlaylistSheet: View {
         }
         .foregroundStyle(scheme.onSurface)
         .background(scheme.surfaceContainerLow.ignoresSafeArea())
+        .onDisappear {
+            Task { @MainActor in
+                await confirmationCenter.presentPendingAfterDismissal()
+            }
+        }
+        .task {
+            guard playlists.isEmpty else { return }
+            do {
+                _ = try LibraryStore(context: modelContext).ensurePersonalPlaylist()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
         .alert("操作失败", isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
@@ -76,7 +94,7 @@ struct AddToPlaylistSheet: View {
     }
 
     private func firstTrack(in playlist: Playlist) -> Track? {
-        playlist.items.sorted { $0.sortIndex < $1.sortIndex }.first?.track.track
+        playlist.orderedItems.first?.track.track
     }
 
     private func containsTrack(_ playlist: Playlist) -> Bool {
@@ -85,13 +103,21 @@ struct AddToPlaylistSheet: View {
 
     private func add(to playlist: Playlist) {
         if containsTrack(playlist) {
-            toastCenter.show("已经在「\(playlist.name)」里了")
+            confirmationCenter.enqueueAfterPresentationDismissal(
+                title: "已经收藏",
+                message: "「\(track.title)」已在「\(playlist.name)」中。"
+            )
             dismiss()
             return
         }
         do {
             _ = try LibraryStore(context: modelContext).add(track, to: playlist)
-            toastCenter.show("已加入「\(playlist.name)」")
+            playbackService.onTrackAddedToPlaylist(track, playlistID: playlist.id)
+            confirmationCenter.enqueueAfterPresentationDismissal(
+                title: "收藏成功",
+                message: "已将「\(track.title)」收藏到「\(playlist.name)」。",
+                acknowledgment: "知道了"
+            )
             dismiss()
         } catch {
             errorMessage = error.localizedDescription
@@ -109,10 +135,10 @@ struct SheetHeader: View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 5) {
                 Text(title)
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.title2.weight(.semibold))
                 if let subtitle {
                     Text(subtitle)
-                        .font(.system(size: 12.5, weight: .medium))
+                        .font(.caption.weight(.medium))
                         .foregroundStyle(scheme.onSurfaceVariant)
                         .lineLimit(1)
                 }

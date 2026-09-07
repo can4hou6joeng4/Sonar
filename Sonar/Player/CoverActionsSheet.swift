@@ -2,7 +2,8 @@ import SwiftUI
 
 struct CoverActionsSheet: View {
     let track: Track
-    let onAddToPlaylist: () -> Void
+    let onAddToQueue: () -> Void
+    let onCollect: () -> Void
     let onSelectQuality: () -> Void
 
     @Environment(PlaybackService.self) private var playbackService
@@ -19,11 +20,19 @@ struct CoverActionsSheet: View {
                 LazyVStack(spacing: 4) {
                     actionRow(
                         icon: "text.badge.plus",
-                        title: "添加到歌单",
-                        subtitle: "选择歌单并立即添加当前歌曲",
-                        identifier: "player-cover-add-to-playlist"
+                        title: "加入待播放",
+                        subtitle: "将当前歌曲添加到待播放末尾",
+                        identifier: "player-cover-add-to-queue"
                     ) {
-                        onAddToPlaylist()
+                        onAddToQueue()
+                    }
+                    actionRow(
+                        icon: "music.note.list",
+                        title: "收藏到歌单",
+                        subtitle: "将当前歌曲保存到个人歌单",
+                        identifier: "player-cover-collect-to-playlist"
+                    ) {
+                        onCollect()
                     }
                     actionRow(
                         icon: "waveform.badge.magnifyingglass",
