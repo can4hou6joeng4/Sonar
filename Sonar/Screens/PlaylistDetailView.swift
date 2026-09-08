@@ -39,7 +39,7 @@ struct PlaylistDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Environment(\.m3Scheme) private var scheme
-    @Environment(\.sourceRuntime) private var sourceRuntime
+    @Environment(\.trackDetailRefreshCoordinator) private var trackDetailRefreshCoordinator
     @Environment(PlaybackService.self) private var playbackService
     @Environment(ToastCenter.self) private var toastCenter
 
@@ -99,11 +99,11 @@ struct PlaylistDetailView: View {
             }
             .scrollIndicators(.hidden)
             .refreshable {
-                await refreshStandardQualityTracks(limit: 50)
+                await refreshTrackDetails(limit: 50, force: true)
             }
         }
         .task {
-            await refreshStandardQualityTracks()
+            await refreshTrackDetails()
         }
         .background(scheme.appSurface.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
@@ -416,25 +416,30 @@ struct PlaylistDetailView: View {
         }
     }
 
-    private func refreshStandardQualityTracks(limit: Int = 20) async {
-        guard let sourceRuntime else { return }
-        let candidates = tracks.filter { $0.highestKnownQuality == .standard }
+    private func refreshTrackDetails(limit: Int = 20, force: Bool = false) async {
+        guard let trackDetailRefreshCoordinator else { return }
+        let candidates = force ? tracks : tracks.filter { $0.highestKnownQuality == .standard }
         guard !candidates.isEmpty else { return }
+        let store = LibraryStore(context: modelContext)
 
         for track in candidates.prefix(limit) {
             if Task.isCancelled { break }
             do {
-                let refreshed = try await sourceRuntime.trackDetail(track)
-                if refreshed.highestKnownQuality != .standard || TrackQualityOption.available(for: refreshed).count > 1 {
-                    await MainActor.run {
-                        _ = try? LibraryStore(context: modelContext).updateTrack(refreshed)
-                        playbackService.updateTrackMetadata(refreshed)
-                    }
+                let outcome = try await trackDetailRefreshCoordinator.refresh(track, store: store, force: force)
+                if case let .refreshed(refreshed) = outcome {
+                    try Task.checkCancellation()
+                    playbackService.updateTrackMetadata(refreshed)
                 }
+            } catch is CancellationError {
+                return
             } catch {
-                // Ignore failure gracefully for tracks that genuinely only have 128k or network glitch
+                // Existing metadata remains usable and the coordinator persists retry backoff.
             }
-            try? await Task.sleep(for: .milliseconds(80))
+            do {
+                try await Task.sleep(for: .milliseconds(80))
+            } catch {
+                return
+            }
         }
     }
 }

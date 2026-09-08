@@ -26,6 +26,39 @@ public struct PersonalPlaylistCollectionResult {
     public let inserted: Bool
 }
 
+public struct TrackDetailCachePolicy: Sendable {
+    public static let currentVersion = 1
+    public static let production = TrackDetailCachePolicy()
+
+    public let ttl: TimeInterval
+    public let failureRetryDelay: TimeInterval
+
+    public init(
+        ttl: TimeInterval = 30 * 24 * 60 * 60,
+        failureRetryDelay: TimeInterval = 6 * 60 * 60
+    ) {
+        self.ttl = max(0, ttl)
+        self.failureRetryDelay = max(0, failureRetryDelay)
+    }
+}
+
+public enum DetailRefreshDecision: Equatable, Sendable {
+    case cached
+    case retryDeferred(until: Date)
+    case refresh
+}
+
+public enum TrackDetailRefreshError: Error, Equatable, Sendable {
+    case identityMismatch(expected: String, received: String)
+}
+
+public enum TrackDetailRefreshOutcome: Sendable {
+    case cached(Track)
+    case refreshed(Track)
+    case retryDeferred(Track, until: Date)
+    case failedWithExistingData(Track)
+}
+
 @MainActor
 public final class LibraryStore {
     public static let recentPlaylistID = UUID(uuidString: "4CF93099-1702-4B9D-99DA-47B54D9B816B")!
@@ -331,6 +364,64 @@ public final class LibraryStore {
         return record
     }
 
+    public func detailRefreshDecision(
+        for track: Track,
+        now: Date = Date(),
+        policy: TrackDetailCachePolicy = .production,
+        force: Bool = false
+    ) throws -> DetailRefreshDecision {
+        if force { return .refresh }
+        if track.highestKnownQuality != .standard { return .cached }
+
+        let musicID = track.musicID
+        var descriptor = FetchDescriptor<TrackRecord>(predicate: #Predicate { $0.musicId == musicID })
+        descriptor.fetchLimit = 1
+        guard let record = try context.fetch(descriptor).first else { return .refresh }
+
+        if record.detailRefreshVersion == TrackDetailCachePolicy.currentVersion,
+           let refreshedAt = record.detailRefreshedAt,
+           refreshedAt.addingTimeInterval(policy.ttl) > now {
+            return .cached
+        }
+        if let retryAfter = record.detailRetryAfter, retryAfter > now {
+            return .retryDeferred(until: retryAfter)
+        }
+        return .refresh
+    }
+
+    @discardableResult
+    public func recordTrackDetailSuccess(
+        _ refreshed: Track,
+        requestedMusicID: String,
+        at now: Date = Date(),
+        version: Int = TrackDetailCachePolicy.currentVersion
+    ) throws -> TrackRecord {
+        guard refreshed.musicID == requestedMusicID else {
+            throw TrackDetailRefreshError.identityMismatch(
+                expected: requestedMusicID,
+                received: refreshed.musicID
+            )
+        }
+        let record = try upsert(refreshed)
+        record.detailRefreshedAt = now
+        record.detailRefreshVersion = version
+        record.detailRetryAfter = nil
+        try context.save()
+        return record
+    }
+
+    public func recordTrackDetailFailure(
+        for track: Track,
+        retryAfter: Date
+    ) throws {
+        let musicID = track.musicID
+        var descriptor = FetchDescriptor<TrackRecord>(predicate: #Predicate { $0.musicId == musicID })
+        descriptor.fetchLimit = 1
+        guard let record = try context.fetch(descriptor).first else { return }
+        record.detailRetryAfter = retryAfter
+        try context.save()
+    }
+
     private func recentPlaylist() throws -> Playlist {
         if let playlist = try playlist(id: Self.recentPlaylistID) { return playlist }
         let playlist = Playlist(id: Self.recentPlaylistID, name: "最近播放", sortIndex: -1, isSystem: true)
@@ -367,5 +458,174 @@ public final class LibraryStore {
         let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty else { throw LibraryError.emptyPlaylistName }
         return name
+    }
+}
+
+@MainActor
+public final class TrackDetailRefreshCoordinator {
+    private struct Pending {
+        let id: UUID
+        let task: Task<Void, Never>
+        var waiters: [UUID: CheckedContinuation<NetworkResolution, Error>]
+    }
+
+    private enum NetworkResolution {
+        case refreshed(Track)
+        case failed
+    }
+
+    private let sourceRuntime: SourceRuntime
+    private let policy: TrackDetailCachePolicy
+    private var pending: [String: Pending] = [:]
+
+    public init(
+        sourceRuntime: SourceRuntime,
+        policy: TrackDetailCachePolicy = .production
+    ) {
+        self.sourceRuntime = sourceRuntime
+        self.policy = policy
+    }
+
+    public func refresh(
+        _ track: Track,
+        store: LibraryStore,
+        force: Bool = false,
+        now: Date = Date()
+    ) async throws -> TrackDetailRefreshOutcome {
+        switch try store.detailRefreshDecision(for: track, now: now, policy: policy, force: force) {
+        case .cached:
+            return .cached(track)
+        case let .retryDeferred(until):
+            return .retryDeferred(track, until: until)
+        case .refresh:
+            break
+        }
+
+        let resolution = try await networkResolution(for: track, store: store, now: now)
+        try Task.checkCancellation()
+        switch resolution {
+        case let .refreshed(refreshed):
+            return .refreshed(refreshed)
+        case .failed:
+            return .failedWithExistingData(track)
+        }
+    }
+
+    func pendingConsumerCount(for musicID: String) -> Int {
+        pending[musicID]?.waiters.count ?? 0
+    }
+
+    private func networkResolution(
+        for track: Track,
+        store: LibraryStore,
+        now: Date
+    ) async throws -> NetworkResolution {
+        let key = track.musicID
+        let waiterID = UUID()
+        return try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            return try await withCheckedThrowingContinuation { continuation in
+                if Task.isCancelled {
+                    continuation.resume(throwing: CancellationError())
+                    return
+                }
+                if pending[key] != nil {
+                    pending[key]?.waiters[waiterID] = continuation
+                    return
+                }
+
+                let requestID = UUID()
+                let runtime = sourceRuntime
+                let retryAfter = now.addingTimeInterval(policy.failureRetryDelay)
+                let task = Task { @MainActor in
+                    do {
+                        let refreshed = try await runtime.trackDetail(track)
+                        try Task.checkCancellation()
+                        self.finish(
+                            key: key,
+                            requestID: requestID,
+                            result: .success(refreshed),
+                            store: store,
+                            requestedTrack: track,
+                            fetchedAt: now,
+                            retryAfter: retryAfter
+                        )
+                    } catch {
+                        self.finish(
+                            key: key,
+                            requestID: requestID,
+                            result: .failure(error),
+                            store: store,
+                            requestedTrack: track,
+                            fetchedAt: now,
+                            retryAfter: retryAfter
+                        )
+                    }
+                }
+                pending[key] = Pending(
+                    id: requestID,
+                    task: task,
+                    waiters: [waiterID: continuation]
+                )
+            }
+        } onCancel: {
+            Task { @MainActor in
+                self.cancelWaiter(key: key, waiterID: waiterID)
+            }
+        }
+    }
+
+    private func cancelWaiter(key: String, waiterID: UUID) {
+        guard let continuation = pending[key]?.waiters.removeValue(forKey: waiterID) else { return }
+        continuation.resume(throwing: CancellationError())
+        if pending[key]?.waiters.isEmpty == true {
+            pending.removeValue(forKey: key)?.task.cancel()
+        }
+    }
+
+    private func finish(
+        key: String,
+        requestID: UUID,
+        result: Result<Track, Error>,
+        store: LibraryStore,
+        requestedTrack: Track,
+        fetchedAt: Date,
+        retryAfter: Date
+    ) {
+        guard let request = pending[key], request.id == requestID else { return }
+        pending[key] = nil
+
+        let resolution: Result<NetworkResolution, Error>
+        switch result {
+        case let .success(refreshed) where refreshed.musicID == key:
+            // A successful network result remains useful even if the disposable
+            // persistence write fails. The next launch will simply refresh again.
+            _ = try? store.recordTrackDetailSuccess(
+                refreshed,
+                requestedMusicID: key,
+                at: fetchedAt
+            )
+            resolution = .success(.refreshed(refreshed))
+        case let .success(refreshed):
+            try? store.recordTrackDetailFailure(for: requestedTrack, retryAfter: retryAfter)
+            resolution = .failure(TrackDetailRefreshError.identityMismatch(
+                expected: key,
+                received: refreshed.musicID
+            ))
+        case let .failure(error) where Self.isCancellation(error):
+            resolution = .failure(CancellationError())
+        case .failure:
+            try? store.recordTrackDetailFailure(for: requestedTrack, retryAfter: retryAfter)
+            resolution = .success(.failed)
+        }
+
+        for waiter in request.waiters.values {
+            waiter.resume(with: resolution)
+        }
+    }
+
+    private static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        return (error as? URLError)?.code == .cancelled
     }
 }

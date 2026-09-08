@@ -87,6 +87,14 @@ private struct SourceRuntimeEnvironmentKey: EnvironmentKey {
     static let defaultValue: SourceRuntime? = nil
 }
 
+private struct TrackDetailRefreshCoordinatorEnvironmentKey: EnvironmentKey {
+    static let defaultValue: TrackDetailRefreshCoordinator? = nil
+}
+
+private struct LyricsServiceEnvironmentKey: EnvironmentKey {
+    static let defaultValue: LyricsService? = nil
+}
+
 extension EnvironmentValues {
     var shellSafeAreaInsets: EdgeInsets {
         get { self[ShellSafeAreaInsetsKey.self] }
@@ -96,6 +104,16 @@ extension EnvironmentValues {
     public var sourceRuntime: SourceRuntime? {
         get { self[SourceRuntimeEnvironmentKey.self] }
         set { self[SourceRuntimeEnvironmentKey.self] = newValue }
+    }
+
+    public var trackDetailRefreshCoordinator: TrackDetailRefreshCoordinator? {
+        get { self[TrackDetailRefreshCoordinatorEnvironmentKey.self] }
+        set { self[TrackDetailRefreshCoordinatorEnvironmentKey.self] = newValue }
+    }
+
+    public var lyricsService: LyricsService? {
+        get { self[LyricsServiceEnvironmentKey.self] }
+        set { self[LyricsServiceEnvironmentKey.self] = newValue }
     }
 }
 
@@ -120,6 +138,7 @@ struct RootView: View {
     @Environment(ToastCenter.self) private var toastCenter
     @Environment(SonarThemeState.self) private var themeState
     @Environment(\.artworkService) private var artworkService
+    @Environment(\.trackDetailRefreshCoordinator) private var trackDetailRefreshCoordinator
     @Environment(\.modelContext) private var modelContext
     @Environment(\.m3Scheme) private var scheme
     @Environment(\.sonarReduceMotion) private var reduceMotion
@@ -170,7 +189,6 @@ struct RootView: View {
                 ZStack {
                     if pullController.playerMounted {
                         PlayerPage(
-                            sourceRuntime: sourceRuntime,
                             pullController: pullController,
                             viewportHeight: proxy.size.height,
                             selectedSurface: $playerSurface,
@@ -419,14 +437,18 @@ struct RootView: View {
         store: LibraryStore,
         request: ArtworkRequestGate.Request
     ) async {
-        guard track.highestKnownQuality == .standard else { return }
-        guard let refreshed = try? await sourceRuntime.trackDetail(track),
-              refreshed.musicID == track.musicID else { return }
-        if refreshed.highestKnownQuality != .standard || TrackQualityOption.available(for: refreshed).count > 1 {
+        guard let trackDetailRefreshCoordinator else { return }
+        do {
+            let outcome = try await trackDetailRefreshCoordinator.refresh(track, store: store)
+            guard case let .refreshed(refreshed) = outcome else { return }
+            try Task.checkCancellation()
             artworkRequests.commit(request, currentTrackID: playbackService.queue.current?.musicID) {
                 playbackService.updateTrackMetadata(refreshed)
-                _ = try? store.updateTrack(refreshed)
             }
+        } catch is CancellationError {
+            return
+        } catch {
+            return
         }
     }
 

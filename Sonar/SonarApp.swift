@@ -37,6 +37,8 @@ private final class SonarServices {
     let sourceRuntime: SourceRuntime
     let playbackService: PlaybackService
     let artworkService: ArtworkService?
+    let trackDetailRefreshCoordinator: TrackDetailRefreshCoordinator
+    let lyricsService: LyricsService
     let themeState: SonarThemeState
     let uiPreferences: UIPlaybackPreferences
     let toastCenter: ToastCenter
@@ -65,6 +67,8 @@ private final class SonarServices {
             resolver: resolver
         )
         artworkService = try? ArtworkService(sourceRuntime: runtime)
+        trackDetailRefreshCoordinator = TrackDetailRefreshCoordinator(sourceRuntime: runtime)
+        lyricsService = LyricsService(sourceRuntime: runtime)
         themeState = SonarThemeState()
         uiPreferences = UIPlaybackPreferences()
         toastCenter = ToastCenter()
@@ -85,6 +89,8 @@ private struct ReadySonarView: View {
             .environment(services.confirmationCenter)
             .environment(\.artworkService, services.artworkService)
             .environment(\.sourceRuntime, services.sourceRuntime)
+            .environment(\.trackDetailRefreshCoordinator, services.trackDetailRefreshCoordinator)
+            .environment(\.lyricsService, services.lyricsService)
     }
 }
 
