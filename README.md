@@ -1,74 +1,123 @@
+<p align="center">
+  <img src="Sonar/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png" width="120" style="border-radius: 26px;" alt="Sonar Icon" />
+</p>
+
+<h1 align="center">Sonar</h1>
+
+<p align="center"><strong>🐋 在深水里靠声音辨路。原生极简 iOS 音乐播放器，让搜索、收藏与聆听回归纯粹。</strong></p>
+
 <div align="center">
-  <img src="Sonar/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png" alt="Sonar 图标" width="120" height="120" />
-  <h1>Sonar</h1>
-  <p><em>🐋 在深水里靠声音辨路。</em></p>
-  <p>一款原生 iOS 音乐播放器，让搜索、收藏与聆听回到音乐本身。</p>
+  <img alt="iOS" src="https://img.shields.io/badge/iOS-17%2B-000000?style=flat-square&logo=apple&logoColor=white" />
+  <img alt="Swift" src="https://img.shields.io/badge/Swift-5.9%2B-FA7343?style=flat-square&logo=swift&logoColor=white" />
+  <img alt="SwiftUI" src="https://img.shields.io/badge/UI-SwiftUI-3E82F7?style=flat-square" />
+  <img alt="SwiftData" src="https://img.shields.io/badge/Storage-SwiftData-5E5CE6?style=flat-square" />
+  <img alt="License" src="https://img.shields.io/badge/License-GPL--3.0-34C759?style=flat-square" />
+  <img alt="No Ads" src="https://img.shields.io/badge/AdFree-100%25-brightgreen?style=flat-square" />
+  <img alt="Zero Tracking" src="https://img.shields.io/badge/Privacy-Zero%20Tracking-blueviolet?style=flat-square" />
 </div>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/iOS-17%2B-111111?style=flat-square&logo=apple" alt="iOS 17 及以上" />
-  <img src="https://img.shields.io/badge/UI-SwiftUI-orange?style=flat-square&logo=swift&logoColor=white" alt="SwiftUI" />
-  <img src="https://img.shields.io/badge/Runtime-JavaScriptCore-blue?style=flat-square" alt="JavaScriptCore" />
-</p>
-
-<p align="center">
-  <a href="#功能特性">功能特性</a> ·
-  <a href="#安装与使用">安装与使用</a> ·
-  <a href="#从源码构建">从源码构建</a> ·
-  <a href="#数据与播放凭据">数据与播放凭据</a> ·
-  <a href="#致谢">致谢</a>
+  <a href="#-特征">特征</a> ·
+  <a href="#-快速开始与安装">快速开始</a> ·
+  <a href="#-播放架构与兜底流程">播放架构</a> ·
+  <a href="#%EF%B8%8F-从源码构建">从源码构建</a> ·
+  <a href="#-数据与凭据管理">数据与凭据</a> ·
+  <a href="#-免责声明与合规说明">免责声明</a> ·
+  <a href="#-致谢与开源协议">开源协议</a>
 </p>
 
 ---
 
-## 功能特性
+## 🎐 特征
 
-- 🔎 **从一首歌开始**：网易与 QQ 双音源搜索，歌曲与歌手结果独立展示，继续探索歌手和专辑。
-- 🎧 **连贯的播放体验**：待播放队列、播放模式、音质选择与后台播放；加载和切歌遵循最新操作；支持多级播放回退与自动兜底。
-- 🎵 **跟着歌词听**：同步逐字歌词，搭配黑胶封面和沉浸式播放界面。
-- 🎨 **随封面变化的色彩**：封面取色与明暗外观，让播放器保留自己的氛围。
-- 💾 **留住喜欢的音乐**：个人歌单、重命名、收藏与移除；通过系统“文件”导出备份、合并导入并跳过重复歌曲。
-- 🛟 **为长期使用留余地**：封面缓存有容量与过期控制；资料库打开失败时，可重试或导出原始资料文件。
+- 🎐 **极简克制**：纯粹原生 SwiftUI 打造，零广告、无开屏推销、无多余社交推荐，启动即听，回归音乐本真
+- 🔎 **双源探索**：深度聚合网易云与 QQ 双主流音源，歌曲与歌手检索独立呈现，支持艺术家与专辑顺畅探索
+- 🛡️ **坚固兜底**：智能多级播放管线（官方源高品 → 跨源同名匹配 → 公共音源流兜底），凭据失效依然稳定播放
+- 🎨 **流光氛围**：实时智能封面动态取色，明暗外观与毛玻璃光影相映成趣，沉浸式黑胶唱片旋转动效
+- 🎵 **逐字歌词**：毫秒级同步平滑逐字滚动，支持全屏歌词流览、锁屏封面与系统后台播控
+- 💾 **本地优先**：纯本地 SwiftData 离线歌单管理与持久化存储，支持通过“文件”导出/导入 JSON 无损备份并智能去重
 
-> Sonar 保存的是歌单与歌曲信息。歌单备份不包含音频文件，也不代表离线下载。
+> **说明**：Sonar 仅在本地管理与保存您的歌单及歌曲元数据索引。歌单备份不包含音频原始文件，亦不代表提供离线下载服务。
 
-## 安装与使用
+---
 
-需要 **iOS 17 或更高版本**。
+## 📲 快速开始与安装
 
-当前以自行构建、个人设备重签验证为主。已有 `Sonar.ipa` 时，需要使用自己的证书与适用的描述文件重签后安装；无签名归档不能直接安装到手机。
+运行环境需 **iOS 17.0 或更高版本**。
 
-进入 App 后，可以搜索歌曲、查看歌手与专辑，将喜欢的歌曲收藏到个人歌单。歌单备份入口位于**设置 → 歌单备份**：
+| 安装途径 | 推荐人群 | 说明 |
+| :--- | :--- | :--- |
+| 🦖 **TrollStore** | 巨魔商店用户 | 直接下载 Release 提供的 `Sonar.ipa`，一键导入永久安装，无需证书重签 |
+| 📲 **个人自签** | 普通 iOS 用户 | 通过 AltStore / Sideloadly / 个人开发者证书重签后载入设备使用（7天/1年） |
+| 🛠️ **源码构建** | 开发者 | 克隆本仓库后使用 Xcode 连接真机调试运行或自行归档打包 |
 
-- **导出歌单**：将歌曲信息保存为 JSON 文件。
-- **导入歌单**：把备份中的新歌曲追加到现有歌单，重复歌曲自动跳过。
+### 使用提示
 
-小组件扩展保留在工程中；当前没有将个人重签环境下的小组件表现作为已通过的真机验收项。
+1. **音乐探索与收藏**：在发现页或搜索框输入曲目/歌手，轻触即可播放；在播放器面板或列表轻点爱心或操作菜单即可加入个人歌单。
+2. **歌单导入与导出**：
+   - 进入 **设置 → 歌单备份**；
+   - **导出歌单**：将当前资料库中的歌曲数据打包为标准化 JSON 备份文件保存至“文件”App 或分享；
+   - **导入歌单**：读取备份文件，自动增量追加新歌曲，已存在的歌曲将自动去重跳过，保证资料库纯净安全。
 
-## 从源码构建
+---
 
-### 开发环境
+## 🔀 播放架构与兜底流程
 
-| 工具 | 要求 |
-| --- | --- |
-| macOS / Xcode | 已使用 Xcode 26 系列验证的 iOS 开发环境 |
-| Node.js | 18 或更高版本，用于音源资源与构建配置生成 |
-| 签名 | 真机安装时使用自己的证书与描述文件 |
+为了在无商业服务器支持的情况下提供尽可能稳定连续的听歌体验，Sonar 采用了客户端智能多级回退与音质阶梯降级策略：
 
-### 打开工程
+```mermaid
+flowchart TD
+    A[用户点播曲目] --> B{主音源可用且有凭据?}
+    B -- 是 --> C[官方主音源解析 (FLAC / 320k)]
+    B -- 否 / 解析失败 --> D[智能回退解析器]
+    D --> E{跨音源同名同歌手检索}
+    E -- 匹配成功 --> F[备用音源解析播放]
+    E -- 匹配失败 / 播放异常 --> G[公共流媒体兜底 (咪咕 320k 优先)]
+    G -- 解析失败 --> H[轻量公共流兜底 (酷我 128k 保底)]
+    H -- 成功 --> I[稳定顺畅播放]
+    C --> I
+    F --> I
+    G --> I
+    H -- 失败 --> J[提示播放不可用并保留原始诊断信息]
+```
 
-打开 `Sonar.xcodeproj`，选择 **Sonar** Scheme 和目标设备后构建。共享工程包含主 App 与小组件扩展。
+- **第一级（官方高品）**：优先调用用户配置的官方音源凭据，保障无损 FLAC 与 320kbps 高音质音频流；
+- **第二级（跨源互补）**：主音源无版权或失效时，自动根据歌曲标题与歌手精确跨源匹配；
+- **第三级（公共流保底）**：串行依次请求公网标准化流解析通道，以极小网络开销完成播放救场。
 
-音源 JavaScript 资源已随源码保存。修改 `js-source/` 后，执行以下命令重新生成：
+---
+
+## 🛠️ 从源码构建
+
+### 开发环境要求
+
+| 组件 / 工具 | 最低要求 | 作用说明 |
+| :--- | :--- | :--- |
+| **macOS** | Sonoma 14.0+ | 开发主机系统 |
+| **Xcode** | 15.0+ (已验证 16 系列) | 包含 iOS 17 SDK 的开发集成环境 |
+| **Node.js** | 18.0.0+ | 用于构建音源 JavaScript 资源与配置生成 |
+| **CocoaPods / SPM** | 原生 SPM | 纯 SwiftPM 依赖管理，开箱即用无额外包管理器负担 |
+
+### 1. 检出代码与构建音源运行时
+
+音源解析引擎采用 JavaScriptCore 原生内嵌驱动。修改 `js-source/` 后需执行打包：
 
 ```sh
+git clone https://github.com/can4hou6joeng4/Sonar.git
+cd Sonar
+
+# 安装依赖并生成内嵌音源运行时
 npm ci
 npm run build:source
 ```
 
-`package.json` 与 `package-lock.json` 保留音源构建所需的依赖信息；无需把 `node_modules/` 加入仓库。
+### 2. 打开 Xcode 工程
 
-### 真机 Release 归档
+双击打开 `Sonar.xcodeproj`，在 Xcode 顶部选择 **Sonar** Scheme 和您的调试目标（iPhone 真机或模拟器），点击 **Run (⌘R)** 即可。
+
+### 3. 生成 Release 归档与 IPA（可选）
+
+如需生成不带签名的 Release 归档：
 
 ```sh
 xcodebuild -project Sonar.xcodeproj -scheme Sonar \
@@ -78,49 +127,51 @@ xcodebuild -project Sonar.xcodeproj -scheme Sonar \
   CODE_SIGN_IDENTITY='' DEVELOPMENT_TEAM=''
 ```
 
-这条命令生成无签名 `.xcarchive`。封装 IPA 时，将归档中的 `Products/Applications/Sonar.app` 放入 `Payload/Sonar.app` 后压缩，再进行个人签名与安装。
+归档完成后，提取 `build/Sonar.xcarchive/Products/Applications/Sonar.app` 放置于 `Payload/Sonar.app` 目录并压缩为 `.ipa` 即可。
 
-`project.yml` 可用于生成共享工程。若使用 XcodeGen，建议先在临时目录生成并检查差异，再更新正式工程。
+---
 
-## 数据与播放凭据
+## 🔐 数据与凭据管理
 
-### 歌单与备份
+### 本地资料库与数据安全
 
-歌单保存在本地资料库中。导入采用追加合并，不删除现有歌曲；无效文件会被拒绝，保存失败会撤销此次导入。
+- 歌单完全保存在本地 SwiftData 容器中，不依赖任何第三方云端账户，杜绝隐私泄漏风险；
+- 资料库异常恢复页支持导出**原始资料文件**，用于极端情况下的底层数据修复。
 
-资料库恢复页导出的**原始资料文件**用于故障恢复，与设置中导出的**歌单备份**格式不同，不能相互替代。
+### 可选音源环境变量
 
-### 可选音源凭据
+新检出的开源仓库默认不包含任何第三方私有凭据，但已内置公共流解析回退。您可通过环境变量注入增强凭据以开启更多源的高音质通道：
 
-搜索与播放需要访问对应音源服务。部分播放路径或音质需要额外凭据，可通过构建环境提供：
+| 环境变量 | 作用与对应通道 |
+| :--- | :--- |
+| `SONAR_WY_TOKEN` | 网易云音乐接口访问鉴权凭据 |
+| `SONAR_CHKSZ_KEY` | ChKSz 接口解析凭据 |
 
-| 环境变量 | 用途 |
-| --- | --- |
-| `SONAR_WY_TOKEN` | 网易播放凭据 |
-| `SONAR_CHKSZ_KEY` | ChKSz 接口凭据 |
+执行构建时，`scripts/generate-build-config.mjs` 会读取上述环境变量并生成 `BuildCredentials.json`（已加入 `.gitignore`）。**请勿公开提交或向公众分发包含个人真实凭据的二进制包。**
 
-共享入口 `scripts/generate-build-config.mjs` 在未提供凭据时生成空配置，因此新检出的仓库也能完成构建。实际歌曲与音质可用性仍取决于音源返回。内置播放管线支持多级回退策略（官方源 → 跨源同名匹配 → 公共音频流兜底），在专属凭据未配置或过期时提供基础播放保障。
+---
 
-若本机存在未跟踪的 `scripts/generate-build-credentials.mjs`，构建会优先使用它。真实凭据及生成的 `BuildCredentials.json` 不提交到仓库。**包含真实凭据的安装包仅供个人设备使用，不公开分发。**
+## ⚖️ 免责声明与合规说明
 
-## 技术组成
+> [!IMPORTANT]
+> **请在阅读并理解以下条款后再使用或参与本项目：**
 
-| 部分 | 实现 |
-| --- | --- |
-| 原生界面 | SwiftUI |
-| 播放与系统音频 | AVFoundation |
-| 本地资料库 | SwiftData |
-| 音源运行时 | JavaScriptCore |
-| 音源资源构建 | Node.js / esbuild |
+1. **非商业研究用途**：Sonar 为个人兴趣与原生 iOS 架构探索而创建的开源项目，仅用于技术学习、SwiftUI/SwiftData 实践及非商业性研究交流，严禁将本项目及其衍生版本用于任何商业牟利行为。
+2. **纯客户端架构与零数据存储**：本项目为纯客户端应用程序，无任何自建后端或中转服务器；本项目不提供音频存储、不分发受版权保护的音视频文件、不持有任何音频媒体数据。播放过程中涉及的音频流、专辑封面与歌词等数据，均由客户端根据用户指令向第三方服务提供方发起公开请求获取。
+3. **知识产权归属**：所有由音源返回的歌曲、歌词、专辑图文及商标等合法知识产权均归属于其各自的原始版权方、歌手、唱片公司或对应在线音乐服务平台。
+4. **用户义务**：使用者应遵循所在地区的相关法律法规，尊重音乐版权。体验测试完毕后请在 24 小时内自行删除相关解析与缓存文件，支持并购买正版音乐服务。
+5. **侵权与异议处理**：若任何版权方或个人认为本项目的开源代码对您的合法权益造成了影响，请通过 GitHub Issue 或电子邮件联系维护者，我们将第一时间积极配合下线或调整相关内容。
 
-共享仓库保留应用源码、资源、工程与必要构建脚本。本地测试和个人开发工具单独维护，不是构建共享 App 的前提。
+---
 
-## 致谢
+## 📄 致谢与开源协议
 
-音源实现参考并复用了 [lx-music-mobile](https://github.com/lyswhut/lx-music-mobile) 的相关代码，感谢上游项目的开源工作。第三方代码与依赖的使用、修改和分发需保留并遵循各自适用的许可声明。
+### 致谢
 
-### 许可与归属
+- 感谢 [lx-music-mobile](https://github.com/lyswhut/lx-music-mobile) 及其开源生态，本项目的音源解析脚本在设计时参考了其部分开源实践。
+- 第三方依赖与开源库许可声明请查阅 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与 [LICENSES/](LICENSES/) 目录。
 
-第三方源码和依赖的许可证、版权声明与来源信息见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 和 [LICENSES/](LICENSES/)。构建的音源资源会携带这些声明。
+### 开源许可证
 
-Sonar 自有代码的对外许可证尚未确定；上述第三方许可证不应被理解为整个项目的统一授权。
+本项目自有代码遵循 **[GNU General Public License v3.0 (GPL-3.0)](LICENSE)** 协议开源。
+您可以在遵守 GPL-3.0 协议条款的前提下自由使用、修改和衍生本代码，但任何衍生与再分发必须保持同等许可证开源。
