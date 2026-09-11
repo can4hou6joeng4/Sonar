@@ -96,11 +96,14 @@ public actor ArtworkService {
             ).appendingPathComponent("Artwork", isDirectory: true)
         }
         try FileManager.default.createDirectory(at: self.cacheDirectory, withIntermediateDirectories: true)
-        Self.trimDisk(
-            directory: self.cacheDirectory,
-            limit: limits.diskBytes,
-            maximumPixelDimension: limits.maximumPixelDimension
-        )
+        let cacheDir = self.cacheDirectory
+        let diskLimit = limits.diskBytes
+        Task.detached(priority: .utility) {
+            Self.trimDisk(
+                directory: cacheDir,
+                limit: diskLimit
+            )
+        }
     }
 
     public func image(for track: Track, now: Date = Date()) async throws -> UIImage {
@@ -285,8 +288,7 @@ public actor ArtworkService {
         }
         Self.trimDisk(
             directory: cacheDirectory,
-            limit: limits.diskBytes,
-            maximumPixelDimension: limits.maximumPixelDimension
+            limit: limits.diskBytes
         )
     }
 
@@ -324,7 +326,7 @@ public actor ArtworkService {
         return UIImage(cgImage: image)
     }
 
-    private static func trimDisk(directory: URL, limit: Int, maximumPixelDimension: Int) {
+    private static func trimDisk(directory: URL, limit: Int) {
         let manager = FileManager.default
         let files = (try? manager.contentsOfDirectory(
             at: directory, includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey, .isRegularFileKey]
@@ -335,9 +337,7 @@ public actor ArtworkService {
                   values.isRegularFile == true else { continue }
             let modified = values.contentModificationDate ?? .distantPast
             let size = values.fileSize ?? 0
-            let isDecodable = size <= limit
-                && (try? Data(contentsOf: url)).flatMap({ downsample($0, maximumPixelDimension: maximumPixelDimension) }) != nil
-            if !isDecodable || size > limit || limit == 0 {
+            if size <= 0 || size > limit || limit == 0 {
                 try? manager.removeItem(at: url)
             } else {
                 retained.append((url, size, modified))

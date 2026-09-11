@@ -46,7 +46,7 @@ public final class JavaScriptSourceRuntime: SourceRuntime, @unchecked Sendable {
     private var timers: [Int: DispatchWorkItem] = [:]
 
     public init(bundleURL: URL? = Bundle.main.url(forResource: "source-bundle", withExtension: "js")) {
-        queue.sync {
+        queue.async {
             self.context = JSContext()
             self.installHostFunctions()
             if let bundleURL, let source = try? String(contentsOf: bundleURL, encoding: .utf8) {

@@ -63,8 +63,10 @@ struct PlayerArtwork: View {
         .task(id: track?.musicID) {
             guard !Task.isCancelled else { return }
             let request = artworkRequests.begin(trackID: track?.musicID)
-            image = nil
-            guard let track, let artworkService else { return }
+            guard let track, let artworkService else {
+                image = nil
+                return
+            }
             let loadedImage = try? await artworkService.image(for: track)
             artworkRequests.commit(request, currentTrackID: track.musicID) {
                 image = loadedImage

@@ -3,11 +3,13 @@ import Foundation
 enum PlaybackResolverPipeline {
     static func make(
         primary: PlaybackURLResolving,
-        sourceRuntime: SourceRuntime
+        sourceRuntime: SourceRuntime,
+        publicFallback: PlaybackURLResolving? = PublicStreamPlaybackURLResolver()
     ) -> PlaybackURLResolving {
         FallbackPlaybackURLResolver(
             primary: HighestAvailableQualityPlaybackURLResolver(resolver: primary),
-            sourceRuntime: sourceRuntime
+            sourceRuntime: sourceRuntime,
+            publicFallback: publicFallback
         )
     }
 }
@@ -90,9 +92,10 @@ enum PlaybackFallbackPolicy {
             "需要会员",
             "无法获取无损",
             "仅返回试听片段",
+            "加载获取歌曲失败",
+            "未返回可用链接",
+            "未能匹配可用链接",
         ].contains { normalized.contains($0) }
-            || normalized == "未返回可用链接"
-            || normalized == "qq: 未返回可用链接"
     }
 
     static func allowsQualityFallback(for error: SourceError) -> Bool {
@@ -110,10 +113,16 @@ enum PlaybackFallbackPolicy {
 public final class FallbackPlaybackURLResolver: PlaybackURLRefreshing, @unchecked Sendable {
     private let primary: PlaybackURLResolving
     private let sourceRuntime: SourceRuntime
+    private let publicFallback: PlaybackURLResolving?
 
-    public init(primary: PlaybackURLResolving, sourceRuntime: SourceRuntime) {
+    public init(
+        primary: PlaybackURLResolving,
+        sourceRuntime: SourceRuntime,
+        publicFallback: PlaybackURLResolving? = nil
+    ) {
         self.primary = primary
         self.sourceRuntime = sourceRuntime
+        self.publicFallback = publicFallback
     }
 
     public func musicURL(for track: Track, quality: Quality) async throws -> URL {
@@ -133,11 +142,19 @@ public final class FallbackPlaybackURLResolver: PlaybackURLRefreshing, @unchecke
             do {
                 let page = try await sourceRuntime.search("\(track.title) \(track.artist)", source: alternateSource, page: 1)
                 try Task.checkCancellation()
-                guard let replacement = bestMatch(for: track, candidates: page.list) else { throw primaryError }
+                guard let replacement = bestMatch(for: track, candidates: page.list) else {
+                    if let publicFallback {
+                        return try await publicFallback.musicURL(for: track, quality: quality)
+                    }
+                    throw primaryError
+                }
                 return try await resolvePrimary(track: replacement, quality: quality, refreshing: refreshing)
             } catch is CancellationError {
                 throw CancellationError()
             } catch let alternateError as SourceError {
+                if let publicFallback, alternateError.allowsPlaybackFallback {
+                    return try await publicFallback.musicURL(for: track, quality: quality)
+                }
                 throw alternateError
             }
         }
@@ -195,3 +212,98 @@ private extension SourceError {
         }
     }
 }
+
+public final class PublicStreamPlaybackURLResolver: PlaybackURLResolving, @unchecked Sendable {
+    private let client: PlaybackHTTPClient
+
+    public init(client: PlaybackHTTPClient = URLSessionPlaybackHTTPClient()) {
+        self.client = client
+    }
+
+    public func musicURL(for track: Track, quality: Quality) async throws -> URL {
+        if let miguURL = try? await resolveMigu(track: track) {
+            return miguURL
+        }
+        if let kuwoURL = try? await resolveKuwo(track: track) {
+            return kuwoURL
+        }
+        throw SourceError.source(message: "公共备选音源未能匹配可用链接")
+    }
+
+    private func resolveMigu(track: Track) async throws -> URL {
+        let query = "\(track.title) \(track.artist)".trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let apiURL = URL(string: "https://api.xcvts.cn/api/music/migu?gm=\(encoded)&n=1&num=1&type=json") else {
+            throw SourceError.source(message: "咪咕: 请求地址无效")
+        }
+        var request = URLRequest(url: apiURL)
+        request.httpMethod = "GET"
+        request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
+        request.timeoutInterval = 3.5
+
+        let response = try await client.send(request)
+        guard (200..<300).contains(response.statusCode) else {
+            throw SourceError.source(message: "咪咕: HTTP \(response.statusCode)")
+        }
+        guard let json = try? JSONSerialization.jsonObject(with: response.body) as? [String: Any],
+              let rawURL = json["music_url"] as? String,
+              let url = URL(string: rawURL),
+              url.scheme == "http" || url.scheme == "https" else {
+            throw SourceError.source(message: "咪咕: 未返回可用播放链接")
+        }
+        try await validateMediaURL(url)
+        return url
+    }
+
+    private func resolveKuwo(track: Track) async throws -> URL {
+        let query = "\(track.title) \(track.artist)".trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let apiURL = URL(string: "https://oiapi.net/api/Kuwo?msg=\(encoded)&n=1&br=7") else {
+            throw SourceError.source(message: "酷我: 请求地址无效")
+        }
+        var request = URLRequest(url: apiURL)
+        request.httpMethod = "GET"
+        request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
+        request.timeoutInterval = 3.5
+
+        let response = try await client.send(request)
+        guard (200..<300).contains(response.statusCode) else {
+            throw SourceError.source(message: "酷我: HTTP \(response.statusCode)")
+        }
+        guard let json = try? JSONSerialization.jsonObject(with: response.body) as? [String: Any] else {
+            throw SourceError.source(message: "酷我: JSON 异常")
+        }
+        var foundURLString: String?
+        if let direct = json["url"] as? String {
+            foundURLString = direct
+        } else if let message = json["message"] as? String {
+            for marker in ["音乐链接：", "音乐链接:"] {
+                if let range = message.range(of: marker) {
+                    let substr = message[range.upperBound...]
+                    let end = substr.firstIndex(where: { $0.isWhitespace || $0.isNewline }) ?? substr.endIndex
+                    foundURLString = String(substr[..<end])
+                    break
+                }
+            }
+        }
+        guard let rawURL = foundURLString,
+              let url = URL(string: rawURL),
+              url.scheme == "http" || url.scheme == "https" else {
+            throw SourceError.source(message: "酷我: 未返回可用播放链接")
+        }
+        try await validateMediaURL(url)
+        return url
+    }
+
+    private func validateMediaURL(_ url: URL) async throws {
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("bytes=0-1", forHTTPHeaderField: "Range")
+        request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
+        let response = try await client.probe(request, maxBytes: 64, timeout: 2.5)
+        guard [200, 206].contains(response.statusCode) else {
+            throw SourceError.source(message: "备选流媒体链接失效（HTTP \(response.statusCode)）")
+        }
+    }
+}
+

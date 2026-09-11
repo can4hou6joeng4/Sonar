@@ -40,6 +40,7 @@ public final class ChkszAPIClient: ChkszAPIRequesting, @unchecked Sendable {
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
+        request.timeoutInterval = 4.0
         var response = try await client.send(request)
         if response.statusCode == 429 {
             let retry = Self.retryDelay(from: response)
@@ -91,8 +92,9 @@ public final class ChkszAPIClient: ChkszAPIRequesting, @unchecked Sendable {
             throw SourceError.source(message: "ChKSz 请求过于频繁（API 429）")
         default:
             let message = (object["msg"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let detail = message.flatMap { $0.isEmpty ? nil : $0 }
-                ?? "ChKSz 返回异常（API " + String(code) + "）"
+            let rawDetail = message.flatMap { $0.isEmpty ? nil : $0 }
+                ?? "返回异常（API " + String(code) + "）"
+            let detail = rawDetail.lowercased().contains("chksz") ? rawDetail : "ChKSz: " + rawDetail
             throw SourceError.source(message: detail)
         }
     }
@@ -355,11 +357,27 @@ public final class FallbackSourceRuntime: SourceRuntime, @unchecked Sendable {
     }
 
     public func picURL(_ track: Track) async throws -> URL {
-        if track.source == .wy,
-           let value = track.rawPayload["picUrl"] as? String,
-           let url = URL(string: value),
-           ["http", "https"].contains(url.scheme?.lowercased()) {
-            return url
+        let payload = track.rawPayload
+        if track.source == .wy {
+            let candidate = (payload["picUrl"] as? String)
+                ?? (payload["img"] as? String)
+                ?? ((payload["al"] as? [String: Any])?["picUrl"] as? String)
+                ?? ((payload["album"] as? [String: Any])?["picUrl"] as? String)
+            if let candidate = candidate?.trimmingCharacters(in: .whitespacesAndNewlines),
+               let url = URL(string: candidate),
+               ["http", "https"].contains(url.scheme?.lowercased()) {
+                return url
+            }
+        } else if track.source == .tx {
+            let albumId = (payload["albumId"] as? String)
+                ?? (payload["albumMid"] as? String)
+                ?? ((payload["album"] as? [String: Any])?["mid"] as? String)
+                ?? ((payload["album"] as? [String: Any])?["id"] as? String)
+            if let albumId = albumId?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !albumId.isEmpty,
+               let url = URL(string: "https://y.gtimg.cn/music/photo_new/T002R500x500M000\(albumId).jpg") {
+                return url
+            }
         }
         return try await primary.picURL(track)
     }
