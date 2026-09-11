@@ -1,9 +1,24 @@
 import SwiftUI
 
+struct PersonalPlaylistActionPresentation: Equatable {
+    let isCollected: Bool
+    let playlistName: String
+
+    var icon: String { isCollected ? "heart.slash" : "heart" }
+    var title: String { isCollected ? "移出 \(playlistName)" : "收藏到 \(playlistName)" }
+    var subtitle: String {
+        isCollected ? "从个人歌单移除，当前播放不会中断" : "将当前歌曲保存到个人歌单"
+    }
+    var identifier: String {
+        isCollected ? "player-cover-remove-from-playlist" : "player-cover-collect-to-playlist"
+    }
+}
+
 struct CoverActionsSheet: View {
     let track: Track
+    let playlistAction: PersonalPlaylistActionPresentation
     let onAddToQueue: () -> Void
-    let onCollect: () -> Void
+    let onToggleCollection: () -> Void
     let onSelectQuality: () -> Void
 
     @Environment(PlaybackService.self) private var playbackService
@@ -27,12 +42,12 @@ struct CoverActionsSheet: View {
                         onAddToQueue()
                     }
                     actionRow(
-                        icon: "music.note.list",
-                        title: "收藏到歌单",
-                        subtitle: "将当前歌曲保存到个人歌单",
-                        identifier: "player-cover-collect-to-playlist"
+                        icon: playlistAction.icon,
+                        title: playlistAction.title,
+                        subtitle: playlistAction.subtitle,
+                        identifier: playlistAction.identifier
                     ) {
-                        onCollect()
+                        onToggleCollection()
                     }
                     actionRow(
                         icon: "waveform.badge.magnifyingglass",

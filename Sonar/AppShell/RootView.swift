@@ -119,6 +119,7 @@ extension EnvironmentValues {
 
 enum ShellBottomLayout {
     static func contentReservation(hasCurrentTrack: Bool = true, safeAreaBottom: CGFloat) -> CGFloat {
+        guard hasCurrentTrack else { return 0 }
         return NCMDesignTokens.Layout.miniPlayerHeight
             + NCMDesignTokens.Layout.bottomContentSpacing
             - MiniPlayerDockPresentation.safeAreaCompaction(safeAreaBottom: safeAreaBottom)
@@ -208,35 +209,29 @@ struct RootView: View {
                 .accessibilityHidden(pullController.pull == 0)
                 .zIndex(NCMDesignTokens.Layer.player)
 
-                NCMMiniPlayer(
-                    safeAreaBottom: proxy.safeAreaInsets.bottom,
-                    onOpenPlayer: {
-                        guard playbackService.queue.current != nil else {
-                            toastCenter.show("点按新歌开始播放")
-                            return
+                if hasCurrentTrack {
+                    NCMMiniPlayer(
+                        safeAreaBottom: proxy.safeAreaInsets.bottom,
+                        onOpenPlayer: {
+                            closeSettingsDrawer()
+                            playerSurface = .artwork
+                            pullController.open(reduceMotion: reduceMotion)
+                        },
+                        onOpenQueue: {
+                            closeSettingsDrawer()
+                            playerSurface = .queue
+                            pullController.open(reduceMotion: reduceMotion)
                         }
-                        closeSettingsDrawer()
-                        playerSurface = .artwork
-                        pullController.open(reduceMotion: reduceMotion)
-                    },
-                    onOpenQueue: {
-                        guard playbackService.queue.current != nil else {
-                            toastCenter.show("待播放列表暂无歌曲")
-                            return
-                        }
-                        closeSettingsDrawer()
-                        playerSurface = .queue
-                        pullController.open(reduceMotion: reduceMotion)
-                    }
-                )
-                .offset(y: ShellBottomLayout.miniPlayerVerticalOffset(
-                    safeAreaBottom: proxy.safeAreaInsets.bottom
-                ))
-                .opacity(pullController.toolbarReveal)
-                .allowsHitTesting(pullController.pull == 0 && drawerProgress == 0)
-                .accessibilityHidden(pullController.pull > 0 || drawerProgress > 0)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .zIndex(NCMDesignTokens.Layer.miniPlayer)
+                    )
+                    .offset(y: ShellBottomLayout.miniPlayerVerticalOffset(
+                        safeAreaBottom: proxy.safeAreaInsets.bottom
+                    ))
+                    .opacity(pullController.toolbarReveal)
+                    .allowsHitTesting(pullController.pull == 0 && drawerProgress == 0)
+                    .accessibilityHidden(pullController.pull > 0 || drawerProgress > 0)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(NCMDesignTokens.Layer.miniPlayer)
+                }
 
                 settingsDrawer(width: drawerWidth, progress: drawerProgress)
                     .zIndex(25)
@@ -478,7 +473,7 @@ struct RootView: View {
                     let playlist = try store.ensurePersonalPlaylist()
                     let tracks = playlist.orderedItems.compactMap { $0.track.track }
                     guard !tracks.isEmpty else {
-                        toastCenter.show("我喜欢的音乐暂无歌曲")
+                        toastCenter.show("\(playlist.name) 暂无歌曲")
                         return
                     }
                     await playbackService.shuffleAndPlay(tracks, activePlaylistID: playlist.id)

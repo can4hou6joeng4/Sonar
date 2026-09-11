@@ -15,7 +15,11 @@ enum PersonalPlaylistCollectionFeedback {
             if result.inserted {
                 playbackService?.onTrackAddedToPlaylist(track, playlistID: result.playlist.id)
             }
-            toastCenter.show(result.inserted ? "已收藏到歌单" : "歌曲已在歌单中")
+            toastCenter.show(
+                result.inserted
+                    ? "已收藏到 \(result.playlist.name)"
+                    : "歌曲已在 \(result.playlist.name) 中"
+            )
         } catch {
             toastCenter.show("收藏失败：\(error.localizedDescription)")
         }
@@ -48,8 +52,8 @@ struct PlaylistDetailView: View {
 
     init(playlist: Playlist, onBack: (() -> Void)? = nil) {
         self.playlist = playlist
-        fallbackTitle = "我喜欢的音乐"
-        fallbackSubtitle = "我喜欢的音乐"
+        fallbackTitle = PersonalPlaylistDefaults.name
+        fallbackSubtitle = PersonalPlaylistDefaults.name
         fallbackDescription = ""
         fallbackTracks = []
         self.onBack = onBack
@@ -65,7 +69,6 @@ struct PlaylistDetailView: View {
     }
 
     private var title: String {
-        if isPersonalPlaylist { return "我喜欢的音乐" }
         return playlist?.name ?? fallbackTitle
     }
     private var isPersonalPlaylist: Bool { playlist == nil || playlist?.isPrimaryPersonal == true }

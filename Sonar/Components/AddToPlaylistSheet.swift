@@ -41,7 +41,7 @@ struct AddToPlaylistSheet: View {
                                 HStack(spacing: 16) {
                                     PlayerArtwork(track: firstTrack(in: playlist), size: 36)
                                     VStack(alignment: .leading, spacing: 3) {
-                                        Text(playlist.isPrimaryPersonal ? "我喜欢的音乐" : playlist.name)
+                                        Text(playlist.name)
                                             .font(.body.weight(.semibold))
                                             .foregroundStyle(scheme.onSurface)
                                         Text("\(playlist.items.count) 首")

@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import Observation
+import SwiftData
 import SwiftUI
 
 public struct LyricsCachePolicy: Sendable {
@@ -348,8 +349,17 @@ struct PlayerPage: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.sonarReduceMotion) private var reduceMotion
     @Environment(\.lyricsService) private var lyricsService
+    @Query(
+        filter: #Predicate<Playlist> {
+            !$0.isSystem && $0.kindRaw == "music" && $0.isPrimaryPersonal && !$0.isArchived
+        },
+        sort: \Playlist.sortIndex
+    )
+    private var personalPlaylists: [Playlist]
     @State private var lyricsModel = PlayerLyricsModel()
     @State private var presentedSheet: PresentedSheet?
+
+    private var personalPlaylist: Playlist? { personalPlaylists.first }
 
     var body: some View {
         ZStack {
@@ -390,6 +400,12 @@ struct PlayerPage: View {
             case let .cover(track):
                 CoverActionsSheet(
                     track: track,
+                    playlistAction: PersonalPlaylistActionPresentation(
+                        isCollected: personalPlaylist?.items.contains {
+                            $0.track.musicId == track.musicID
+                        } == true,
+                        playlistName: personalPlaylist?.name ?? PersonalPlaylistDefaults.name
+                    ),
                     onAddToQueue: {
                         presentedSheet = nil
                         Task {
@@ -397,14 +413,9 @@ struct PlayerPage: View {
                             toastCenter.show(added ? "已加入待播放" : "歌曲已在待播放中")
                         }
                     },
-                    onCollect: {
+                    onToggleCollection: {
                         presentedSheet = nil
-                        PersonalPlaylistCollectionFeedback.collect(
-                            track,
-                            context: modelContext,
-                            toastCenter: toastCenter,
-                            playbackService: playbackService
-                        )
+                        toggleCollection(of: track)
                     },
                     onSelectQuality: { transitionSheet(to: .quality(track)) }
                 )
@@ -426,6 +437,28 @@ struct PlayerPage: View {
     private func showMore() {
         guard let track = playbackService.queue.current else { return }
         presentedSheet = .cover(track)
+    }
+
+    private func toggleCollection(of track: Track) {
+        if let playlist = personalPlaylist,
+           let index = playlist.orderedItems.firstIndex(where: { $0.track.musicId == track.musicID }) {
+            do {
+                try LibraryStore(context: modelContext).removeItem(at: index, from: playlist)
+                playbackService.onTrackRemovedFromPlaylist(track, playlistID: playlist.id)
+                toastCenter.show("已从 \(playlist.name) 移出")
+                AppHaptics.medium()
+            } catch {
+                toastCenter.show("移除失败：\(error.localizedDescription)")
+            }
+            return
+        }
+
+        PersonalPlaylistCollectionFeedback.collect(
+            track,
+            context: modelContext,
+            toastCenter: toastCenter,
+            playbackService: playbackService
+        )
     }
 
     private func transitionSheet(to destination: PresentedSheet) {

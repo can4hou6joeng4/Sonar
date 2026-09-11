@@ -131,7 +131,7 @@ public final class LibraryStore {
         } else {
             let nextIndex = (try playlists(includeArchived: true).map(\.sortIndex).max() ?? -1) + 1
             primary = Playlist(
-                name: "我喜欢的音乐",
+                name: PersonalPlaylistDefaults.name,
                 sortIndex: nextIndex,
                 isPrimaryPersonal: true
             )
@@ -139,6 +139,10 @@ public final class LibraryStore {
             didChange = true
         }
 
+        if PersonalPlaylistDefaults.legacyNames.contains(primary.name) {
+            primary.name = PersonalPlaylistDefaults.name
+            didChange = true
+        }
         if !primary.isPrimaryPersonal {
             primary.isPrimaryPersonal = true
             didChange = true

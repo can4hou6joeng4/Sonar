@@ -50,7 +50,7 @@ struct QuickShuffleWidgetView: View {
             Spacer()
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("我喜欢的音乐")
+                Text(PersonalPlaylistDefaults.name)
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(.primary)
 
@@ -100,7 +100,7 @@ struct QuickShuffleWidget: Widget {
         StaticConfiguration(kind: kind, provider: QuickShuffleTimelineProvider()) { entry in
             QuickShuffleWidgetView(entry: entry)
         }
-        .configurationDisplayName("我喜欢的音乐 · 随心听")
+        .configurationDisplayName("\(PersonalPlaylistDefaults.name) · 随心听")
         .description("一键在桌面开启收藏歌曲的随机播放。")
         .supportedFamilies([.systemSmall])
     }

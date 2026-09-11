@@ -3,6 +3,11 @@ import Foundation
 import WidgetKit
 #endif
 
+public enum PersonalPlaylistDefaults {
+    public static let name = "can4hou6joeng4"
+    public static let legacyNames: Set<String> = ["我喜欢的音乐"]
+}
+
 public struct WidgetPlaybackSnapshot: Codable, Equatable, Sendable {
     public let title: String
     public let artist: String

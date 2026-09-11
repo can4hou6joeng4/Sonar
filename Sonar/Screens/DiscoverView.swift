@@ -12,9 +12,9 @@ struct DiscoverView: View {
     @Environment(ToastCenter.self) private var toastCenter
     @Environment(\.modelContext) private var modelContext
     @Environment(\.m3Scheme) private var scheme
+    @Environment(\.trackDetailRefreshCoordinator) private var trackDetailRefreshCoordinator
     @Query(sort: \Playlist.sortIndex) private var libraryPlaylists: [Playlist]
     @State private var actionError: String?
-    @State private var personalPlaylistIsPresented = false
     @State private var selectedTrackForActions: Track?
 
     init(
@@ -37,14 +37,13 @@ struct DiscoverView: View {
         }
     }
 
-    private var tracks: [Track] {
-        personalPlaylist?.orderedItems.compactMap { $0.track.track } ?? []
-    }
-
     var body: some View {
+        let playlist = personalPlaylist
+        let tracks = playlist?.orderedItems.compactMap { $0.track.track } ?? []
+
         VStack(spacing: 0) {
             header
-            homeContent
+            homeContent(playlist: playlist, tracks: tracks)
         }
         .background(scheme.appSurface.ignoresSafeArea())
         .rootSettingsDrawerGesture(
@@ -54,16 +53,6 @@ struct DiscoverView: View {
             onEnded: onSettingsDragEnded
         )
         .toolbar(.hidden, for: .navigationBar)
-        .navigationDestination(isPresented: $personalPlaylistIsPresented) {
-            if let personalPlaylist {
-                PlaylistDetailView(
-                    playlist: personalPlaylist,
-                    onBack: { personalPlaylistIsPresented = false }
-                )
-            } else {
-                SongsView(isActive: false)
-            }
-        }
         .confirmationDialog(
             selectedTrackForActions?.title ?? "歌曲操作",
             isPresented: Binding(
@@ -138,67 +127,12 @@ struct DiscoverView: View {
         .padding(.top, 6)
     }
 
-    private var homeContent: some View {
+    private func homeContent(playlist: Playlist?, tracks: [Track]) -> some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                personalPlaylistCard
+                playlistHeader(playlist: playlist, tracks: tracks)
 
                 if !tracks.isEmpty {
-                    HStack {
-                        Text("歌曲 (\(tracks.count))")
-                            .font(.system(size: 17, weight: .bold))
-                            .foregroundStyle(scheme.onSurface)
-
-                        Spacer()
-
-                        HStack(spacing: 8) {
-                            Button {
-                                Task {
-                                    if playbackService.playbackMode == .shuffle {
-                                        await playbackService.shuffleAndPlay(tracks, activePlaylistID: personalPlaylist?.id)
-                                    } else {
-                                        await playbackService.replaceQueue(tracks, startingAt: 0, activePlaylistID: personalPlaylist?.id)
-                                    }
-                                }
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "play.fill")
-                                        .font(.system(size: 11))
-                                    Text("播放全部")
-                                        .font(.system(size: 13, weight: .semibold))
-                                }
-                                .foregroundStyle(scheme.primary)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(scheme.primary.opacity(0.12), in: Capsule())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityIdentifier("home-play-all-button")
-
-                            Button {
-                                Task {
-                                    await playbackService.shuffleAndPlay(tracks, activePlaylistID: personalPlaylist?.id)
-                                }
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "shuffle")
-                                        .font(.system(size: 11))
-                                    Text("随机播放")
-                                        .font(.system(size: 13, weight: .semibold))
-                                }
-                                .foregroundStyle(scheme.onSurfaceVariant)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(scheme.surfaceContainerHigh, in: Capsule())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityIdentifier("home-shuffle-button")
-                        }
-                    }
-                    .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
-                    .padding(.top, 14)
-                    .padding(.bottom, 6)
-
                     ForEach(Array(tracks.enumerated()), id: \.element.musicID) { index, track in
                         SongRow(
                             track: track,
@@ -207,12 +141,12 @@ struct DiscoverView: View {
                             showDivider: index < tracks.count - 1,
                             isCurrent: playbackService.queue.current?.musicID == track.musicID,
                             isPlaying: playbackService.state == .playing,
-                            onPlay: { Task { await playbackService.replaceQueue(tracks, startingAt: index, activePlaylistID: personalPlaylist?.id) } },
+                            onPlay: { Task { await playbackService.replaceQueue(tracks, startingAt: index, activePlaylistID: playlist?.id) } },
                             onAction: { selectedTrackForActions = track }
                         )
                         .contextMenu {
                             Button {
-                                Task { await playbackService.replaceQueue(tracks, startingAt: index, activePlaylistID: personalPlaylist?.id) }
+                                Task { await playbackService.replaceQueue(tracks, startingAt: index, activePlaylistID: playlist?.id) }
                             } label: {
                                 Label("立即播放", systemImage: "play.fill")
                             }
@@ -234,7 +168,7 @@ struct DiscoverView: View {
                             }
                             Divider()
                             Button(role: .destructive) {
-                                removeTrack(track)
+                                removeTrack(track, from: playlist)
                             } label: {
                                 Label("移出歌单", systemImage: "trash")
                             }
@@ -246,6 +180,7 @@ struct DiscoverView: View {
                             .font(.system(size: 40))
                             .foregroundStyle(scheme.onSurfaceVariant.opacity(0.4))
                             .padding(.top, 48)
+                            .accessibilityHidden(true)
 
                         Text("还没有收藏的音乐")
                             .font(.system(size: 16, weight: .semibold))
@@ -263,65 +198,87 @@ struct DiscoverView: View {
             }
         }
         .scrollIndicators(.hidden)
+        .refreshable {
+            await refreshTrackDetails(tracks, limit: 50, force: true)
+        }
     }
 
-    private var personalPlaylistCard: some View {
-        Button {
-            personalPlaylistIsPresented = true
-        } label: {
-            HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(scheme.primary.opacity(0.12))
-                        .frame(width: 60, height: 60)
+    private func playlistHeader(playlist: Playlist?, tracks: [Track]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("\(tracks.count) 首歌曲")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(scheme.onSurfaceVariant)
+                .accessibilityIdentifier("home-playlist-count")
 
-                    if let firstTrack = personalPlaylist?.orderedItems.first?.track.track {
-                        PlayerArtwork(track: firstTrack, size: 60, cornerRadius: 12)
-                            .shadow(color: .black.opacity(0.18), radius: 6, y: 3)
-                    } else {
-                        Image(systemName: "heart.fill")
-                            .font(.system(size: 24, weight: .semibold))
-                            .foregroundStyle(scheme.primary)
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("我喜欢的音乐")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(scheme.onSurface)
-                        .lineLimit(1)
-
-                    Text("\(personalPlaylist?.orderedItems.count ?? 0) 首歌曲")
-                        .font(.system(size: 13))
-                        .foregroundStyle(scheme.onSurfaceVariant)
-                }
-
-                Spacer(minLength: 0)
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(scheme.onSurfaceVariant.opacity(0.6))
-                    .padding(.trailing, 4)
+            HStack(spacing: 10) {
+                playlistActionButton(
+                    title: "播放全部",
+                    systemImage: "play.fill",
+                    foreground: scheme.onPrimary,
+                    background: scheme.primary,
+                    identifier: "home-play-all-button",
+                    isDisabled: tracks.isEmpty,
+                    action: { playAll(playlist: playlist, tracks: tracks) }
+                )
+                playlistActionButton(
+                    title: "随机播放",
+                    systemImage: "shuffle",
+                    foreground: scheme.onSurface,
+                    background: scheme.surfaceContainerHigh,
+                    identifier: "home-shuffle-button",
+                    isDisabled: tracks.isEmpty,
+                    action: { shuffleAll(playlist: playlist, tracks: tracks) }
+                )
             }
-            .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(scheme.surfaceContainerLow)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
-                    )
-            )
-            .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
-            .padding(.top, 10)
-            .padding(.bottom, 6)
+        }
+        .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+    }
+
+    private func playlistActionButton(
+        title: String,
+        systemImage: String,
+        foreground: Color,
+        background: Color,
+        identifier: String,
+        isDisabled: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(foreground)
+                .frame(maxWidth: .infinity)
+                .frame(height: 40)
+                .background(background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .contentShape(Rectangle())
         }
         .buttonStyle(.bounce)
-        .accessibilityIdentifier("home-personal-playlist-card")
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.45 : 1)
+        .accessibilityIdentifier(identifier)
     }
 
-    private func removeTrack(_ track: Track) {
-        guard let playlist = personalPlaylist,
+    private func playAll(playlist: Playlist?, tracks: [Track]) {
+        guard let playlist, !tracks.isEmpty else { return }
+        Task {
+            playbackService.setPlaybackMode(.sequence)
+            await playbackService.replaceQueue(tracks, activePlaylistID: playlist.id)
+            toastCenter.show("已开始播放 \(tracks.count) 首歌曲")
+        }
+    }
+
+    private func shuffleAll(playlist: Playlist?, tracks: [Track]) {
+        guard let playlist, !tracks.isEmpty else { return }
+        Task {
+            _ = await playbackService.shuffleAndPlay(tracks, activePlaylistID: playlist.id)
+            toastCenter.show(tracks.count == 1 ? "已开始播放" : "已随机播放 \(tracks.count) 首歌曲")
+        }
+    }
+
+    private func removeTrack(_ track: Track, from selectedPlaylist: Playlist? = nil) {
+        guard let playlist = selectedPlaylist ?? personalPlaylist,
               let index = playlist.orderedItems.firstIndex(where: { $0.track.musicId == track.musicID }) else { return }
         do {
             try LibraryStore(context: modelContext).removeItem(at: index, from: playlist)
@@ -330,6 +287,33 @@ struct DiscoverView: View {
             AppHaptics.medium()
         } catch {
             actionError = error.localizedDescription
+        }
+    }
+
+    private func refreshTrackDetails(_ candidates: [Track], limit: Int = 20, force: Bool = false) async {
+        guard let trackDetailRefreshCoordinator else { return }
+        let selected = force ? candidates : candidates.filter { $0.highestKnownQuality == .standard }
+        guard !selected.isEmpty else { return }
+        let store = LibraryStore(context: modelContext)
+
+        for track in selected.prefix(limit) {
+            if Task.isCancelled { return }
+            do {
+                let outcome = try await trackDetailRefreshCoordinator.refresh(track, store: store, force: force)
+                if case let .refreshed(refreshed) = outcome {
+                    try Task.checkCancellation()
+                    playbackService.updateTrackMetadata(refreshed)
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                // Existing metadata remains usable and the coordinator persists retry backoff.
+            }
+            do {
+                try await Task.sleep(for: .milliseconds(80))
+            } catch {
+                return
+            }
         }
     }
 }
