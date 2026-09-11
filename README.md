@@ -45,11 +45,14 @@
 
 运行环境需 **iOS 17.0 或更高版本**。
 
-| 安装途径 | 推荐人群 | 说明 |
+> [!NOTE]
+> 本项目遵循**纯开源代码分发**原则，仓库**不提供任何预编译安装包或个人自用 IPA**。用户可通过下方指南自行拉取源码并在本地打包专属于自己的 IPA 文件：
+
+| 安装方式 | 适合场景 | 流程说明 |
 | :--- | :--- | :--- |
-| 🦖 **TrollStore** | 巨魔商店用户 | 直接下载 Release 提供的 `Sonar.ipa`，一键导入永久安装，无需证书重签 |
-| 📲 **个人自签** | 普通 iOS 用户 | 通过 AltStore / Sideloadly / 个人开发者证书重签后载入设备使用（7天/1年） |
-| 🛠️ **源码构建** | 开发者 | 克隆本仓库后使用 Xcode 连接真机调试运行或自行归档打包 |
+| 🦖 **TrollStore（巨魔）** | 适用支持巨魔的 iOS 设备 | 本地编译生成未签名 `Sonar.ipa` 后，通过 AirDrop 或系统文件直接导入 TrollStore 永久使用 |
+| 📲 **个人自签工具** | 普通未越狱 iOS 设备 | 使用本地打包生成的 `Sonar.ipa`，通过 AltStore / Sideloadly / 个人免费证书重签载入 |
+| 🛠️ **Xcode 联机直装** | 拥有 Mac 的用户 / 开发者 | 打开工程并连接真机，配置个人免费开发者签名后，直接 `⌘R` 联机运行 |
 
 ### 使用提示
 
@@ -115,19 +118,25 @@ npm run build:source
 
 双击打开 `Sonar.xcodeproj`，在 Xcode 顶部选择 **Sonar** Scheme 和您的调试目标（iPhone 真机或模拟器），点击 **Run (⌘R)** 即可。
 
-### 3. 生成 Release 归档与 IPA（可选）
+### 3. 本地打包 IPA 文件
 
-如需生成不带签名的 Release 归档：
+执行以下命令即可在本地一键编译并封装生成未签名的 `Sonar.ipa`（可直接用于 TrollStore 或自签工具）：
 
 ```sh
+# 1. 编译生成 Release 归档
 xcodebuild -project Sonar.xcodeproj -scheme Sonar \
   -configuration Release -destination 'generic/platform=iOS' \
   -archivePath build/Sonar.xcarchive archive \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
   CODE_SIGN_IDENTITY='' DEVELOPMENT_TEAM=''
-```
 
-归档完成后，提取 `build/Sonar.xcarchive/Products/Applications/Sonar.app` 放置于 `Payload/Sonar.app` 目录并压缩为 `.ipa` 即可。
+# 2. 封装为标准 IPA 文件
+mkdir -p build/Payload
+cp -R build/Sonar.xcarchive/Products/Applications/Sonar.app build/Payload/
+cd build && zip -qr Sonar.ipa Payload && rm -rf Payload && cd ..
+
+# 产物即为 build/Sonar.ipa
+```
 
 ---
 
