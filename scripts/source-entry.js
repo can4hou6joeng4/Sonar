@@ -54,6 +54,18 @@ globalThis.__source__ = Object.freeze({
     if (!result || result.source !== source || !Array.isArray(result.list)) throw new Error('音源返回热门搜索异常')
     return [...new Set(result.list.map(value => String(value).trim()).filter(Boolean))]
   },
+  async playlistSearch(source, keyword, page = 1, limit = 20) {
+    const sdk = sdkFor(source)
+    const normalizedPage = Math.max(1, Number(page))
+    const normalizedLimit = Math.max(1, Number(limit))
+    const result = await unwrapRequest(sdk.songList.search(String(keyword), normalizedPage, normalizedLimit))
+    if (!result || !Array.isArray(result.list)) throw new Error('音源返回歌单搜索结果异常')
+    return {
+      ...result,
+      page: normalizedPage,
+      limit: normalizedLimit,
+    }
+  },
   async playlistCatalog(source, sortId, tagId, page = 1) {
     const sdk = sdkFor(source)
     const result = await unwrapRequest(sdk.songList.getList(sortId, tagId, Number(page)))

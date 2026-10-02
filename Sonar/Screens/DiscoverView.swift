@@ -338,6 +338,9 @@ private struct NCMSearchView: View {
     var body: some View {
         VStack(spacing: 0) {
             searchBar
+            if !trimmedQuery.isEmpty {
+                searchScopePicker
+            }
             searchContent
         }
         .background(scheme.appSurface.ignoresSafeArea())
@@ -397,7 +400,7 @@ private struct NCMSearchView: View {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 16, weight: .medium))
-                TextField("搜索歌曲、歌手或专辑", text: $model.query)
+                TextField("搜索歌曲、歌手、专辑或歌单", text: $model.query)
                     .font(.system(size: 15))
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -491,26 +494,51 @@ private struct NCMSearchView: View {
         .refreshable { await model.refreshHotSearches() }
     }
 
+    private var searchScopePicker: some View {
+        Picker("搜索分类", selection: $model.selectedScope) {
+            ForEach(SearchScope.allCases) { scope in
+                Text(scope.rawValue).tag(scope)
+            }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
+        .padding(.top, 2)
+        .padding(.bottom, 6)
+        .accessibilityIdentifier("search-scope-picker")
+        .onChange(of: model.selectedScope) { _, newScope in
+            Task { await model.loadScopeIfNeeded(newScope) }
+        }
+    }
+
     private var searchResultsContent: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                if model.isLoadingArtists || !model.artistResults.isEmpty || !model.artistSourceWarnings.isEmpty {
-                    artistResultsSection
+                switch model.selectedScope {
+                case .songs:
+                    songsResultSection
+                case .artists:
+                    artistsResultSection
+                case .playlists:
+                    playlistsResultSection
                 }
+            }
+        }
+        .scrollDismissesKeyboard(.immediately)
+    }
 
-                if model.isLoading {
-                    ProgressView("正在搜索歌曲…")
-                        .frame(maxWidth: .infinity, minHeight: 80)
-                        .accessibilityIdentifier("search-song-loading")
-                } else if let errorMessage = model.songSearchErrorMessage ?? model.errorMessage {
-                    ContentUnavailableView("搜索不可用", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
-                } else if model.results.isEmpty {
-                    ContentUnavailableView(
-                        model.isLoadingArtists || !model.artistResults.isEmpty ? "未找到歌曲" : "未找到结果",
-                        systemImage: "music.note.list"
-                    )
-                }
-
+    private var songsResultSection: some View {
+        VStack(spacing: 0) {
+            if model.isLoading || !model.hasLoadedSongs {
+                ProgressView("正在搜索歌曲…")
+                    .frame(maxWidth: .infinity, minHeight: 120)
+                    .accessibilityIdentifier("search-song-loading")
+            } else if let errorMessage = model.songSearchErrorMessage ?? model.errorMessage {
+                ContentUnavailableView("搜索不可用", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
+                    .frame(maxWidth: .infinity, minHeight: 200)
+            } else if model.results.isEmpty {
+                ContentUnavailableView("未找到歌曲", systemImage: "music.note.list")
+                    .frame(maxWidth: .infinity, minHeight: 200)
+            } else {
                 if let warning = model.partialSourceWarning {
                     HStack {
                         Text(warning)
@@ -538,90 +566,146 @@ private struct NCMSearchView: View {
                 }
             }
         }
-        .scrollDismissesKeyboard(.immediately)
     }
 
-    private var artistResultsSection: some View {
+    private var artistsResultSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("歌手")
-                .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(scheme.onSurface)
-                .padding(.horizontal, 16)
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                .accessibilityIdentifier("search-artist-section")
-
-            if model.isLoadingArtists {
+            if model.isLoadingArtists || !model.hasLoadedArtists {
                 ProgressView("正在搜索歌手…")
-                    .frame(maxWidth: .infinity, minHeight: 60)
+                    .frame(maxWidth: .infinity, minHeight: 120)
                     .accessibilityIdentifier("search-artist-loading")
-            }
+            } else if model.artistResults.isEmpty && !model.failedArtistSources.isEmpty {
+                ContentUnavailableView(
+                    "歌手搜索暂不可用",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text("请检查网络后重试")
+                )
+                .frame(maxWidth: .infinity, minHeight: 200)
+            } else if model.artistResults.isEmpty {
+                ContentUnavailableView("未找到歌手", systemImage: "person.crop.circle")
+                    .frame(maxWidth: .infinity, minHeight: 200)
+            } else {
+                ForEach(model.visibleArtistResults, id: \.stableID) { artist in
+                    NavigationLink {
+                        ArtistDetailView(artist: artist, runtime: runtime)
+                    } label: {
+                        HStack(spacing: 14) {
+                            RemotePlaylistArtwork(urlString: artist.imageURL)
+                                .frame(width: 56, height: 56)
+                                .clipShape(Circle())
+                                .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
+                                .shadow(color: .black.opacity(0.18), radius: 5, y: 2)
 
-            ForEach(model.visibleArtistResults, id: \.stableID) { artist in
-                NavigationLink {
-                    ArtistDetailView(artist: artist, runtime: runtime)
-                } label: {
-                    HStack(spacing: 14) {
-                        RemotePlaylistArtwork(urlString: artist.imageURL)
-                            .frame(width: 56, height: 56)
-                            .clipShape(Circle())
-                            .overlay(Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1))
-                            .shadow(color: .black.opacity(0.18), radius: 5, y: 2)
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 6) {
+                                    Text(artist.name)
+                                        .font(.system(size: 16, weight: .bold))
+                                        .foregroundStyle(scheme.onSurface)
+                                        .lineLimit(1)
 
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 6) {
-                                Text(artist.name)
-                                    .font(.system(size: 16, weight: .bold))
-                                    .foregroundStyle(scheme.onSurface)
+                                    Text("歌手")
+                                        .font(.system(size: 10, weight: .semibold))
+                                        .foregroundStyle(scheme.primary)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 1.5)
+                                        .background(scheme.primary.opacity(0.12), in: Capsule())
+                                }
+
+                                Text(artistMetadata(artist))
+                                    .font(.caption)
+                                    .foregroundStyle(scheme.onSurfaceVariant)
                                     .lineLimit(1)
-
-                                Text("歌手")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundStyle(scheme.primary)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 1.5)
-                                    .background(scheme.primary.opacity(0.12), in: Capsule())
                             }
 
-                            Text(artistMetadata(artist))
-                                .font(.caption)
-                                .foregroundStyle(scheme.onSurfaceVariant)
-                                .lineLimit(1)
+                            Spacer(minLength: 8)
+
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(scheme.outline)
                         }
-
-                        Spacer(minLength: 8)
-
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(scheme.outline)
+                        .padding(.horizontal, 16)
+                        .frame(minHeight: 68)
+                        .contentShape(Rectangle())
                     }
-                    .padding(.horizontal, 16)
-                    .frame(minHeight: 68)
-                    .contentShape(Rectangle())
+                    .buttonStyle(.cellHighlight)
+                    .accessibilityIdentifier("search-artist-\(artist.stableID)")
                 }
-                .buttonStyle(.cellHighlight)
-                .accessibilityIdentifier("search-artist-\(artist.stableID)")
-            }
 
-            ForEach(model.artistSourceWarnings, id: \.self) { source in
-                artistWarning(source: source, isExpansion: false)
-            }
-
-            if model.isArtistResultsExpanded {
-                ForEach(model.artistExpansionWarnings, id: \.self) { source in
-                    artistWarning(source: source, isExpansion: true)
+                ForEach(model.artistSourceWarnings, id: \.self) { source in
+                    artistWarning(source: source, isExpansion: false)
                 }
+
+                if model.isArtistResultsExpanded {
+                    ForEach(model.artistExpansionWarnings, id: \.self) { source in
+                        artistWarning(source: source, isExpansion: true)
+                    }
+                }
+
+                artistExpansionFooter
             }
+        }
+    }
 
-            artistExpansionFooter
+    private var playlistsResultSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if model.isLoadingPlaylists || !model.hasLoadedPlaylists {
+                ProgressView("正在搜索歌单…")
+                    .frame(maxWidth: .infinity, minHeight: 120)
+                    .accessibilityIdentifier("search-playlist-loading")
+            } else if let errorMessage = model.playlistErrorMessage {
+                VStack(spacing: 12) {
+                    ContentUnavailableView(
+                        "歌单搜索暂不可用",
+                        systemImage: "exclamationmark.triangle",
+                        description: Text(errorMessage)
+                    )
+                    Button {
+                        Task { await model.retryPlaylistSearch() }
+                    } label: {
+                        Label("重试", systemImage: "arrow.clockwise")
+                            .font(.system(size: 14, weight: .medium))
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(scheme.primary)
+                    .accessibilityLabel("重试网易云歌单搜索")
+                }
+                .frame(maxWidth: .infinity, minHeight: 200)
+            } else if model.playlistResults.isEmpty {
+                ContentUnavailableView("未找到歌单", systemImage: "music.note.list")
+                    .frame(maxWidth: .infinity, minHeight: 200)
+            } else {
+                ForEach(model.playlistResults, id: \.key) { playlist in
+                    NavigationLink {
+                        RemotePlaylistDetailView(playlist: playlist, runtime: runtime)
+                    } label: {
+                        HStack(spacing: 14) {
+                            RemotePlaylistArtwork(urlString: playlist.img)
+                                .frame(width: 56, height: 56)
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
-            Rectangle().fill(scheme.outlineVariant).frame(height: 0.5).padding(.leading, 16)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(playlist.name)
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundStyle(scheme.onSurface)
+                                    .lineLimit(2)
+                                Text(playlist.author.isEmpty ? "网易云歌单" : playlist.author)
+                                    .font(.caption)
+                                    .foregroundStyle(scheme.onSurfaceVariant)
+                                    .lineLimit(1)
+                            }
 
-            if !model.results.isEmpty {
-                Text("歌曲")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(scheme.onSurface)
-                    .padding(.horizontal, 16)
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                            Spacer(minLength: 8)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(scheme.outline)
+                        }
+                        .padding(.horizontal, 16)
+                        .frame(minHeight: 76)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.cellHighlight)
+                    .accessibilityIdentifier("search-playlist-\(playlist.key)")
+                }
             }
         }
     }
@@ -759,6 +843,7 @@ private struct NCMSearchView: View {
         LazyVStack(spacing: 0) {
             ForEach(Array(values.enumerated()), id: \.offset) { index, value in
                 Button {
+                    model.selectedScope = .songs
                     model.query = value
                     submitSearch()
                 } label: {
@@ -789,6 +874,7 @@ private struct NCMSearchView: View {
     private func clearSearch() {
         model.cancelLiveSearch()
         model.query = ""
+        model.selectedScope = .songs
         model.queryChanged()
     }
 
@@ -837,6 +923,112 @@ struct RemotePlaylistArtwork: View {
 
 extension PlaylistSummary {
     var key: String { "\(source.rawValue):\(id)" }
+}
+
+struct RemotePlaylistDetailView: View {
+    let playlist: PlaylistSummary
+    private let runtime: SourceRuntime
+
+    @Environment(PlaybackService.self) private var playbackService
+    @Environment(\.m3Scheme) private var scheme
+    @Environment(\.dismiss) private var dismiss
+    @State private var model: HomeFreshFeedViewModel
+
+    init(playlist: PlaylistSummary, runtime: SourceRuntime) {
+        self.playlist = playlist
+        self.runtime = runtime
+        _model = State(initialValue: HomeFreshFeedViewModel(runtime: runtime))
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                Button { dismiss() } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 20, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("返回")
+                Spacer()
+                Text("网易云歌单")
+                    .font(.system(size: 17, weight: .bold))
+                Spacer()
+                Color.clear.frame(width: 44, height: 44)
+            }
+            .foregroundStyle(scheme.onSurface)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(spacing: 14) {
+                        RemotePlaylistArtwork(urlString: playlist.img)
+                            .frame(width: 88, height: 88)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(playlist.name)
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundStyle(scheme.onSurface)
+                                .lineLimit(3)
+                            Text(playlist.author.isEmpty ? "网易云" : playlist.author)
+                                .font(.subheadline)
+                                .foregroundStyle(scheme.onSurfaceVariant)
+                                .lineLimit(1)
+                            if let total = playlist.total, total > 0 {
+                                Text("\(total) 首歌曲")
+                                    .font(.caption)
+                                    .foregroundStyle(scheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                    .padding(16)
+
+                    if model.isLoading && model.tracks.isEmpty {
+                        ProgressView("正在加载歌单…")
+                            .frame(maxWidth: .infinity, minHeight: 120)
+                    } else if let errorMessage = model.errorMessage, model.tracks.isEmpty {
+                        ContentUnavailableView("歌单暂不可用", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
+                    } else if !model.tracks.isEmpty {
+                        Button {
+                            Task { await playbackService.replaceQueue(model.tracks) }
+                        } label: {
+                            Label("播放全部", systemImage: "play.fill")
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 8)
+
+                        ForEach(Array(model.tracks.enumerated()), id: \.element.musicID) { index, track in
+                            SongRow(
+                                track: track,
+                                trailing: .more,
+                                showDivider: index < model.tracks.count - 1,
+                                isCurrent: playbackService.queue.current?.musicID == track.musicID,
+                                isPlaying: playbackService.state == .playing,
+                                onPlay: { Task { await playbackService.replaceQueue(model.tracks, startingAt: index) } },
+                                onAction: {}
+                            )
+                            .onAppear {
+                                if index == model.tracks.count - 1 {
+                                    Task { await model.loadMoreIfNeeded() }
+                                }
+                            }
+                        }
+
+                        if model.isLoadingMore {
+                            ProgressView("正在加载更多…")
+                                .frame(maxWidth: .infinity, minHeight: 52)
+                        }
+                    }
+                }
+            }
+            .scrollIndicators(.hidden)
+        }
+        .background(scheme.appSurface.ignoresSafeArea())
+        .toolbar(.hidden, for: .navigationBar)
+        .navigationBarBackButtonHidden(true)
+        .task { await model.loadInitialIfNeeded(from: playlist) }
+    }
 }
 
 extension Track: Identifiable {

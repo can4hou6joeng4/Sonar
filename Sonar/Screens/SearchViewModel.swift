@@ -1,6 +1,14 @@
 import Foundation
 import Observation
 
+public enum SearchScope: String, CaseIterable, Identifiable, Sendable {
+    case songs = "歌曲"
+    case artists = "歌手"
+    case playlists = "歌单"
+
+    public var id: String { rawValue }
+}
+
 @MainActor
 @Observable
 final class SearchViewModel {
@@ -28,6 +36,11 @@ final class SearchViewModel {
         var artists: [ArtistSummary] { page?.list ?? [] }
     }
 
+    private struct PlaylistSourceResult: Sendable {
+        let page: PlaylistCatalogPage?
+        let errorMessage: String?
+    }
+
     private struct ArtistPaginationState: Sendable {
         var artists: [ArtistSummary]
         var total: Int
@@ -37,12 +50,18 @@ final class SearchViewModel {
     }
 
     var query = ""
+    var selectedScope: SearchScope = .songs
     var results: [Track] = []
     var artistResults: [ArtistSummary] = []
+    var playlistResults: [PlaylistSummary] = []
     var suggestions: [String] = []
+    private(set) var hasLoadedSongs = false
+    private(set) var hasLoadedArtists = false
+    private(set) var hasLoadedPlaylists = false
     var hotSearches = fallbackHotSearches
     var isLoading = false
     var isLoadingArtists = false
+    var isLoadingPlaylists = false
     var isLoadingSuggestions = false
     var isLoadingHotSearches = false
     var hasSearched = false
@@ -50,6 +69,7 @@ final class SearchViewModel {
     var failedSource: MusicSource?
     var isRetryingFailedSource = false
     var failedArtistSources: Set<MusicSource> = []
+    var playlistErrorMessage: String?
     var retryingArtistSources: Set<MusicSource> = []
     var isArtistResultsExpanded = false
     var isLoadingMoreArtists = false
@@ -164,12 +184,19 @@ final class SearchViewModel {
             activeSearchKeyword = nil
             isLoading = false
             isLoadingArtists = false
+            isLoadingPlaylists = false
+            hasLoadedSongs = false
+            hasLoadedArtists = false
+            hasLoadedPlaylists = false
             submittedKeyword = nil
+            selectedScope = .songs
         }
         guard !keyword.isEmpty else {
             suggestions = []
             results = []
             resetArtistResults()
+            resetPlaylistResults()
+            hasLoadedSongs = false
             errorMessage = nil
             failedSource = nil
             isRetryingFailedSource = false
@@ -177,17 +204,21 @@ final class SearchViewModel {
             retryingArtistSources = []
             hasSearched = false
             submittedKeyword = nil
+            selectedScope = .songs
             return
         }
         if keyword != submittedKeyword {
             results = []
             resetArtistResults()
+            resetPlaylistResults()
+            hasLoadedSongs = false
             errorMessage = nil
             failedSource = nil
             isRetryingFailedSource = false
             failedArtistSources = []
             retryingArtistSources = []
             hasSearched = false
+            selectedScope = .songs
         }
         guard keyword != submittedKeyword, keyword.count >= 2 else {
             return
@@ -233,7 +264,7 @@ final class SearchViewModel {
         liveSearchTask?.cancel()
     }
 
-    func search() async {
+    func search(scope: SearchScope? = nil) async {
         liveSearchTask?.cancel()
         let keyword = query.trimmingCharacters(in: .whitespacesAndNewlines)
         submittedSearchTask?.cancel()
@@ -247,6 +278,8 @@ final class SearchViewModel {
         guard !keyword.isEmpty else {
             results = []
             resetArtistResults()
+            resetPlaylistResults()
+            hasLoadedSongs = false
             errorMessage = nil
             failedSource = nil
             isRetryingFailedSource = false
@@ -254,18 +287,27 @@ final class SearchViewModel {
             retryingArtistSources = []
             isLoading = false
             isLoadingArtists = false
+            isLoadingPlaylists = false
             hasSearched = false
             activeSearchKeyword = nil
             submittedKeyword = nil
+            selectedScope = .songs
             return
         }
+        let targetScope = scope ?? selectedScope
         submittedKeyword = keyword
         activeSearchKeyword = keyword
         results = []
         resetArtistResults()
-        hasSearched = false
-        isLoading = true
-        isLoadingArtists = true
+        resetPlaylistResults()
+        hasLoadedSongs = false
+        hasLoadedArtists = false
+        hasLoadedPlaylists = false
+        hasSearched = true
+        selectedScope = targetScope
+        isLoading = targetScope == .songs
+        isLoadingArtists = targetScope == .artists
+        isLoadingPlaylists = targetScope == .playlists
         errorMessage = nil
         failedSource = nil
         isRetryingFailedSource = false
@@ -273,9 +315,14 @@ final class SearchViewModel {
         retryingArtistSources = []
 
         let task = Task {
-            async let songs: Void = loadSubmittedSongs(keyword, generation: generation)
-            async let artists: Void = loadSubmittedArtists(keyword, generation: generation)
-            _ = await (songs, artists)
+            switch targetScope {
+            case .songs:
+                await loadSubmittedSongs(keyword, generation: generation)
+            case .artists:
+                await loadSubmittedArtists(keyword, generation: generation)
+            case .playlists:
+                await loadSubmittedPlaylists(keyword, generation: generation)
+            }
         }
         submittedSearchTask = task
         await task.value
@@ -284,7 +331,28 @@ final class SearchViewModel {
         activeSearchKeyword = nil
     }
 
+    func loadScopeIfNeeded(_ scope: SearchScope) async {
+        guard let keyword = submittedKeyword, !keyword.isEmpty else { return }
+        let generation = searchGeneration
+        guard isCurrentSearch(generation, keyword: keyword) else { return }
+        switch scope {
+        case .songs:
+            if !hasLoadedSongs && !isLoading {
+                await loadSubmittedSongs(keyword, generation: generation)
+            }
+        case .artists:
+            if !hasLoadedArtists && !isLoadingArtists {
+                await loadSubmittedArtists(keyword, generation: generation)
+            }
+        case .playlists:
+            if !hasLoadedPlaylists && !isLoadingPlaylists {
+                await loadSubmittedPlaylists(keyword, generation: generation)
+            }
+        }
+    }
+
     private func loadSubmittedSongs(_ keyword: String, generation: Int) async {
+        isLoading = true
         async let wyResult = search(keyword, source: .wy)
         async let txResult = search(keyword, source: .tx)
         let sourceResults = await [wyResult, txResult]
@@ -295,11 +363,13 @@ final class SearchViewModel {
         }
         failedSource = results.isEmpty ? nil : songFailures.first?.0
         isLoading = false
+        hasLoadedSongs = true
         hasSearched = true
         updateSearchError()
     }
 
     private func loadSubmittedArtists(_ keyword: String, generation: Int) async {
+        isLoadingArtists = true
         let candidates = Self.candidateArtistKeywords(for: keyword)
         async let wyArtists = searchArtists(candidates: candidates, source: .wy, page: 1, limit: Self.artistPreviewLimit)
         async let txArtists = searchArtists(candidates: candidates, source: .tx, page: 1, limit: Self.artistPreviewLimit)
@@ -309,21 +379,43 @@ final class SearchViewModel {
         artistResults = rankedArtists(for: keyword)
         failedArtistSources = Set(sourceResults.filter { $0.errorMessage != nil }.map(\.source))
         isLoadingArtists = false
+        hasLoadedArtists = true
+        hasSearched = true
+        updateSearchError()
+    }
+
+    private func loadSubmittedPlaylists(_ keyword: String, generation: Int) async {
+        isLoadingPlaylists = true
+        let result = await searchPlaylists(keyword, source: .wy)
+        guard !Task.isCancelled, isCurrentSearch(generation, keyword: keyword) else { return }
+        playlistResults = PlaylistResultRanker.rank(result.page?.list ?? [], for: keyword)
+        playlistErrorMessage = result.errorMessage
+        isLoadingPlaylists = false
+        hasLoadedPlaylists = true
         hasSearched = true
         updateSearchError()
     }
 
     private func updateSearchError() {
-        // A still-pending section may produce usable results. Do not announce a
-        // whole-query failure or empty state before both sections have finished.
-        guard !isLoading, !isLoadingArtists, results.isEmpty, artistResults.isEmpty else {
-            errorMessage = nil
-            return
-        }
-        if !songFailures.isEmpty {
-            errorMessage = "搜索失败：\(songFailures.map(\.1).joined(separator: "；"))"
-        } else {
+        switch selectedScope {
+        case .songs:
+            guard !isLoading, results.isEmpty else {
+                errorMessage = nil
+                return
+            }
+            if !songFailures.isEmpty {
+                errorMessage = "搜索失败：\(songFailures.map(\.1).joined(separator: "；"))"
+            } else {
+                errorMessage = nil
+            }
+        case .artists:
+            guard !isLoadingArtists, artistResults.isEmpty else {
+                errorMessage = nil
+                return
+            }
             errorMessage = failedArtistSources.isEmpty ? nil : "歌手搜索暂不可用，请重试"
+        case .playlists:
+            errorMessage = playlistErrorMessage
         }
     }
 
@@ -468,6 +560,15 @@ final class SearchViewModel {
         }
     }
 
+    func retryPlaylistSearch() async {
+        guard let keyword = submittedKeyword,
+              query.trimmingCharacters(in: .whitespacesAndNewlines) == keyword,
+              !isLoadingPlaylists else { return }
+        let generation = searchGeneration
+        hasLoadedPlaylists = false
+        await loadSubmittedPlaylists(keyword, generation: generation)
+    }
+
     private func search(_ keyword: String, source: MusicSource) async -> SourceResult {
         do {
             return SourceResult(
@@ -530,6 +631,19 @@ final class SearchViewModel {
         return primaryResult
     }
 
+    private func searchPlaylists(_ keyword: String, source: MusicSource) async -> PlaylistSourceResult {
+        do {
+            return PlaylistSourceResult(
+                page: try await runtime.playlistSearch(keyword, source: source, page: 1),
+                errorMessage: nil
+            )
+        } catch is CancellationError {
+            return PlaylistSourceResult(page: nil, errorMessage: nil)
+        } catch {
+            return PlaylistSourceResult(page: nil, errorMessage: error.localizedDescription)
+        }
+    }
+
     private func searchArtists(
         _ keyword: String,
         source: MusicSource,
@@ -556,13 +670,12 @@ final class SearchViewModel {
 
     private func isCurrentSearch(_ generation: Int, keyword: String) -> Bool {
         generation == searchGeneration
-            && activeSearchKeyword == keyword
+            && (submittedKeyword == keyword || activeSearchKeyword == keyword)
             && query.trimmingCharacters(in: .whitespacesAndNewlines) == keyword
     }
 
     nonisolated func deduplicated(_ tracks: [Track]) -> [Track] {
-        var seen = Set<String>()
-        return tracks.filter { seen.insert($0.musicID).inserted }
+        SearchResultRanker.deduplicated(tracks)
     }
 
     nonisolated func deduplicated(_ artists: [ArtistSummary]) -> [ArtistSummary] {
@@ -577,6 +690,15 @@ final class SearchViewModel {
         isLoadingMoreArtists = false
         artistExpansionFailedSources = []
         retryingArtistExpansionSources = []
+        hasLoadedArtists = false
+        isLoadingArtists = false
+    }
+
+    private func resetPlaylistResults() {
+        playlistResults = []
+        playlistErrorMessage = nil
+        isLoadingPlaylists = false
+        hasLoadedPlaylists = false
     }
 
     private func makeArtistSourceStates(
@@ -670,6 +792,35 @@ enum ArtistResultRanker {
     }
 }
 
+enum PlaylistResultRanker {
+    static func rank(_ playlists: [PlaylistSummary], for query: String) -> [PlaylistSummary] {
+        let target = normalized(query)
+        return playlists.enumerated().sorted { lhs, rhs in
+            let leftScore = score(lhs.element, target: target)
+            let rightScore = score(rhs.element, target: target)
+            if leftScore != rightScore { return leftScore > rightScore }
+            return lhs.offset < rhs.offset
+        }.map(\.element)
+    }
+
+    private static func score(_ playlist: PlaylistSummary, target: String) -> Int {
+        let name = normalized(playlist.name)
+        let author = normalized(playlist.author)
+        let desc = normalized(playlist.desc ?? "")
+        var score = 0
+        if name == target { score += 1_200 }
+        else if !name.isEmpty && (name.contains(target) || target.contains(name)) { score += 900 }
+        if !author.isEmpty && author.contains(target) { score += 350 }
+        if !desc.isEmpty && desc.contains(target) { score += 180 }
+        return score
+    }
+
+    private static func normalized(_ value: String) -> String {
+        value.folding(options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive], locale: .current)
+            .filter { $0.isLetter || $0.isNumber }
+    }
+}
+
 enum SearchResultRanker {
     private static let artistSeparators = CharacterSet(charactersIn: "、&;/,，|")
     private static let asciiDerivativeMarkers = Set(["live", "dj", "cover", "remix", "montagem"])
@@ -679,7 +830,7 @@ enum SearchResultRanker {
 
     static func rank(_ tracks: [Track], for query: String) -> [Track] {
         let normalizedQuery = normalized(query)
-        return tracks.enumerated()
+        return deduplicated(tracks).enumerated()
             .map {
                 (
                     index: $0.offset,
@@ -692,6 +843,33 @@ enum SearchResultRanker {
                 return $0.index < $1.index
             }
             .map(\.track)
+    }
+
+    /// Treat the same title by the same artist as one logical result across
+    /// sources. NetEase is intentionally considered first so QQ does not
+    /// replace an equivalent NetEase result.
+    static func deduplicated(_ tracks: [Track]) -> [Track] {
+        let sourcePriority: [MusicSource: Int] = [.wy: 0, .tx: 1]
+        let ordered = tracks.enumerated().sorted {
+            let leftPriority = sourcePriority[$0.element.source, default: Int.max]
+            let rightPriority = sourcePriority[$1.element.source, default: Int.max]
+            if leftPriority != rightPriority { return leftPriority < rightPriority }
+            return $0.offset < $1.offset
+        }
+
+        var seen = Set<String>()
+        return ordered.compactMap { item in
+            let key = identityKey(for: item.element)
+            guard seen.insert(key).inserted else { return nil }
+            return item.element
+        }
+    }
+
+    static func identityKey(for track: Track) -> String {
+        let title = normalized(track.title)
+        let artist = normalized(track.artist)
+        guard !title.isEmpty, !artist.isEmpty else { return track.musicID }
+        return "\(title)|\(artist)"
     }
 
     private static func score(_ track: Track, query: String, rawQuery: String) -> Int {

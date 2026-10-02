@@ -350,6 +350,19 @@ public struct PlaylistCatalogPage: Codable, Equatable, Sendable {
         self.limit = limit
         self.source = source
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case list, total, page, limit, source
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        list = try container.decode([PlaylistSummary].self, forKey: .list)
+        total = try container.decodeIfPresent(Int.self, forKey: .total) ?? list.count
+        page = try container.decodeIfPresent(Int.self, forKey: .page) ?? 1
+        limit = try container.decodeIfPresent(Int.self, forKey: .limit) ?? max(list.count, 20)
+        source = try container.decode(MusicSource.self, forKey: .source)
+    }
 }
 
 public struct PlaylistDetailInfo: Codable, Equatable, Sendable {
@@ -416,6 +429,7 @@ public protocol SourceRuntime: Sendable {
     func picURL(_ track: Track) async throws -> URL
     func tipSearch(_ keyword: String) async throws -> [String]
     func hotSearch(source: MusicSource) async throws -> [String]
+    func playlistSearch(_ keyword: String, source: MusicSource, page: Int) async throws -> PlaylistCatalogPage
     func playlistCatalog(source: MusicSource, sortId: String, tagId: String?, page: Int) async throws -> PlaylistCatalogPage
     func playlistDetail(source: MusicSource, id: String, page: Int) async throws -> PlaylistDetail
     func searchArtists(_ keyword: String, source: MusicSource, page: Int) async throws -> ArtistSearchPage
@@ -433,6 +447,10 @@ public extension SourceRuntime {
 
     func hotSearch(source: MusicSource) async throws -> [String] {
         throw SourceError.source(message: "音源运行时不支持热门搜索")
+    }
+
+    func playlistSearch(_ keyword: String, source: MusicSource, page: Int = 1) async throws -> PlaylistCatalogPage {
+        throw SourceError.source(message: "音源运行时不支持歌单搜索")
     }
 
     func playlistCatalog(source: MusicSource, sortId: String, tagId: String? = nil, page: Int = 1) async throws -> PlaylistCatalogPage {

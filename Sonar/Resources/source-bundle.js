@@ -411,7 +411,6 @@ Files: adler32.js, constants.js, crc32.js, deflate.js, gzheader.js, inffast.js, 
 // 3. This notice may not be removed or altered from any source distribution.
 
 
-
 ===== esbuild =====
 MIT License
 
@@ -10210,6 +10209,18 @@ ${result.lyric}`;
       const result = await unwrapRequest(sdkFor(source).hotSearch.getList());
       if (!result || result.source !== source || !Array.isArray(result.list)) throw new Error("\u97F3\u6E90\u8FD4\u56DE\u70ED\u95E8\u641C\u7D22\u5F02\u5E38");
       return [...new Set(result.list.map((value) => String(value).trim()).filter(Boolean))];
+    },
+    async playlistSearch(source, keyword, page = 1, limit = 20) {
+      const sdk = sdkFor(source);
+      const normalizedPage = Math.max(1, Number(page));
+      const normalizedLimit = Math.max(1, Number(limit));
+      const result = await unwrapRequest(sdk.songList.search(String(keyword), normalizedPage, normalizedLimit));
+      if (!result || !Array.isArray(result.list)) throw new Error("\u97F3\u6E90\u8FD4\u56DE\u6B4C\u5355\u641C\u7D22\u7ED3\u679C\u5F02\u5E38");
+      return {
+        ...result,
+        page: normalizedPage,
+        limit: normalizedLimit
+      };
     },
     async playlistCatalog(source, sortId, tagId, page = 1) {
       const sdk = sdkFor(source);

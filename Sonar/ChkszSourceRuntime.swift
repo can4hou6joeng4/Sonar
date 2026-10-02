@@ -390,6 +390,10 @@ public final class FallbackSourceRuntime: SourceRuntime, @unchecked Sendable {
         try await primary.hotSearch(source: source)
     }
 
+    public func playlistSearch(_ keyword: String, source: MusicSource, page: Int) async throws -> PlaylistCatalogPage {
+        try await primary.playlistSearch(keyword, source: source, page: page)
+    }
+
     public func playlistCatalog(source: MusicSource, sortId: String, tagId: String?, page: Int) async throws -> PlaylistCatalogPage {
         try await primary.playlistCatalog(source: source, sortId: sortId, tagId: tagId, page: page)
     }

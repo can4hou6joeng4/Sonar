@@ -123,6 +123,13 @@ public final class JavaScriptSourceRuntime: SourceRuntime, @unchecked Sendable {
         try JSONDecoder().decode([String].self, from: await invokeData("hotSearch", arguments: [source.rawValue]))
     }
 
+    public func playlistSearch(_ keyword: String, source: MusicSource, page: Int = 1) async throws -> PlaylistCatalogPage {
+        try JSONDecoder().decode(
+            PlaylistCatalogPage.self,
+            from: await invokeData("playlistSearch", arguments: [source.rawValue, keyword, page])
+        )
+    }
+
     public func playlistCatalog(
         source: MusicSource,
         sortId: String,
