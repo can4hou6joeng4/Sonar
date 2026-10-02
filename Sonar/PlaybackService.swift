@@ -103,6 +103,7 @@ public final class PlaybackService {
     private var interruptionObserver: NSObjectProtocol?
     private var routeChangeObserver: NSObjectProtocol?
     private var silenceHintObserver: NSObjectProtocol?
+    private var didBecomeActiveObserver: NSObjectProtocol?
     public private(set) var shouldResumeAfterInterruption = false
     private var remoteCommandTokens: [(MPRemoteCommand, Any)] = []
     private var nowPlayingArtwork: MPMediaItemArtwork?
@@ -162,6 +163,7 @@ public final class PlaybackService {
             if let interruptionObserver { NotificationCenter.default.removeObserver(interruptionObserver) }
             if let routeChangeObserver { NotificationCenter.default.removeObserver(routeChangeObserver) }
             if let silenceHintObserver { NotificationCenter.default.removeObserver(silenceHintObserver) }
+            if let didBecomeActiveObserver { NotificationCenter.default.removeObserver(didBecomeActiveObserver) }
             for (command, token) in remoteCommandTokens { command.removeTarget(token) }
         }
     }
@@ -170,7 +172,8 @@ public final class PlaybackService {
         _ tracks: [Track],
         startingAt index: Int? = nil,
         autoplay: Bool = true,
-        activePlaylistID: UUID? = nil
+        activePlaylistID: UUID? = nil,
+        preservingPlayedMusicIDs: Set<String> = []
     ) async {
         self.activePlaylistID = activePlaylistID
         consecutiveAutoplayFailures = 0
@@ -187,7 +190,11 @@ public final class PlaybackService {
             startIndex = 0
         }
 
-        queue.replace(with: tracks, startingAt: startIndex)
+        queue.replace(
+            with: tracks,
+            startingAt: startIndex,
+            preservingPlayedMusicIDs: preservingPlayedMusicIDs
+        )
         await loadCurrent(autoplay: autoplay)
     }
 
@@ -199,7 +206,10 @@ public final class PlaybackService {
     ) async -> Bool {
         guard !tracks.isEmpty else { return false }
         consecutiveAutoplayFailures = 0
+        let sameQueue = queue.hasSameTracks(as: tracks)
         setPlaybackMode(.shuffle)
+
+        var preservedPlayedMusicIDs = sameQueue ? queue.shuffledPlayedMusicIDs : []
 
         let startIndex: Int
         if let index, tracks.indices.contains(index) {
@@ -209,10 +219,19 @@ public final class PlaybackService {
             let currentIndex = tracks.firstIndex(where: { $0.musicID == currentTrack?.musicID })
             let candidateIndices: [Int]
             if let currentIndex, tracks.count > 1 {
-                let filtered = tracks.indices.filter { $0 != currentIndex }
+                let filtered = tracks.indices.filter {
+                    $0 != currentIndex
+                        && !preservedPlayedMusicIDs.contains(tracks[$0].musicID)
+                }
                 candidateIndices = filtered.isEmpty ? Array(tracks.indices) : filtered
             } else {
-                candidateIndices = Array(tracks.indices)
+                let filtered = tracks.indices.filter {
+                    !preservedPlayedMusicIDs.contains(tracks[$0].musicID)
+                }
+                candidateIndices = filtered.isEmpty ? Array(tracks.indices) : filtered
+            }
+            if candidateIndices.allSatisfy({ preservedPlayedMusicIDs.contains(tracks[$0].musicID) }) {
+                preservedPlayedMusicIDs.removeAll()
             }
             let offset = randomIndex(0..<candidateIndices.count)
             startIndex = candidateIndices.indices.contains(offset) ? candidateIndices[offset] : 0
@@ -220,7 +239,13 @@ public final class PlaybackService {
             startIndex = 0
         }
 
-        await replaceQueue(tracks, startingAt: startIndex, autoplay: true, activePlaylistID: activePlaylistID)
+        await replaceQueue(
+            tracks,
+            startingAt: startIndex,
+            autoplay: true,
+            activePlaylistID: activePlaylistID,
+            preservingPlayedMusicIDs: preservedPlayedMusicIDs
+        )
         return true
     }
 
@@ -647,9 +672,7 @@ public final class PlaybackService {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            Task { @MainActor [weak self] in
-                self?.handleAudioSessionInterruption(notification)
-            }
+            self?.handleAudioSessionInterruption(notification)
         }
 
         routeChangeObserver = NotificationCenter.default.addObserver(
@@ -657,9 +680,7 @@ public final class PlaybackService {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            Task { @MainActor [weak self] in
-                self?.handleAudioSessionRouteChange(notification)
-            }
+            self?.handleAudioSessionRouteChange(notification)
         }
 
         silenceHintObserver = NotificationCenter.default.addObserver(
@@ -667,9 +688,15 @@ public final class PlaybackService {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            Task { @MainActor [weak self] in
-                self?.handleAudioSessionSilenceHint(notification)
-            }
+            self?.handleAudioSessionSilenceHint(notification)
+        }
+
+        didBecomeActiveObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleAppDidBecomeActive()
         }
     }
 
@@ -684,6 +711,9 @@ public final class PlaybackService {
         case .began:
             intentRevision += 1
             let wasActive = playbackRequested
+                || state == .playing
+                || player.timeControlStatus == .playing
+                || player.rate > 0
             if wasActive {
                 shouldResumeAfterInterruption = true
             }
@@ -694,7 +724,6 @@ public final class PlaybackService {
 
         case .ended:
             guard shouldResumeAfterInterruption else { return }
-            shouldResumeAfterInterruption = false
             scheduleInterruptionResume()
 
         @unknown default:
@@ -726,6 +755,9 @@ public final class PlaybackService {
         case .begin:
             intentRevision += 1
             let wasActive = playbackRequested
+                || state == .playing
+                || player.timeControlStatus == .playing
+                || player.rate > 0
             if wasActive {
                 shouldResumeAfterInterruption = true
                 playbackRequested = false
@@ -735,11 +767,15 @@ public final class PlaybackService {
             }
         case .end:
             guard shouldResumeAfterInterruption else { return }
-            shouldResumeAfterInterruption = false
             scheduleInterruptionResume()
         @unknown default:
             break
         }
+    }
+
+    private func handleAppDidBecomeActive() {
+        guard shouldResumeAfterInterruption else { return }
+        scheduleInterruptionResume()
     }
 
     private func scheduleInterruptionResume() {
@@ -753,19 +789,29 @@ public final class PlaybackService {
     private func resumeAfterInterruption(generation: Int, revision: Int) async {
         guard queue.current != nil else { return }
         var activated = false
-        for attempt in 0..<3 {
+        for attempt in 0..<4 {
             guard !Task.isCancelled, recoveryGate.isCurrent(generation), intentRevision == revision else { return }
             do {
                 try configureAudioSession()
                 activated = true
                 break
             } catch {
-                if attempt < 2 {
-                    try? await Task.sleep(nanoseconds: 200_000_000)
+                if attempt < 3 {
+                    let delays: [UInt64] = [60_000_000, 180_000_000, 350_000_000]
+                    try? await Task.sleep(nanoseconds: delays[attempt])
                 }
             }
         }
-        if activated, !Task.isCancelled, recoveryGate.isCurrent(generation), intentRevision == revision {
+        guard activated, !Task.isCancelled, recoveryGate.isCurrent(generation), intentRevision == revision else { return }
+        shouldResumeAfterInterruption = false
+
+        playbackRequested = true
+        if let currentItem = player.currentItem, currentItem.status == .readyToPlay {
+            state = .playing
+            player.playImmediately(atRate: 1.0)
+            synchronizePlaybackState()
+            updateNowPlaying()
+        } else {
             await play()
         }
     }
@@ -940,6 +986,7 @@ public final class PlaybackService {
                       notification.object as? AVPlayerItem === player.currentItem,
                       playbackRequested else { return }
                 if case .failed = state { return }
+                if shouldResumeAfterInterruption { return }
                 state = .loading
                 updateNowPlaying()
             }
@@ -953,6 +1000,14 @@ public final class PlaybackService {
             Task { @MainActor [weak self] in
                 guard let self, notification.object as? AVPlayerItem === player.currentItem else { return }
                 guard let item = player.currentItem else { return }
+                let error = notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error
+                if shouldResumeAfterInterruption || isInterruptionError(error) {
+                    shouldResumeAfterInterruption = true
+                    state = .paused
+                    player.pause()
+                    updateNowPlaying()
+                    return
+                }
                 await handlePlaybackFailure(
                     of: item,
                     generation: recoveryGate.generation,
@@ -960,6 +1015,23 @@ public final class PlaybackService {
                 )
             }
         }
+    }
+
+    private func isInterruptionError(_ error: Error?) -> Bool {
+        guard let error = error as NSError? else { return false }
+        if error.domain == AVFoundationErrorDomain {
+            if error.code == AVError.sessionWasInterrupted.rawValue
+                || error.code == AVError.operationNotAllowed.rawValue {
+                return true
+            }
+        }
+        if let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError {
+            if isInterruptionError(underlying) { return true }
+        }
+        if error.domain == NSOSStatusErrorDomain && (error.code == 560557684 || error.code == 561017449) {
+            return true
+        }
+        return false
     }
 
     func synchronizePlaybackState() {
@@ -980,8 +1052,15 @@ public final class PlaybackService {
         } else if player.timeControlStatus == .waitingToPlayAtSpecifiedRate {
             state = .loading
         } else if player.timeControlStatus == .paused {
-            if player.error != nil || item.error != nil {
-                state = .failed(playbackFailureDescription(for: item, fallback: "音频播放中断"))
+            if shouldResumeAfterInterruption {
+                state = .paused
+            } else if let error = player.error ?? item.error {
+                if isInterruptionError(error) {
+                    shouldResumeAfterInterruption = true
+                    state = .paused
+                } else {
+                    state = .failed(playbackFailureDescription(for: item, fallback: "音频播放中断"))
+                }
             } else {
                 state = .loading
             }

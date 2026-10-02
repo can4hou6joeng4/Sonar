@@ -16,6 +16,7 @@ public struct PlaybackQueue: Sendable, Equatable {
     private var currentEntryID: UUID?
     private var history: [UUID] = []
     private var forwardHistory: [UUID] = []
+    private var playedMusicIDs: Set<String> = []
     private var isShuffled = false
     private let randomIndex: @Sendable (Range<Int>) -> Int
 
@@ -37,6 +38,7 @@ public struct PlaybackQueue: Sendable, Equatable {
             && lhs.currentEntryID == rhs.currentEntryID
             && lhs.history == rhs.history
             && lhs.forwardHistory == rhs.forwardHistory
+            && lhs.playedMusicIDs == rhs.playedMusicIDs
             && lhs.isShuffled == rhs.isShuffled
     }
 
@@ -57,6 +59,10 @@ public struct PlaybackQueue: Sendable, Equatable {
               let currentIndex = effectiveEntries.firstIndex(where: { $0.id == currentEntryID }) else {
             return effectiveEntries.first?.track
         }
+        if isShuffled,
+           let nextID = nextUnplayedID(after: currentIndex) {
+            return effectiveEntries.first(where: { $0.id == nextID })?.track
+        }
         let nextIndex = currentIndex + 1
         if effectiveEntries.indices.contains(nextIndex) {
             return effectiveEntries[nextIndex].track
@@ -66,18 +72,38 @@ public struct PlaybackQueue: Sendable, Equatable {
 
     public var shuffleEnabled: Bool { isShuffled }
 
-    public mutating func replace(with tracks: [Track], startingAt index: Int = 0) {
+    public var shuffledPlayedMusicIDs: Set<String> { playedMusicIDs }
+
+    public func hasSameTracks(as tracks: [Track]) -> Bool {
+        Set(canonicalEntries.map { $0.track.musicID }) == Set(tracks.map(\.musicID))
+    }
+
+    public mutating func replace(
+        with tracks: [Track],
+        startingAt index: Int = 0,
+        preservingPlayedMusicIDs preservedIDs: Set<String> = []
+    ) {
         let entries = tracks.map { Entry(track: $0) }
         canonicalEntries = entries
         history.removeAll()
         forwardHistory.removeAll()
         currentEntryID = entries.indices.contains(index) ? entries[index].id : nil
+        let validMusicIDs = Set(entries.map { $0.track.musicID })
+        playedMusicIDs = preservedIDs.intersection(validMusicIDs)
+        if let currentEntryID,
+           let current = entries.first(where: { $0.id == currentEntryID }) {
+            playedMusicIDs.insert(current.track.musicID)
+        }
         effectiveEntries = isShuffled ? shuffledCycle(anchoredAt: currentEntryID) : entries
     }
 
     public mutating func setShuffled(_ shuffled: Bool) {
         guard shuffled != isShuffled else { return }
         isShuffled = shuffled
+        if let currentEntryID,
+           let current = canonicalEntries.first(where: { $0.id == currentEntryID }) {
+            playedMusicIDs.insert(current.track.musicID)
+        }
         effectiveEntries = shuffled ? shuffledCycle(anchoredAt: currentEntryID) : canonicalEntries
         forwardHistory.removeAll()
         pruneNavigationState()
@@ -171,11 +197,11 @@ public struct PlaybackQueue: Sendable, Equatable {
         }
 
         let targetID: UUID?
-        if effectiveEntries.indices.contains(currentIndex + 1) {
+        if isShuffled {
+            targetID = nextUnplayedID(after: currentIndex)
+                ?? startNextShuffleCycle(from: currentEntryID)
+        } else if effectiveEntries.indices.contains(currentIndex + 1) {
             targetID = effectiveEntries[currentIndex + 1].id
-        } else if isShuffled, effectiveEntries.count > 1 {
-            effectiveEntries = shuffledCycle(anchoredAt: currentEntryID)
-            targetID = effectiveEntries.dropFirst().first?.id
         } else if wrapping {
             targetID = effectiveEntries.first?.id
         } else {
@@ -213,7 +239,33 @@ public struct PlaybackQueue: Sendable, Equatable {
             history.append(currentEntryID)
         }
         currentEntryID = targetID
+        if let target = effectiveEntries.first(where: { $0.id == targetID }) {
+            playedMusicIDs.insert(target.track.musicID)
+        }
         if clearForward { forwardHistory.removeAll() }
+    }
+
+    private func nextUnplayedID(after currentIndex: Int) -> UUID? {
+        guard !effectiveEntries.isEmpty else { return nil }
+        for offset in 1...effectiveEntries.count {
+            let index = (currentIndex + offset) % effectiveEntries.count
+            let entry = effectiveEntries[index]
+            if !playedMusicIDs.contains(entry.track.musicID) {
+                return entry.id
+            }
+        }
+        return nil
+    }
+
+    private mutating func startNextShuffleCycle(from currentID: UUID) -> UUID? {
+        guard effectiveEntries.count > 1 else { return nil }
+        if let current = effectiveEntries.first(where: { $0.id == currentID }) {
+            playedMusicIDs = [current.track.musicID]
+        } else {
+            playedMusicIDs.removeAll()
+        }
+        effectiveEntries = shuffledCycle(anchoredAt: currentID)
+        return effectiveEntries.dropFirst().first?.id
     }
 
     private func shuffledCycle(anchoredAt currentID: UUID?) -> [Entry] {
@@ -222,10 +274,15 @@ public struct PlaybackQueue: Sendable, Equatable {
             return shuffled(canonicalEntries)
         }
         let current = canonicalEntries[currentIndex]
-        let remaining = canonicalEntries.filter { $0.id != currentID }
+        let remaining = canonicalEntries.filter {
+            $0.id != currentID && !playedMusicIDs.contains($0.track.musicID)
+        }
         let naturalContinuation = Array(canonicalEntries.dropFirst(currentIndex + 1))
             + Array(canonicalEntries.prefix(currentIndex))
-        return [current] + shuffled(remaining, avoiding: naturalContinuation)
+        let played = canonicalEntries.filter {
+            $0.id != currentID && playedMusicIDs.contains($0.track.musicID)
+        }
+        return [current] + shuffled(remaining, avoiding: naturalContinuation) + played
     }
 
     private func shuffled(_ entries: [Entry], avoiding naturalOrder: [Entry]? = nil) -> [Entry] {
@@ -264,6 +321,7 @@ public struct PlaybackQueue: Sendable, Equatable {
         let validIDs = Set(canonicalEntries.map(\.id))
         history.removeAll { !validIDs.contains($0) }
         forwardHistory.removeAll { !validIDs.contains($0) }
+        playedMusicIDs = Set(canonicalEntries.map { $0.track.musicID }).intersection(playedMusicIDs)
         if let currentEntryID, !validIDs.contains(currentEntryID) {
             self.currentEntryID = effectiveEntries.first?.id
         }
