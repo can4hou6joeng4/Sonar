@@ -4,6 +4,7 @@ extension PlaybackService.PlaybackMode {
     var title: String {
         switch self {
         case .sequence: "列表循环"
+        case .playInOrder: "顺序播放"
         case .shuffle: "随机播放"
         case .repeatOne: "单曲循环"
         }
@@ -12,6 +13,7 @@ extension PlaybackService.PlaybackMode {
     var systemImage: String {
         switch self {
         case .sequence: "repeat"
+        case .playInOrder: "arrow.right"
         case .shuffle: "shuffle"
         case .repeatOne: "repeat.1"
         }
@@ -19,9 +21,10 @@ extension PlaybackService.PlaybackMode {
 
     var next: Self {
         switch self {
-        case .sequence: .repeatOne
-        case .repeatOne: .shuffle
-        case .shuffle: .sequence
+        case .shuffle: .repeatOne
+        case .repeatOne: .playInOrder
+        case .playInOrder: .sequence
+        case .sequence: .shuffle
         }
     }
 }

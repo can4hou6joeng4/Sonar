@@ -1,6 +1,5 @@
 import Foundation
 import CryptoKit
-import UIKit
 import ImageIO
 
 public protocol ArtworkHTTPClient: Sendable {
@@ -48,7 +47,7 @@ public actor ArtworkService {
     }
 
     private struct MemoryEntry {
-        let image: UIImage
+        let image: PlatformImage
         let cost: Int
         let expiresAt: Date
         var access: UInt64
@@ -57,7 +56,7 @@ public actor ArtworkService {
     private struct Pending {
         let id: UUID
         let task: Task<Void, Never>
-        var waiters: [UUID: CheckedContinuation<UIImage, Error>]
+        var waiters: [UUID: CheckedContinuation<PlatformImage, Error>]
     }
 
     private struct BackgroundPending {
@@ -106,7 +105,7 @@ public actor ArtworkService {
         }
     }
 
-    public func image(for track: Track, now: Date = Date()) async throws -> UIImage {
+    public func image(for track: Track, now: Date = Date()) async throws -> PlatformImage {
         try Task.checkCancellation()
         let key = track.musicID
         trimMemory(now: now)
@@ -136,7 +135,7 @@ public actor ArtworkService {
         }
 
         let waiterID = UUID()
-        let image: UIImage = try await withTaskCancellationHandler {
+        let image: PlatformImage = try await withTaskCancellationHandler {
             try Task.checkCancellation()
             return try await withCheckedThrowingContinuation { continuation in
                 if pending[key] != nil {
@@ -208,7 +207,7 @@ public actor ArtworkService {
         }
     }
 
-    private func finish(key: String, requestID: UUID, result: Result<UIImage, Error>, now: Date) {
+    private func finish(key: String, requestID: UUID, result: Result<PlatformImage, Error>, now: Date) {
         guard let request = pending[key], request.id == requestID else { return }
         pending[key] = nil
         if case let .success(image) = result {
@@ -255,7 +254,7 @@ public actor ArtworkService {
     private func finishBackground(
         key: String,
         requestID: UUID,
-        result: Result<UIImage, Error>,
+        result: Result<PlatformImage, Error>,
         now: Date
     ) {
         guard backgroundPending[key]?.id == requestID else { return }
@@ -271,10 +270,10 @@ public actor ArtworkService {
         }
     }
 
-    private func persist(_ image: UIImage, key: String, at now: Date) {
+    private func persist(_ image: PlatformImage, key: String, at now: Date) {
         // Persist the downsampled image, not the original full-resolution response.
         if ttl > 0, limits.diskBytes > 0,
-           let data = image.jpegData(compressionQuality: 0.9), data.count <= limits.diskBytes {
+           let data = image.sonarJPEGData(compressionQuality: 0.9), data.count <= limits.diskBytes {
             let url = cacheURL(for: key)
             do {
                 try data.write(to: url, options: .atomic)
@@ -292,9 +291,9 @@ public actor ArtworkService {
         )
     }
 
-    private func insertMemory(_ image: UIImage, key: String, expiresAt: Date, now: Date) {
+    private func insertMemory(_ image: PlatformImage, key: String, expiresAt: Date, now: Date) {
         removeMemory(key)
-        guard let cgImage = image.cgImage else { return }
+        guard let cgImage = image.sonarCGImage else { return }
         let cost = cgImage.bytesPerRow * cgImage.height
         guard cost <= limits.memoryBytes, expiresAt > now else { return }
         access &+= 1
@@ -315,7 +314,7 @@ public actor ArtworkService {
         if let old = memoryCache.removeValue(forKey: key) { memoryBytes -= old.cost }
     }
 
-    private static func downsample(_ data: Data, maximumPixelDimension: Int) -> UIImage? {
+    private static func downsample(_ data: Data, maximumPixelDimension: Int) -> PlatformImage? {
         guard let source = CGImageSourceCreateWithData(data as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
               let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -323,7 +322,7 @@ public actor ArtworkService {
                 kCGImageSourceShouldCacheImmediately: true,
                 kCGImageSourceThumbnailMaxPixelSize: maximumPixelDimension,
               ] as CFDictionary) else { return nil }
-        return UIImage(cgImage: image)
+        return PlatformImage.sonarImage(cgImage: image)
     }
 
     private static func trimDisk(directory: URL, limit: Int) {

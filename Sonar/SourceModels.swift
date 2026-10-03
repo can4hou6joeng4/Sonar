@@ -481,3 +481,11 @@ public extension SourceRuntime {
         throw SourceError.source(message: "音源运行时不支持专辑曲目")
     }
 }
+
+extension PlaylistSummary {
+    var key: String { "\(source.rawValue):\(id)" }
+}
+
+extension Track: Identifiable {
+    public var id: String { musicID }
+}

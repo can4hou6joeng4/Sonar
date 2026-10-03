@@ -2,7 +2,12 @@ import AVFoundation
 import Foundation
 import MediaPlayer
 import Observation
+import OSLog
+#if os(macOS)
+import AppKit
+#else
 import UIKit
+#endif
 
 enum PlaybackFailureDiagnostics {
     static func sanitizedDetail(_ value: String?) -> String? {
@@ -63,6 +68,7 @@ public final class PlaybackService {
         case sequence = "listLoop"
         case repeatOne
         case shuffle
+        case playInOrder
     }
 
     /// 切换音质的结果。界面据此给出不同提示，不允许「点了没反应」。
@@ -75,6 +81,19 @@ public final class PlaybackService {
 
     private static let preferredQualityKey = "preferredPlaybackQuality"
     private static let playbackModeKey = "playbackMode"
+    private static let volumeKey = "macPlaybackVolume"
+
+    /// App volume only; the Mac system output volume is left to the user.
+    public private(set) var volume: Double
+
+    public func setVolume(_ value: Double) {
+        guard value.isFinite else { return }
+        volume = min(1, max(0, value))
+        player.volume = Float(volume)
+        #if os(macOS)
+        defaults.set(volume, forKey: Self.volumeKey)
+        #endif
+    }
 
     public private(set) var queue: PlaybackQueue
     public private(set) var activePlaylistID: UUID?
@@ -109,15 +128,50 @@ public final class PlaybackService {
     private var nowPlayingArtwork: MPMediaItemArtwork?
     private var currentMediaHost: String?
     private var recoveryGate = PlaybackRecoveryGate()
+    #if os(iOS)
     private var transitionBackgroundTaskID: UIBackgroundTaskIdentifier = .invalid
+    private var isTransitionInProgress: Bool { transitionBackgroundTaskID != .invalid }
+    #else
+    private var isTransitionInProgress = false
+    #endif
     private var consecutiveAutoplayFailures = 0
     private let maxConsecutiveAutoplaySkips = 3
     private var hasPrefetchedUpcomingForCurrentTrack = false
-    private var preloadedNextURL: (musicID: String, url: URL)?
-    private var prefetchTask: Task<Void, Never>?
+    private struct UpcomingResolution {
+        let id = UUID()
+        let musicID: String
+        let quality: Quality
+        let task: Task<URL, Error>
+    }
+    private var upcomingResolution: UpcomingResolution?
+    private var activeURLResolutionTask: Task<URL, Error>?
+    private var mediaPreparationTask: Task<Void, Never>?
+    private var preparedNext: (id: UUID, item: AVPlayerItem)?
+    private var preparedStatusObservation: NSKeyValueObservation?
+    private var preparedBufferObservation: NSKeyValueObservation?
+    private let logger = Logger(subsystem: "cn.bobochang.sonar", category: "PlaybackTransition")
+
+    struct TransitionTiming {
+        let id: Int
+        let startedAt: TimeInterval
+        var reusedPreparedItem = false
+        var resolutionMilliseconds: Double?
+        var readyMilliseconds: Double?
+        var playingMilliseconds: Double?
+    }
+    private(set) var lastTransitionTiming: TransitionTiming?
+    private var measuredItem: AVPlayerItem?
+
+    private static func makePlayer() -> AVPlayer {
+        #if os(macOS)
+        return AVQueuePlayer()
+        #else
+        return AVPlayer()
+        #endif
+    }
 
     public init(
-        player: AVPlayer = AVPlayer(),
+        player: AVPlayer? = nil,
         resolver: PlaybackURLResolving = PlaybackURLResolver(),
         defaults: UserDefaults = .standard,
         randomIndex: @escaping @Sendable (Range<Int>) -> Int = { Int.random(in: $0) },
@@ -128,7 +182,19 @@ public final class PlaybackService {
             try await Task.sleep(for: .milliseconds(400))
         }
     ) {
-        self.player = player
+        self.player = player ?? Self.makePlayer()
+        let player = self.player
+        // Keep queue ownership in PlaybackService. The next item buffers in
+        // AVQueuePlayer, but only our end handler may advance it (mode/pause win).
+        if player is AVQueuePlayer { player.actionAtItemEnd = .pause }
+        #if os(macOS)
+        let restoredVolume = (defaults.object(forKey: Self.volumeKey) as? NSNumber)?.doubleValue ?? Double(player.volume)
+        let boundedVolume = restoredVolume.isFinite ? min(1, max(0, restoredVolume)) : 1
+        volume = boundedVolume
+        player.volume = Float(boundedVolume)
+        #else
+        volume = Double(player.volume)
+        #endif
         self.resolver = resolver
         self.defaults = defaults
         self.recoveryDelay = recoveryDelay
@@ -152,6 +218,11 @@ public final class PlaybackService {
 
     deinit {
         MainActor.assumeIsolated {
+            upcomingResolution?.task.cancel()
+            activeURLResolutionTask?.cancel()
+            mediaPreparationTask?.cancel()
+            preparedStatusObservation?.invalidate()
+            preparedBufferObservation?.invalidate()
             endTransitionBackgroundTask()
             removeWidgetNotifications()
             if let timeObserver { player.removeTimeObserver(timeObserver) }
@@ -177,8 +248,7 @@ public final class PlaybackService {
     ) async {
         self.activePlaylistID = activePlaylistID
         consecutiveAutoplayFailures = 0
-        preloadedNextURL = nil
-        prefetchTask?.cancel()
+        discardUpcoming()
         shouldResumeAfterInterruption = false
 
         let startIndex: Int
@@ -252,6 +322,7 @@ public final class PlaybackService {
     public func onTrackAddedToPlaylist(_ track: Track, playlistID: UUID) {
         guard activePlaylistID == playlistID else { return }
         guard !queue.tracks.contains(where: { $0.musicID == track.musicID }) else { return }
+        defer { prefetchUpcomingTrackIfNeeded() }
 
         if playbackMode == .shuffle {
             if let currentIndex = queue.currentIndex {
@@ -269,6 +340,7 @@ public final class PlaybackService {
         guard let index = queue.tracks.firstIndex(where: { $0.musicID == track.musicID }) else { return }
         if queue.currentIndex != index {
             queue.remove(at: index)
+            prefetchUpcomingTrackIfNeeded()
         }
     }
 
@@ -283,6 +355,7 @@ public final class PlaybackService {
             return true
         }
         queue.append(track)
+        prefetchUpcomingTrackIfNeeded()
         return true
     }
 
@@ -292,6 +365,7 @@ public final class PlaybackService {
             return
         }
         queue.insert(track, at: currentIndex + 1)
+        prefetchUpcomingTrackIfNeeded()
     }
 
     public func play() async {
@@ -308,6 +382,7 @@ public final class PlaybackService {
             state = .loading
             player.play()
             synchronizePlaybackState()
+            prefetchUpcomingTrackIfNeeded()
             updateNowPlaying()
         } catch {
             playbackRequested = false
@@ -348,6 +423,8 @@ public final class PlaybackService {
         playbackMode = mode
         defaults.set(mode.rawValue, forKey: Self.playbackModeKey)
         queue.setShuffled(mode == .shuffle)
+        logger.info("mode_changed mode=\(mode.rawValue, privacy: .public)")
+        prefetchUpcomingTrackIfNeeded()
     }
 
     public func seek(to seconds: TimeInterval) async {
@@ -363,8 +440,9 @@ public final class PlaybackService {
     public func next() async {
         beginTransitionBackgroundTask()
         consecutiveAutoplayFailures = 0
-        guard queue.advance(wrapping: true) != nil else {
-            endTransitionBackgroundTask()
+        guard queue.advance(wrapping: playbackMode != .playInOrder) != nil else {
+            if playbackMode == .playInOrder { pause() }
+            else { endTransitionBackgroundTask() }
             return
         }
         await loadCurrent(autoplay: true)
@@ -373,7 +451,7 @@ public final class PlaybackService {
     public func previous() async {
         beginTransitionBackgroundTask()
         consecutiveAutoplayFailures = 0
-        guard queue.retreat(wrapping: playbackMode != .shuffle) != nil else {
+        guard queue.retreat(wrapping: playbackMode == .sequence || playbackMode == .repeatOne) != nil else {
             endTransitionBackgroundTask()
             await seek(to: 0)
             return
@@ -390,20 +468,24 @@ public final class PlaybackService {
 
     public func moveQueueItems(fromOffsets: IndexSet, toOffset: Int) {
         queue.move(fromOffsets: fromOffsets, toOffset: toOffset)
+        prefetchUpcomingTrackIfNeeded()
     }
 
     public func insertQueueItem(_ track: Track, at index: Int) {
         queue.insert(track, at: index)
+        prefetchUpcomingTrackIfNeeded()
     }
 
     public func removeQueueItem(at index: Int) async {
         let removedCurrent = queue.currentIndex == index
         _ = queue.remove(at: index)
         if removedCurrent { await loadCurrent(autoplay: playbackRequested) }
+        else { prefetchUpcomingTrackIfNeeded() }
     }
 
     public func clearUpcoming() {
         queue.clearUpcoming()
+        prefetchUpcomingTrackIfNeeded()
     }
 
     func handlePlaybackEnded(of item: AVPlayerItem) async {
@@ -421,6 +503,12 @@ public final class PlaybackService {
         consecutiveAutoplayFailures = 0
 
         switch playbackMode {
+        case .playInOrder:
+            guard queue.advance(wrapping: false) != nil else {
+                pause()
+                return
+            }
+            await loadCurrent(autoplay: true)
         case .sequence, .shuffle:
             guard queue.tracks.count > 1 else {
                 await restartCurrent()
@@ -436,15 +524,17 @@ public final class PlaybackService {
         }
     }
 
-    public func updateNowPlayingArtwork(_ image: UIImage?) {
+    public func updateNowPlayingArtwork(_ image: PlatformImage?) {
         nowPlayingArtwork = image.map { image in
             MPMediaItemArtwork(boundsSize: image.size) { _ in image }
         }
-        if let image, let data = image.jpegData(compressionQuality: 0.8) {
+        #if os(iOS)
+        if let image, let data = image.sonarJPEGData(compressionQuality: 0.8) {
             WidgetShareStore.shared.saveArtwork(data)
         } else if image == nil {
             WidgetShareStore.shared.clearArtwork()
         }
+        #endif
         updateNowPlaying()
     }
 
@@ -459,6 +549,9 @@ public final class PlaybackService {
     public func setPreferredQuality(_ quality: Quality) async -> QualityChange {
         guard preferredQuality != quality else { return .unchanged }
         preferredQuality = quality
+        discardUpcoming()
+        activeURLResolutionTask?.cancel()
+        activeURLResolutionTask = nil
         guard let track = queue.current else { return .deferred }
         let generation = recoveryGate.beginLoad()
 
@@ -474,7 +567,7 @@ public final class PlaybackService {
             }
             currentMediaHost = url.host
             let item = AVPlayerItem(url: url)
-            player.replaceCurrentItem(with: item)
+            replacePlayerItem(with: item)
             observeStatus(of: item, generation: generation)
             if resumeAt > 0 {
                 // 用回调版而不是 await 版：新 item 还没 ready 时 await 会一直挂着，
@@ -492,6 +585,7 @@ public final class PlaybackService {
                 playbackRequested = false
                 state = .paused
             }
+            prefetchUpcomingTrackIfNeeded()
             updateNowPlaying()
             return .reloaded(quality)
         } catch {
@@ -511,24 +605,43 @@ public final class PlaybackService {
 
     private func loadCurrent(autoplay: Bool, refreshing: Bool = false) async {
         let generation = recoveryGate.beginLoad()
+        lastTransitionTiming = TransitionTiming(id: generation, startedAt: ProcessInfo.processInfo.systemUptime)
+        measuredItem = nil
+        activeURLResolutionTask?.cancel()
+        activeURLResolutionTask = nil
         intentRevision += 1
         shouldResumeAfterInterruption = false
         guard let track = queue.current else {
+            discardUpcoming()
             playbackRequested = false
-            player.replaceCurrentItem(with: nil)
+            replacePlayerItem(with: nil)
             currentMediaHost = nil
             itemStatusObservation?.invalidate()
             itemStatusObservation = nil
             elapsed = 0
             duration = 0
             state = .idle
-            MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+            updateNowPlaying()
             endTransitionBackgroundTask()
             return
         }
+        let quality = preferredQuality
+        let prefetched = upcomingResolution.flatMap {
+            !refreshing && $0.musicID == track.musicID && $0.quality == quality ? $0 : nil
+        }
+        let preparedItem: AVPlayerItem? = prefetched.flatMap { request in
+            guard let preparedNext, preparedNext.id == request.id,
+                  preparedNext.item.status != .failed,
+                  let queuePlayer = player as? AVQueuePlayer,
+                  queuePlayer.items().dropFirst().first === preparedNext.item else { return nil }
+            return preparedNext.item
+        }
+        discardUpcoming(cancelResolution: prefetched == nil, removePreparedItem: preparedItem == nil)
         playbackRequested = autoplay
-        player.pause()
-        player.replaceCurrentItem(with: nil)
+        if preparedItem == nil {
+            player.pause()
+            replacePlayerItem(with: nil)
+        }
         itemStatusObservation?.invalidate()
         itemStatusObservation = nil
         elapsed = 0
@@ -537,37 +650,50 @@ public final class PlaybackService {
         hasPrefetchedUpcomingForCurrentTrack = false
         updateNowPlaying()
         do {
-            let url: URL
-            if !refreshing, preloadedNextURL?.musicID == track.musicID {
-                url = preloadedNextURL!.url
-                preloadedNextURL = nil
-            } else if refreshing, let refreshable = resolver as? PlaybackURLRefreshing {
-                url = try await refreshable.refreshMusicURL(for: track, quality: preferredQuality)
-            } else {
-                url = try await resolver.musicURL(for: track, quality: preferredQuality)
+            if let preparedItem, let asset = preparedItem.asset as? AVURLAsset {
+                // No suspension between adopting the queued item and advancing:
+                // a mode or queue edit cannot insert a different item ahead of it.
+                try completeCurrentLoad(item: preparedItem, url: asset.url, generation: generation, prepared: true)
+                return
+            }
+            // A next-track lookup can still be running when the user skips or
+            // the current item ends. Transfer that work instead of duplicating it.
+            let resolutionTask = Task { [resolver, prefetched] in
+                if let prefetched {
+                    do {
+                        let url = try await withTaskCancellationHandler {
+                            try await prefetched.task.value
+                        } onCancel: {
+                            prefetched.task.cancel()
+                        }
+                        try Task.checkCancellation()
+                        return url
+                    } catch {
+                        // A speculative failure gets one ordinary on-demand
+                        // attempt; a superseded load must not start more work.
+                        try Task.checkCancellation()
+                    }
+                }
+                try Task.checkCancellation()
+                if refreshing, let refreshable = resolver as? PlaybackURLRefreshing {
+                    return try await refreshable.refreshMusicURL(for: track, quality: quality)
+                }
+                return try await resolver.musicURL(for: track, quality: quality)
+            }
+            activeURLResolutionTask = resolutionTask
+            defer {
+                if recoveryGate.isCurrent(generation) { activeURLResolutionTask = nil }
+            }
+            let url = try await withTaskCancellationHandler {
+                try await resolutionTask.value
+            } onCancel: {
+                resolutionTask.cancel()
             }
             try Task.checkCancellation()
             guard recoveryGate.isCurrent(generation), queue.current?.musicID == track.musicID else {
                 return
             }
-            currentMediaHost = url.host
-            itemStatusObservation?.invalidate()
-            itemStatusObservation = nil
-            let item = AVPlayerItem(url: url)
-            player.replaceCurrentItem(with: item)
-            observeStatus(of: item, generation: generation)
-            updateNowPlaying()
-            if playbackRequested {
-                try configureAudioSession()
-                player.play()
-                synchronizePlaybackState()
-                prefetchUpcomingTrackIfNeeded()
-            } else {
-                playbackRequested = false
-                state = .paused
-                endTransitionBackgroundTask()
-            }
-            updateNowPlaying()
+            try completeCurrentLoad(item: AVPlayerItem(url: url), url: url, generation: generation, prepared: false)
         } catch {
             guard recoveryGate.isCurrent(generation), queue.current?.musicID == track.musicID else {
                 return
@@ -595,6 +721,29 @@ public final class PlaybackService {
         }
     }
 
+    private func completeCurrentLoad(item: AVPlayerItem, url: URL, generation: Int, prepared: Bool) throws {
+        currentMediaHost = url.host
+        measuredItem = item
+        lastTransitionTiming?.reusedPreparedItem = prepared
+        recordTransitionStage("resolved")
+        if prepared, let queuePlayer = player as? AVQueuePlayer {
+            queuePlayer.advanceToNextItem()
+        } else {
+            replacePlayerItem(with: item)
+        }
+        observeStatus(of: item, generation: generation)
+        if playbackRequested {
+            try configureAudioSession()
+            player.play()
+            synchronizePlaybackState()
+            prefetchUpcomingTrackIfNeeded()
+        } else {
+            state = .paused
+            endTransitionBackgroundTask()
+        }
+        updateNowPlaying()
+    }
+
     private func handleAutoplayFailureAndSkip(generation: Int, revision: Int) async {
         consecutiveAutoplayFailures += 1
         guard consecutiveAutoplayFailures <= maxConsecutiveAutoplaySkips,
@@ -610,44 +759,144 @@ public final class PlaybackService {
             if recoveryGate.isCurrent(generation) { endTransitionBackgroundTask() }
             return
         }
-        guard recoveryGate.isCurrent(generation), intentRevision == revision,
-              queue.advance(wrapping: true) != nil else { return }
+        guard recoveryGate.isCurrent(generation), intentRevision == revision else { return }
+        guard queue.advance(wrapping: playbackMode != .playInOrder) != nil else {
+            endTransitionBackgroundTask()
+            return
+        }
         await loadCurrent(autoplay: true)
     }
 
+    private func discardUpcoming(cancelResolution: Bool = true, removePreparedItem: Bool = true) {
+        if cancelResolution { upcomingResolution?.task.cancel() }
+        upcomingResolution = nil
+        mediaPreparationTask?.cancel()
+        mediaPreparationTask = nil
+        preparedStatusObservation?.invalidate()
+        preparedStatusObservation = nil
+        preparedBufferObservation?.invalidate()
+        preparedBufferObservation = nil
+        if removePreparedItem, let preparedNext,
+           let queuePlayer = player as? AVQueuePlayer,
+           preparedNext.item !== queuePlayer.currentItem {
+            queuePlayer.remove(preparedNext.item)
+        }
+        preparedNext = nil
+    }
+
+    private func replacePlayerItem(with item: AVPlayerItem?) {
+        if let queuePlayer = player as? AVQueuePlayer {
+            queuePlayer.removeAllItems()
+            if let item { queuePlayer.insert(item, after: nil) }
+        } else {
+            player.replaceCurrentItem(with: item)
+        }
+    }
+
     private func prefetchUpcomingTrackIfNeeded() {
-        guard let nextTrack = queue.peekNext(), nextTrack.musicID != queue.current?.musicID else { return }
-        if preloadedNextURL?.musicID == nextTrack.musicID { return }
-        prefetchTask?.cancel()
-        prefetchTask = Task(priority: .userInitiated) { [weak self, nextTrack] in
-            guard let self else { return }
+        guard playbackMode != .repeatOne,
+              let nextTrack = queue.peekNext(wrapping: playbackMode != .playInOrder),
+              nextTrack.musicID != queue.current?.musicID else {
+            discardUpcoming()
+            return
+        }
+        let quality = preferredQuality
+        if upcomingResolution?.musicID == nextTrack.musicID, upcomingResolution?.quality == quality { return }
+        discardUpcoming()
+        guard playbackRequested, player.currentItem != nil else { return }
+        let task = Task(priority: .userInitiated) { [resolver, nextTrack, quality] in
+            try await resolver.musicURL(for: nextTrack, quality: quality)
+        }
+        let request = UpcomingResolution(musicID: nextTrack.musicID, quality: quality, task: task)
+        upcomingResolution = request
+        guard player is AVQueuePlayer else { return }
+        mediaPreparationTask = Task { [weak self] in
             do {
-                let url = try await self.resolver.musicURL(for: nextTrack, quality: self.preferredQuality)
-                await MainActor.run {
-                    if self.queue.peekNext()?.musicID == nextTrack.musicID {
-                        self.preloadedNextURL = (nextTrack.musicID, url)
+                let url = try await task.value
+                try Task.checkCancellation()
+                guard let self, self.upcomingResolution?.id == request.id,
+                      let queuePlayer = self.player as? AVQueuePlayer,
+                      let currentItem = queuePlayer.currentItem else { return }
+                let item = AVPlayerItem(url: url)
+                item.preferredForwardBufferDuration = 5
+                guard queuePlayer.canInsert(item, after: currentItem) else { return }
+                self.preparedNext = (request.id, item)
+                queuePlayer.insert(item, after: currentItem)
+                self.logger.info("upcoming_media_enqueued")
+                self.preparedBufferObservation = item.observe(\.loadedTimeRanges, options: [.initial, .new]) { [weak self, weak item] _, _ in
+                    Task { @MainActor [weak self, weak item] in
+                        guard let self, let item, self.preparedNext?.item === item,
+                              self.preparedBufferObservation != nil,
+                              item.loadedTimeRanges.contains(where: { $0.timeRangeValue.duration.seconds > 0 }) else { return }
+                        self.logger.info("upcoming_media_buffered")
+                        self.preparedBufferObservation?.invalidate()
+                        self.preparedBufferObservation = nil
+                    }
+                }
+                self.preparedStatusObservation = item.observe(\.status, options: [.initial, .new]) { [weak self, weak item] _, _ in
+                    Task { @MainActor [weak self, weak item] in
+                        guard let self, let item, self.preparedNext?.item === item else { return }
+                        if item.status == .readyToPlay {
+                            self.logger.info("upcoming_media_ready")
+                        } else if item.status == .failed {
+                            // Keep the resolved URL for the ordinary load/recovery
+                            // path, but never transfer a failed speculative item.
+                            queuePlayer.remove(item)
+                            self.preparedNext = nil
+                            self.preparedStatusObservation = nil
+                            self.preparedBufferObservation?.invalidate()
+                            self.preparedBufferObservation = nil
+                            self.logger.info("upcoming_media_failed")
+                        }
                     }
                 }
             } catch {
-                // Prefetch failure is silent; fallback will resolve on demand
+                // Speculation is optional. loadCurrent retries on demand.
             }
         }
     }
 
+    private func recordTransitionStage(_ stage: String) {
+        guard var timing = lastTransitionTiming else { return }
+        let milliseconds = (ProcessInfo.processInfo.systemUptime - timing.startedAt) * 1_000
+        switch stage {
+        case "resolved":
+            guard timing.resolutionMilliseconds == nil else { return }
+            timing.resolutionMilliseconds = milliseconds
+        case "ready":
+            guard timing.readyMilliseconds == nil else { return }
+            timing.readyMilliseconds = milliseconds
+        case "playing":
+            guard timing.playingMilliseconds == nil else { return }
+            timing.playingMilliseconds = milliseconds
+        default: return
+        }
+        lastTransitionTiming = timing
+        logger.info("transition=\(timing.id) stage=\(stage, privacy: .public) elapsed_ms=\(milliseconds) prepared=\(timing.reusedPreparedItem)")
+    }
+
     private func beginTransitionBackgroundTask() {
         endTransitionBackgroundTask()
+        #if os(iOS)
         transitionBackgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "sonar-track-transition") { [weak self] in
             Task { @MainActor [weak self] in
                 self?.endTransitionBackgroundTask()
             }
         }
+        #else
+        isTransitionInProgress = true
+        #endif
     }
 
     private func endTransitionBackgroundTask() {
+        #if os(iOS)
         if transitionBackgroundTaskID != .invalid {
             UIApplication.shared.endBackgroundTask(transitionBackgroundTaskID)
             transitionBackgroundTaskID = .invalid
         }
+        #else
+        isTransitionInProgress = false
+        #endif
     }
 
     private func restartCurrent() async {
@@ -661,12 +910,15 @@ public final class PlaybackService {
     }
 
     private func configureAudioSession() throws {
+        #if os(iOS)
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.playback, mode: .default, options: [])
         try session.setActive(true)
+        #endif
     }
 
     private func installAudioSessionObservers() {
+        #if os(iOS)
         interruptionObserver = NotificationCenter.default.addObserver(
             forName: AVAudioSession.interruptionNotification,
             object: nil,
@@ -698,8 +950,10 @@ public final class PlaybackService {
         ) { [weak self] _ in
             self?.handleAppDidBecomeActive()
         }
+        #endif
     }
 
+    #if os(iOS)
     func handleAudioSessionInterruption(_ notification: Notification) {
         guard let userInfo = notification.userInfo,
               let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
@@ -772,6 +1026,8 @@ public final class PlaybackService {
             break
         }
     }
+
+    #endif
 
     private func handleAppDidBecomeActive() {
         guard shouldResumeAfterInterruption else { return }
@@ -848,7 +1104,11 @@ public final class PlaybackService {
         itemStatusObservation?.invalidate()
         itemStatusObservation = item.observe(\.status, options: [.initial, .new]) { [weak self, weak item] _, _ in
             Task { @MainActor [weak self, weak item] in
-                guard let self, let item, item === player.currentItem else { return }
+                guard let self, let item, item === player.currentItem,
+                      recoveryGate.isCurrent(generation) else { return }
+                if item === measuredItem, item.status == .readyToPlay {
+                    recordTransitionStage("ready")
+                }
                 if item.status == .failed {
                     await handlePlaybackFailure(
                         of: item,
@@ -876,7 +1136,7 @@ public final class PlaybackService {
               recoveryGate.isCurrent(generation),
               let track = queue.current else { return }
         guard recoveryGate.consumeRecovery(for: generation) else {
-            let shouldSkip = playbackRequested && transitionBackgroundTaskID != .invalid
+            let shouldSkip = playbackRequested && isTransitionInProgress
             let revision = intentRevision
             playbackRequested = false
             state = .failed(playbackFailureDescription(for: item, fallback: fallback))
@@ -893,8 +1153,9 @@ public final class PlaybackService {
         let queueIndex = queue.currentIndex
         let resumeAt = elapsed
         state = .loading
+        discardUpcoming()
         player.pause()
-        player.replaceCurrentItem(with: nil)
+        replacePlayerItem(with: nil)
         currentMediaHost = nil
         itemStatusObservation?.invalidate()
         itemStatusObservation = nil
@@ -930,7 +1191,7 @@ public final class PlaybackService {
 
             currentMediaHost = url.host
             let replacement = AVPlayerItem(url: url)
-            player.replaceCurrentItem(with: replacement)
+            replacePlayerItem(with: replacement)
             observeStatus(of: replacement, generation: generation)
             if resumeAt > 0 {
                 player.seek(
@@ -947,6 +1208,7 @@ public final class PlaybackService {
             } else {
                 state = .paused
             }
+            prefetchUpcomingTrackIfNeeded()
             updateNowPlaying()
         } catch {
             guard recoveryGate.isCurrent(generation),
@@ -959,7 +1221,7 @@ public final class PlaybackService {
                 endTransitionBackgroundTask()
                 return
             }
-            let shouldSkip = playbackRequested && transitionBackgroundTaskID != .invalid
+            let shouldSkip = playbackRequested && isTransitionInProgress
             let revision = intentRevision
             elapsed = resumeAt
             playbackRequested = false
@@ -1019,12 +1281,14 @@ public final class PlaybackService {
 
     private func isInterruptionError(_ error: Error?) -> Bool {
         guard let error = error as NSError? else { return false }
+        #if os(iOS)
         if error.domain == AVFoundationErrorDomain {
             if error.code == AVError.sessionWasInterrupted.rawValue
                 || error.code == AVError.operationNotAllowed.rawValue {
                 return true
             }
         }
+        #endif
         if let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError {
             if isInterruptionError(underlying) { return true }
         }
@@ -1045,7 +1309,11 @@ public final class PlaybackService {
             state = .paused
             return
         }
-        if player.timeControlStatus == .playing {
+        if player.timeControlStatus == .playing, item.status == .readyToPlay {
+            if item === measuredItem {
+                recordTransitionStage("ready")
+                recordTransitionStage("playing")
+            }
             consecutiveAutoplayFailures = 0
             endTransitionBackgroundTask()
             state = .playing
@@ -1151,6 +1419,14 @@ public final class PlaybackService {
     }
 
     private func updateNowPlaying(includeWidget: Bool = true) {
+        #if os(macOS)
+        let center = MPNowPlayingInfoCenter.default()
+        if queue.current == nil {
+            center.playbackState = .stopped
+        } else {
+            center.playbackState = state == .playing ? .playing : .paused
+        }
+        #endif
         guard let track = queue.current else {
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
             if includeWidget {
@@ -1175,6 +1451,7 @@ public final class PlaybackService {
     }
 
     private func updateWidgetSnapshot(for track: Track?) {
+        #if os(iOS)
         let currentSnapshot = WidgetShareStore.shared.loadSnapshot()
         guard let track else {
             let emptySnapshot = WidgetPlaybackSnapshot(
@@ -1210,9 +1487,11 @@ public final class PlaybackService {
             updatedAt: Date()
         )
         WidgetShareStore.shared.saveSnapshot(updatedSnapshot)
+        #endif
     }
 
     private func installWidgetNotifications() {
+        #if os(iOS)
         let center = CFNotificationCenterGetDarwinNotifyCenter()
         let observer = Unmanaged.passUnretained(self).toOpaque()
         let names: [String] = [
@@ -1252,11 +1531,14 @@ public final class PlaybackService {
                 .deliverImmediately
             )
         }
+        #endif
     }
 
     private func removeWidgetNotifications() {
+        #if os(iOS)
         let center = CFNotificationCenterGetDarwinNotifyCenter()
         let observer = Unmanaged.passUnretained(self).toOpaque()
         CFNotificationCenterRemoveEveryObserver(center, observer)
+        #endif
     }
 }

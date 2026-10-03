@@ -7,127 +7,182 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		E10000000000000000000002 /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000001 /* WidgetSnapshot.swift */; };
-		E10000000000000000000004 /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000001 /* WidgetSnapshot.swift */; };
-		E10000000000000000000006 /* SonarWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000005 /* SonarWidget.swift */; };
-		E10000000000000000000008 /* NowPlayingWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000007 /* NowPlayingWidget.swift */; };
-		E1000000000000000000000A /* QuickShuffleWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000009 /* QuickShuffleWidget.swift */; };
-		E1000000000000000000000C /* AppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1000000000000000000000B /* AppIntents.swift */; };
-		E1000000000000000000000F /* SonarWidgetExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = E1000000000000000000000E /* SonarWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		60469D3B6128408AA3743CDF /* MacPlaybackControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3939705B7D2B476D9028898A /* MacPlaybackControls.swift */; };
+		003DE8178F6E063C5829A4CA /* SonarBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80A3D173DFB6CE7A7020235B /* SonarBootstrap.swift */; };
+		03B507D5E142354A8E2E020D /* ArtworkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A73EFD248035C9B528F3F9CB /* ArtworkService.swift */; };
+		04A7EC70D53BC2C31C0837B4 /* PlatformImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5719E7714C35C9B356E1DA3C /* PlatformImage.swift */; };
 		081601FE13DC4F6CC4BECB93 /* SonarApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4BE53DF67468C133914605A /* SonarApp.swift */; };
+		081C757D53FE360A465B0143 /* MacDiscoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0CA156CD5F28106F70B55CA /* MacDiscoveryView.swift */; };
+		090006C909B857368B794DBB /* CommonCryptoBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFC8F9394CC9701D9490C16A /* CommonCryptoBridge.swift */; };
 		09DC6AACFD5438547D5D84AB /* PlaylistDetailActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = B360F26B77EE77962CC5B76E /* PlaylistDetailActions.swift */; };
+		0B14F916B874DED1DBF31BE6 /* BuildCredentialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F60B4B0591442EA64C302E0 /* BuildCredentialStore.swift */; };
 		11655853DA39CABB92DCF693 /* KaraokeLyricsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7EFC9D29E2E8C6E459BE3932 /* KaraokeLyricsView.swift */; };
+		119B5345823C0A8EA9499559 /* PlaybackURLResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A187AA0404C33C8BC38A76A /* PlaybackURLResolver.swift */; };
 		151055174EAF225E4D91E9F4 /* SongRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3080232A9FEDC04BB7B8BEA4 /* SongRow.swift */; };
 		15154B117DC173D22B9F67D6 /* PlaybackURLCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = F26CF6694394C69F6AC0B84A /* PlaybackURLCache.swift */; };
 		158D633DE820239A440A6817 /* LibraryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26011CDFF363FA05A89B2898 /* LibraryModels.swift */; };
 		1729AC660D12ABAAA2822994 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BCB6EA4B48AAD5F80A2F91F /* SettingsView.swift */; };
+		1E8C7400A1DEB0D76D9DB9E9 /* source-bundle.js in Resources */ = {isa = PBXBuildFile; fileRef = 2931BE48DB1A297EC3191C39 /* source-bundle.js */; };
 		1EE5664EB824B6ED410F4183 /* CommonCryptoBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFC8F9394CC9701D9490C16A /* CommonCryptoBridge.swift */; };
+		207EC744AEB0D1E31BCF74C3 /* MacSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD58E841CE5D8C29360941AC /* MacSearchView.swift */; };
+		2098A400B160A8CEAD80EA39 /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99282A07249A917FD0BC660E /* WidgetSnapshot.swift */; };
+		24EA5E1659CE69C5FD928BD9 /* ArtistDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 140533A1689200E1381DE77E /* ArtistDetailViewModel.swift */; };
+		264C9B4E7884B61480A1D69C /* M3Scheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B0A53749C9C59898311059 /* M3Scheme.swift */; };
 		26FCAACF94F51F504364CE16 /* SecurityBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31A1B9444845B790C78ED7B0 /* SecurityBridge.swift */; };
 		27B2E5179FE340020A5625CE /* AddToPlaylistSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB7FA3DD083707A1D97DCEB5 /* AddToPlaylistSheet.swift */; };
 		27DF39947DBF445C999D2FFB /* M3Scheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5B0A53749C9C59898311059 /* M3Scheme.swift */; };
 		27F4265CCD2C3F3429E40095 /* PlaybackQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 450235EC55571F09C6B63486 /* PlaybackQueue.swift */; };
 		28483A3C7E4549A2CF6841F1 /* SpinningCoverArt.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA8450B8875639E3642B3EF1 /* SpinningCoverArt.swift */; };
 		28BD98FF1A8F3A1B147C03D0 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D15663FD95D43381881A7594 /* RootView.swift */; };
+		2AC0DF2FE2138AE3456EBEE4 /* MacTransportBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3625B01B1E950EB1FD5E0F02 /* MacTransportBar.swift */; };
+		2D15CCA0EC8F5A51393AD4E0 /* NotchGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FA05B31AFAD1B518CEA5142 /* NotchGeometry.swift */; };
 		2E7D13EFF607BC9957874E0B /* DiscoveryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37757D19F8858B8ABA516C35 /* DiscoveryViewModel.swift */; };
+		2F1F1BB0494040CAB644CD45 /* SonarWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = EB43F02C357C8AEC7CFB2D01 /* SonarWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		31797BFCD01A15336B821E9D /* NowPlayingWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7299262CE051452757A4957 /* NowPlayingWidget.swift */; };
 		31ECB3C15B5E6D5EF489136E /* DiscoveryMasonry.swift in Sources */ = {isa = PBXBuildFile; fileRef = E82FBC791AAE24EFC9A544E1 /* DiscoveryMasonry.swift */; };
 		36418007708D397E8BE4CF28 /* BottomCapsule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A3DC582BF54B809E00F210B /* BottomCapsule.swift */; };
 		36B26DFAE25D317CC4BA1685 /* SourceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20D71D4430F13816E4463BEB /* SourceModels.swift */; };
+		3834511C63D829751D798AE6 /* SecurityBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31A1B9444845B790C78ED7B0 /* SecurityBridge.swift */; };
 		386AB54DC24767D8C846FE69 /* PlaylistDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F74D5FDBD441E80006CE4316 /* PlaylistDetailView.swift */; };
+		3ADB4D1F4D8E0EE940F7F136 /* SearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3955CB53C63B2A1DB50F8F6 /* SearchViewModel.swift */; };
+		3DDBE9B28A88936BAC98B686 /* QuickShuffleWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1235783BEBD722567E91D58 /* QuickShuffleWidget.swift */; };
 		43CD3AEBDDCBC0B4765C3E17 /* AlbumFace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F7F921047A8D92FECF278CF /* AlbumFace.swift */; };
 		47C209A1ED23CFF7F558242A /* ArtistDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 140533A1689200E1381DE77E /* ArtistDetailViewModel.swift */; };
 		4B5AA5F26183998A2CCDC40A /* KaraokeLyrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 337C15C1593EC29A9D42F238 /* KaraokeLyrics.swift */; };
 		53198B5BF3D3961430F76D21 /* PlayingEqualizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07B622B9E6C84FC10638B2D6 /* PlayingEqualizer.swift */; };
 		540EEDA4419A9A732D08D5F6 /* Lyrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BABFCFE6594F1616267CADF /* Lyrics.swift */; };
+		542BAF8189E814883914BBE7 /* MacHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBC0FE27B28E5523FFA22AC6 /* MacHomeView.swift */; };
 		5606CC309EB25391C07A493C /* DiscoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21B7025D42AB216F2BD01D5B /* DiscoverView.swift */; };
 		5A55326C0B38E947E1B5A637 /* Icons.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CCA531797715B360AB7222C /* Icons.swift */; };
+		5B470E72EF556A348CCB0C04 /* QualityBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36C34DC215A6702A788FFF6A /* QualityBadge.swift */; };
+		5CBF0B8B60ED5ED5D35E6568 /* SourceRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4873C9CD18E857D410F0903 /* SourceRuntime.swift */; };
+		5D1B31E068874469A5A8AC70 /* SonarWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD9DDF5B055DDB9BEC09523E /* SonarWidget.swift */; };
 		6CD60E3CFDB28C33042F3814 /* SourceRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4873C9CD18E857D410F0903 /* SourceRuntime.swift */; };
 		6DD0D71E00BCB48AB525E982 /* QueueSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FD6117061EF6855072332D5 /* QueueSheet.swift */; };
+		6FC37939D385F70BBF929022 /* PlatformImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5719E7714C35C9B356E1DA3C /* PlatformImage.swift */; };
 		7107D4B6F85615FAD72AB260 /* ChkszSourceRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 408380D09AED2923A3000137 /* ChkszSourceRuntime.swift */; };
+		71AA454E378826503DFF8158 /* FallbackPlaybackURLResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 894FFA986F474E822DF07866 /* FallbackPlaybackURLResolver.swift */; };
 		75365FC1462F820C235C1672 /* FlowingLightBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5C6311BA7B0AA1A095870AA /* FlowingLightBackground.swift */; };
 		7647B97C127EC7F0A172D228 /* QualityBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36C34DC215A6702A788FFF6A /* QualityBadge.swift */; };
 		766580A1DEA22FB604515B4A /* UIPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2E11E59C2BDFF4AD9DD59B8 /* UIPreferences.swift */; };
+		76C46E72A3B6425BDF188FD4 /* SourceModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20D71D4430F13816E4463BEB /* SourceModels.swift */; };
+		79911F8A373BA75C2C952D34 /* PlaybackURLCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = F26CF6694394C69F6AC0B84A /* PlaybackURLCache.swift */; };
 		79F8EBE93D4C886200C66CEA /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 6E5EED7134E31ACCC9993AB0 /* Assets.xcassets */; };
+		7A5895C860E749BE29B29DA7 /* PlaylistBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD1042AAEABD40DCA2E0633F /* PlaylistBackup.swift */; };
+		7FE1F65FFF9088A4EC9B9A30 /* MacCatalogDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 983802D0240E80F52984A8B1 /* MacCatalogDetailView.swift */; };
 		82095E42E272B41D46844AF0 /* ArtistDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B8FEA6147F929B784BB7382 /* ArtistDetailView.swift */; };
 		849E996CB5EA0C8A6FE0A1E2 /* AlbumDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43DD259A5E54953DA91FB738 /* AlbumDetailView.swift */; };
+		854CE459C258E8F1D8DD7A27 /* MacAppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 626940789E51AAF357598AF4 /* MacAppModel.swift */; };
+		8B6877C15FAE872321579C79 /* MacSeekSlider.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA6F585193CD9E113E4787E2 /* MacSeekSlider.swift */; };
 		8BAEAC65DC833A534322C035 /* CoverActionsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6952DE2A6614C64A7DA896D /* CoverActionsSheet.swift */; };
+		8CD35F2396AEAE42FBF66473 /* ArtworkPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0EA2B04C18A56C9D4F2E6BC /* ArtworkPalette.swift */; };
+		91779D83DF56BDC1863D9E13 /* PlaybackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB25826E80F220BFE6A05B3D /* PlaybackService.swift */; };
 		93B6A65068C432DF3FEA5054 /* FallbackPlaybackURLResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 894FFA986F474E822DF07866 /* FallbackPlaybackURLResolver.swift */; };
+		9530293170B5F5C6B0EB2CF6 /* BackupDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = B646339D5586DBC0E6F7CEED /* BackupDocument.swift */; };
+		9C002202389C410024ECC238 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E30C24AEA37BB3E700DAC427 /* Assets.xcassets */; };
+		9C44E7CE2642E9E513736D45 /* SonarBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80A3D173DFB6CE7A7020235B /* SonarBootstrap.swift */; };
 		9FFCA6673E96AB9E38E4D3C9 /* source-bundle.js in Resources */ = {isa = PBXBuildFile; fileRef = 2931BE48DB1A297EC3191C39 /* source-bundle.js */; };
+		A0FF8E68199039B5B2369E11 /* LibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ACD8DDDE5E548ADB1CA6E26 /* LibraryStore.swift */; };
 		A33731C2FB928F04D0A6E14A /* LibraryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6ACD8DDDE5E548ADB1CA6E26 /* LibraryStore.swift */; };
 		A4AA32949043B0D5D115CF7E /* PlayerPullController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0865577F07EB71937350124 /* PlayerPullController.swift */; };
 		A7BF89AEB063AECC71DA0947 /* ThemeState.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC2B15B9CA2543216C4296B /* ThemeState.swift */; };
 		A9AE8D025631CAF898D158A9 /* BuildCredentialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F60B4B0591442EA64C302E0 /* BuildCredentialStore.swift */; };
+		AA7B15B6AEE1E3EC2250794D /* MacPlayerInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A02BA723056F35F973D8692 /* MacPlayerInspector.swift */; };
+		AC2E44788798C9D9E6AEEE1C /* UIPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2E11E59C2BDFF4AD9DD59B8 /* UIPreferences.swift */; };
 		ADD1640DC2D9A7FD0E69C200 /* SongsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE4216B9E4E0F3B63F32E34D /* SongsView.swift */; };
+		AF2AD686FEB632AFD7890417 /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99282A07249A917FD0BC660E /* WidgetSnapshot.swift */; };
+		B273110055A3987C3E8B61CA /* AppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDF9CDFAF920907E737EA1F1 /* AppIntents.swift */; };
 		B79D52F6E65651E1D5D8AFF4 /* AppMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE0491EEF08DC41DD523100C /* AppMotion.swift */; };
 		BFCE11F52C7F8236BB409ED2 /* SearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3955CB53C63B2A1DB50F8F6 /* SearchViewModel.swift */; };
+		C118FF41E801D98F1D4CD6D6 /* LibraryModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26011CDFF363FA05A89B2898 /* LibraryModels.swift */; };
+		C4BD769464B5D00A33C12E92 /* DiscoveryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37757D19F8858B8ABA516C35 /* DiscoveryViewModel.swift */; };
+		C4CECD45B6286235DBB79D39 /* PlaybackQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 450235EC55571F09C6B63486 /* PlaybackQueue.swift */; };
 		C75A6000F0E8384EE9F58CD1 /* QualitySheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38306610D315CA28D8009742 /* QualitySheet.swift */; };
 		CBA5F11BFBEB660A2096BA90 /* PlayerPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F0ECA31FC7B1E12EAE9F14D /* PlayerPage.swift */; };
+		CD3A97624F1A6F9F17A5AAEE /* MacTrackTable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6491371AFD71CDD36CE052F8 /* MacTrackTable.swift */; };
+		CE48177ACF39F7D53FECD547 /* MacRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 46BFFDE124AB3142A58DACE2 /* MacRootView.swift */; };
 		CEC90225BE102E2FC4B0B08E /* PlayerPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FA173DE89542F08636CCD14 /* PlayerPalette.swift */; };
+		D052BF68DC9448B1FE54BAB6 /* MacSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB69039E57D6401DC7FCB763 /* MacSettingsView.swift */; };
 		D0CF85FDD1BF0F805AAC893F /* PlaybackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB25826E80F220BFE6A05B3D /* PlaybackService.swift */; };
+		D98C43A6E74D23F95B6C47A1 /* BackupDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = B646339D5586DBC0E6F7CEED /* BackupDocument.swift */; };
+		DB2BA76D2DDF637BFF3FD7DB /* MacArtworkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F37B3B1D1F607208C82EDE7 /* MacArtworkView.swift */; };
+		DD93E167257EE4F12191C3C0 /* ThemeState.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC2B15B9CA2543216C4296B /* ThemeState.swift */; };
+		DE37A96EE60EE520B57EC1D7 /* Lyrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BABFCFE6594F1616267CADF /* Lyrics.swift */; };
+		E05F4AB1CCBC458F2C87EB5D /* SonarMacApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDB605A69440E3482B2857A3 /* SonarMacApp.swift */; };
+		E0C0042DF41593C7DD3B0977 /* PlaylistBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD1042AAEABD40DCA2E0633F /* PlaylistBackup.swift */; };
 		ECB552CFAFC383946E5F9B35 /* ArtworkPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0EA2B04C18A56C9D4F2E6BC /* ArtworkPalette.swift */; };
+		EDDC470E674A41FDB20959DD /* NotchPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 954D83BCE2DB35C87029A054 /* NotchPlayerView.swift */; };
+		EEC2F7BFEB9C9BD5F13EC1C2 /* WidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99282A07249A917FD0BC660E /* WidgetSnapshot.swift */; };
+		EF410A97E099E35275BA6B6C /* ChkszSourceRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 408380D09AED2923A3000137 /* ChkszSourceRuntime.swift */; };
 		F14EC2B8475DB8F382D6ADC7 /* ToastOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E179A67DAA8C9A38B93B5C5 /* ToastOverlay.swift */; };
+		F1EE5FDEF276B87C218D7D73 /* NotchWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFED279A43B9C82D356B903C /* NotchWindowController.swift */; };
+		F2E5611E54861C8CFE30DBAB /* MacStatusPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0912F1FA2AE27BA9AB7BA29F /* MacStatusPanel.swift */; };
 		F3912122DFB13666E703F465 /* PlaybackURLResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A187AA0404C33C8BC38A76A /* PlaybackURLResolver.swift */; };
 		F41CAAB893659495EEFFD012 /* PlayerArtwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = 084822A4565C9A88078621FC /* PlayerArtwork.swift */; };
 		F5FD0195E6AF7728BE1CD0CD /* TransportBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E07FEE1C6FDFBA2097C6AAA /* TransportBar.swift */; };
 		F7E9F7607BD999EE802E71E9 /* ArtworkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A73EFD248035C9B528F3F9CB /* ArtworkService.swift */; };
-		966845E7ACF4114C221A0229 /* SonarBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = C59839DEB4ED86B6FE210FE4 /* SonarBootstrap.swift */; };
-		923F78A505478D9E49E529B4 /* BackupDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33754D3D0D385718FE481C9E /* BackupDocument.swift */; };
-		8D7F9B5B2809C3F143DCA6F4 /* PlaylistBackup.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEBA50F9B966B3E7F5ECF43C /* PlaylistBackup.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		E10000000000000000000015 /* PBXContainerItemProxy */ = {
+		DECE27AEE0067A57594D2C53 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = B57AF75FE96B8E5347F20F03 /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = E10000000000000000000017;
+			remoteGlobalIDString = 971030551A536A4848351453;
 			remoteInfo = SonarWidgetExtension;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		E10000000000000000000014 /* Embed App Extensions */ = {
+		16E8E9FBC248399B7F429A11 /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				E1000000000000000000000F /* SonarWidgetExtension.appex in Embed App Extensions */,
+				2F1F1BB0494040CAB644CD45 /* SonarWidgetExtension.appex in Embed Foundation Extensions */,
 			);
-			name = "Embed App Extensions";
+			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		E10000000000000000000001 /* WidgetSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetSnapshot.swift; sourceTree = "<group>"; };
-		E10000000000000000000005 /* SonarWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonarWidget.swift; sourceTree = "<group>"; };
-		E10000000000000000000007 /* NowPlayingWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingWidget.swift; sourceTree = "<group>"; };
-		E10000000000000000000009 /* QuickShuffleWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickShuffleWidget.swift; sourceTree = "<group>"; };
-		E1000000000000000000000B /* AppIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIntents.swift; sourceTree = "<group>"; };
-		E1000000000000000000000D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		E1000000000000000000000E /* SonarWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SonarWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		3939705B7D2B476D9028898A /* MacPlaybackControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacPlaybackControls.swift; sourceTree = "<group>"; };
 		07B622B9E6C84FC10638B2D6 /* PlayingEqualizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayingEqualizer.swift; sourceTree = "<group>"; };
 		084822A4565C9A88078621FC /* PlayerArtwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerArtwork.swift; sourceTree = "<group>"; };
+		08DCF05FD200C693CE9F9F37 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		0912F1FA2AE27BA9AB7BA29F /* MacStatusPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacStatusPanel.swift; sourceTree = "<group>"; };
 		140533A1689200E1381DE77E /* ArtistDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtistDetailViewModel.swift; sourceTree = "<group>"; };
 		20D71D4430F13816E4463BEB /* SourceModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceModels.swift; sourceTree = "<group>"; };
 		21B7025D42AB216F2BD01D5B /* DiscoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverView.swift; sourceTree = "<group>"; };
 		26011CDFF363FA05A89B2898 /* LibraryModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryModels.swift; sourceTree = "<group>"; };
 		2931BE48DB1A297EC3191C39 /* source-bundle.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = "source-bundle.js"; sourceTree = "<group>"; };
+		2A02BA723056F35F973D8692 /* MacPlayerInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacPlayerInspector.swift; sourceTree = "<group>"; };
 		2B7C19357F8DDBAE431FF001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		2B8FEA6147F929B784BB7382 /* ArtistDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtistDetailView.swift; sourceTree = "<group>"; };
+		2F37B3B1D1F607208C82EDE7 /* MacArtworkView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacArtworkView.swift; sourceTree = "<group>"; };
 		3080232A9FEDC04BB7B8BEA4 /* SongRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SongRow.swift; sourceTree = "<group>"; };
 		31A1B9444845B790C78ED7B0 /* SecurityBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityBridge.swift; sourceTree = "<group>"; };
 		337C15C1593EC29A9D42F238 /* KaraokeLyrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KaraokeLyrics.swift; sourceTree = "<group>"; };
+		3625B01B1E950EB1FD5E0F02 /* MacTransportBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacTransportBar.swift; sourceTree = "<group>"; };
 		36C34DC215A6702A788FFF6A /* QualityBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QualityBadge.swift; sourceTree = "<group>"; };
 		37757D19F8858B8ABA516C35 /* DiscoveryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryViewModel.swift; sourceTree = "<group>"; };
 		38306610D315CA28D8009742 /* QualitySheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QualitySheet.swift; sourceTree = "<group>"; };
+		3AD56815810F488E5A42D761 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		3E07FEE1C6FDFBA2097C6AAA /* TransportBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransportBar.swift; sourceTree = "<group>"; };
+		3FA05B31AFAD1B518CEA5142 /* NotchGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchGeometry.swift; sourceTree = "<group>"; };
 		408380D09AED2923A3000137 /* ChkszSourceRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChkszSourceRuntime.swift; sourceTree = "<group>"; };
+		436336F57FF1148FDBF94FFE /* SonarMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SonarMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		43DD259A5E54953DA91FB738 /* AlbumDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlbumDetailView.swift; sourceTree = "<group>"; };
 		450235EC55571F09C6B63486 /* PlaybackQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackQueue.swift; sourceTree = "<group>"; };
+		46BFFDE124AB3142A58DACE2 /* MacRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacRootView.swift; sourceTree = "<group>"; };
 		4A187AA0404C33C8BC38A76A /* PlaybackURLResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackURLResolver.swift; sourceTree = "<group>"; };
 		4BABFCFE6594F1616267CADF /* Lyrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Lyrics.swift; sourceTree = "<group>"; };
 		4FA173DE89542F08636CCD14 /* PlayerPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerPalette.swift; sourceTree = "<group>"; };
+		5719E7714C35C9B356E1DA3C /* PlatformImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformImage.swift; sourceTree = "<group>"; };
+		626940789E51AAF357598AF4 /* MacAppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacAppModel.swift; sourceTree = "<group>"; };
+		6491371AFD71CDD36CE052F8 /* MacTrackTable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacTrackTable.swift; sourceTree = "<group>"; };
 		6ACD8DDDE5E548ADB1CA6E26 /* LibraryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryStore.swift; sourceTree = "<group>"; };
 		6E5EED7134E31ACCC9993AB0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		6F60B4B0591442EA64C302E0 /* BuildCredentialStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuildCredentialStore.swift; sourceTree = "<group>"; };
@@ -135,65 +190,136 @@
 		7E179A67DAA8C9A38B93B5C5 /* ToastOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToastOverlay.swift; sourceTree = "<group>"; };
 		7EFC9D29E2E8C6E459BE3932 /* KaraokeLyricsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KaraokeLyricsView.swift; sourceTree = "<group>"; };
 		7FD6117061EF6855072332D5 /* QueueSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueSheet.swift; sourceTree = "<group>"; };
+		80A3D173DFB6CE7A7020235B /* SonarBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonarBootstrap.swift; sourceTree = "<group>"; };
 		894FFA986F474E822DF07866 /* FallbackPlaybackURLResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FallbackPlaybackURLResolver.swift; sourceTree = "<group>"; };
 		8A3DC582BF54B809E00F210B /* BottomCapsule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BottomCapsule.swift; sourceTree = "<group>"; };
 		8CCA531797715B360AB7222C /* Icons.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Icons.swift; sourceTree = "<group>"; };
 		8F0ECA31FC7B1E12EAE9F14D /* PlayerPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerPage.swift; sourceTree = "<group>"; };
+		954D83BCE2DB35C87029A054 /* NotchPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchPlayerView.swift; sourceTree = "<group>"; };
+		983802D0240E80F52984A8B1 /* MacCatalogDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacCatalogDetailView.swift; sourceTree = "<group>"; };
+		99282A07249A917FD0BC660E /* WidgetSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetSnapshot.swift; sourceTree = "<group>"; };
 		9BCB6EA4B48AAD5F80A2F91F /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		9DE730991A87EDFF59F6BAB5 /* SonarMac.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SonarMac.entitlements; sourceTree = "<group>"; };
 		A5C6311BA7B0AA1A095870AA /* FlowingLightBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowingLightBackground.swift; sourceTree = "<group>"; };
 		A6952DE2A6614C64A7DA896D /* CoverActionsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoverActionsSheet.swift; sourceTree = "<group>"; };
 		A73EFD248035C9B528F3F9CB /* ArtworkService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtworkService.swift; sourceTree = "<group>"; };
+		AB69039E57D6401DC7FCB763 /* MacSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSettingsView.swift; sourceTree = "<group>"; };
 		ACC2B15B9CA2543216C4296B /* ThemeState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeState.swift; sourceTree = "<group>"; };
+		B1235783BEBD722567E91D58 /* QuickShuffleWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickShuffleWidget.swift; sourceTree = "<group>"; };
 		B2E11E59C2BDFF4AD9DD59B8 /* UIPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIPreferences.swift; sourceTree = "<group>"; };
 		B360F26B77EE77962CC5B76E /* PlaylistDetailActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistDetailActions.swift; sourceTree = "<group>"; };
 		B4873C9CD18E857D410F0903 /* SourceRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceRuntime.swift; sourceTree = "<group>"; };
+		B646339D5586DBC0E6F7CEED /* BackupDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupDocument.swift; sourceTree = "<group>"; };
 		BA8450B8875639E3642B3EF1 /* SpinningCoverArt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpinningCoverArt.swift; sourceTree = "<group>"; };
 		BB25826E80F220BFE6A05B3D /* PlaybackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackService.swift; sourceTree = "<group>"; };
+		BBC0FE27B28E5523FFA22AC6 /* MacHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacHomeView.swift; sourceTree = "<group>"; };
+		BD1042AAEABD40DCA2E0633F /* PlaylistBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistBackup.swift; sourceTree = "<group>"; };
 		BE4216B9E4E0F3B63F32E34D /* SongsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SongsView.swift; sourceTree = "<group>"; };
 		C3955CB53C63B2A1DB50F8F6 /* SearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchViewModel.swift; sourceTree = "<group>"; };
 		C4BE53DF67468C133914605A /* SonarApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonarApp.swift; sourceTree = "<group>"; };
 		C5B0A53749C9C59898311059 /* M3Scheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = M3Scheme.swift; sourceTree = "<group>"; };
+		C7299262CE051452757A4957 /* NowPlayingWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingWidget.swift; sourceTree = "<group>"; };
+		CD9DDF5B055DDB9BEC09523E /* SonarWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonarWidget.swift; sourceTree = "<group>"; };
+		CDB605A69440E3482B2857A3 /* SonarMacApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonarMacApp.swift; sourceTree = "<group>"; };
 		D15663FD95D43381881A7594 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		DA6F585193CD9E113E4787E2 /* MacSeekSlider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSeekSlider.swift; sourceTree = "<group>"; };
+		DDF9CDFAF920907E737EA1F1 /* AppIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIntents.swift; sourceTree = "<group>"; };
 		E0EA2B04C18A56C9D4F2E6BC /* ArtworkPalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtworkPalette.swift; sourceTree = "<group>"; };
+		E30C24AEA37BB3E700DAC427 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E82FBC791AAE24EFC9A544E1 /* DiscoveryMasonry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryMasonry.swift; sourceTree = "<group>"; };
+		EB43F02C357C8AEC7CFB2D01 /* SonarWidgetExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = SonarWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		EE0491EEF08DC41DD523100C /* AppMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppMotion.swift; sourceTree = "<group>"; };
 		F0865577F07EB71937350124 /* PlayerPullController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerPullController.swift; sourceTree = "<group>"; };
+		F0CA156CD5F28106F70B55CA /* MacDiscoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacDiscoveryView.swift; sourceTree = "<group>"; };
 		F26CF6694394C69F6AC0B84A /* PlaybackURLCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackURLCache.swift; sourceTree = "<group>"; };
 		F74D5FDBD441E80006CE4316 /* PlaylistDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistDetailView.swift; sourceTree = "<group>"; };
 		FB7FA3DD083707A1D97DCEB5 /* AddToPlaylistSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddToPlaylistSheet.swift; sourceTree = "<group>"; };
 		FBCDBA8A850047173492B69E /* Sonar.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Sonar.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		FD58E841CE5D8C29360941AC /* MacSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSearchView.swift; sourceTree = "<group>"; };
+		FF36E18C33F345D7F9A424E7 /* SonarWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SonarWidgetExtension.entitlements; sourceTree = "<group>"; };
+		FF70443412C0145A0BD084EF /* Sonar.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Sonar.entitlements; sourceTree = "<group>"; };
 		FFC8F9394CC9701D9490C16A /* CommonCryptoBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommonCryptoBridge.swift; sourceTree = "<group>"; };
-		C59839DEB4ED86B6FE210FE4 /* SonarBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonarBootstrap.swift; sourceTree = "<group>"; };
-		33754D3D0D385718FE481C9E /* BackupDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupDocument.swift; sourceTree = "<group>"; };
-		DEBA50F9B966B3E7F5ECF43C /* PlaylistBackup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaylistBackup.swift; sourceTree = "<group>"; };
+		FFED279A43B9C82D356B903C /* NotchWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchWindowController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
-		E10000000000000000000010 /* WidgetShare */ = {
+		01BBEB9E1FCA05A3558E13F5 /* SonarMac */ = {
 			isa = PBXGroup;
 			children = (
-				E10000000000000000000001 /* WidgetSnapshot.swift */,
+				E30C24AEA37BB3E700DAC427 /* Assets.xcassets */,
+				3AD56815810F488E5A42D761 /* Info.plist */,
+				9DE730991A87EDFF59F6BAB5 /* SonarMac.entitlements */,
+				2FE8674DB51CB566028F7F2C /* App */,
+				B43A16F6DE4B132F45D7D1E1 /* Notch */,
+				3571C39775C8FF8281C1BAD4 /* Stores */,
+				50CC1D28CCC378A718DE92AE /* Views */,
 			);
-			path = WidgetShare;
+			path = SonarMac;
 			sourceTree = "<group>";
 		};
-		E10000000000000000000011 /* SonarWidgetExtension */ = {
+		166D3C67E8F85B52D7B86182 /* SonarWidgetExtension */ = {
 			isa = PBXGroup;
 			children = (
-				E10000000000000000000005 /* SonarWidget.swift */,
-				E10000000000000000000007 /* NowPlayingWidget.swift */,
-				E10000000000000000000009 /* QuickShuffleWidget.swift */,
-				E1000000000000000000000B /* AppIntents.swift */,
-				E1000000000000000000000D /* Info.plist */,
+				DDF9CDFAF920907E737EA1F1 /* AppIntents.swift */,
+				08DCF05FD200C693CE9F9F37 /* Info.plist */,
+				C7299262CE051452757A4957 /* NowPlayingWidget.swift */,
+				B1235783BEBD722567E91D58 /* QuickShuffleWidget.swift */,
+				CD9DDF5B055DDB9BEC09523E /* SonarWidget.swift */,
+				FF36E18C33F345D7F9A424E7 /* SonarWidgetExtension.entitlements */,
 			);
 			path = SonarWidgetExtension;
+			sourceTree = "<group>";
+		};
+		2FE8674DB51CB566028F7F2C /* App */ = {
+			isa = PBXGroup;
+			children = (
+				CDB605A69440E3482B2857A3 /* SonarMacApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		3571C39775C8FF8281C1BAD4 /* Stores */ = {
+			isa = PBXGroup;
+			children = (
+				626940789E51AAF357598AF4 /* MacAppModel.swift */,
+			);
+			path = Stores;
+			sourceTree = "<group>";
+		};
+		50CC1D28CCC378A718DE92AE /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				2F37B3B1D1F607208C82EDE7 /* MacArtworkView.swift */,
+				983802D0240E80F52984A8B1 /* MacCatalogDetailView.swift */,
+				F0CA156CD5F28106F70B55CA /* MacDiscoveryView.swift */,
+				BBC0FE27B28E5523FFA22AC6 /* MacHomeView.swift */,
+				3939705B7D2B476D9028898A /* MacPlaybackControls.swift */,
+				2A02BA723056F35F973D8692 /* MacPlayerInspector.swift */,
+				46BFFDE124AB3142A58DACE2 /* MacRootView.swift */,
+				FD58E841CE5D8C29360941AC /* MacSearchView.swift */,
+				DA6F585193CD9E113E4787E2 /* MacSeekSlider.swift */,
+				AB69039E57D6401DC7FCB763 /* MacSettingsView.swift */,
+				0912F1FA2AE27BA9AB7BA29F /* MacStatusPanel.swift */,
+				6491371AFD71CDD36CE052F8 /* MacTrackTable.swift */,
+				3625B01B1E950EB1FD5E0F02 /* MacTransportBar.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		51769965CA92BDA46EE7CD3B /* WidgetShare */ = {
+			isa = PBXGroup;
+			children = (
+				99282A07249A917FD0BC660E /* WidgetSnapshot.swift */,
+			);
+			path = WidgetShare;
 			sourceTree = "<group>";
 		};
 		84220EB3A3A0CA7750580CC4 = {
 			isa = PBXGroup;
 			children = (
 				8E662CAFB732C9989839C8E8 /* Sonar */,
-				E10000000000000000000011 /* SonarWidgetExtension */,
+				01BBEB9E1FCA05A3558E13F5 /* SonarMac */,
+				166D3C67E8F85B52D7B86182 /* SonarWidgetExtension */,
 				91249AF9156547D24ABADACE /* Products */,
 			);
 			sourceTree = "<group>";
@@ -213,12 +339,10 @@
 		8E662CAFB732C9989839C8E8 /* Sonar */ = {
 			isa = PBXGroup;
 			children = (
-				DEBA50F9B966B3E7F5ECF43C /* PlaylistBackup.swift */,
-				33754D3D0D385718FE481C9E /* BackupDocument.swift */,
-				C59839DEB4ED86B6FE210FE4 /* SonarBootstrap.swift */,
 				E0EA2B04C18A56C9D4F2E6BC /* ArtworkPalette.swift */,
 				A73EFD248035C9B528F3F9CB /* ArtworkService.swift */,
 				6E5EED7134E31ACCC9993AB0 /* Assets.xcassets */,
+				B646339D5586DBC0E6F7CEED /* BackupDocument.swift */,
 				6F60B4B0591442EA64C302E0 /* BuildCredentialStore.swift */,
 				408380D09AED2923A3000137 /* ChkszSourceRuntime.swift */,
 				FFC8F9394CC9701D9490C16A /* CommonCryptoBridge.swift */,
@@ -227,12 +351,16 @@
 				26011CDFF363FA05A89B2898 /* LibraryModels.swift */,
 				6ACD8DDDE5E548ADB1CA6E26 /* LibraryStore.swift */,
 				4BABFCFE6594F1616267CADF /* Lyrics.swift */,
+				5719E7714C35C9B356E1DA3C /* PlatformImage.swift */,
 				450235EC55571F09C6B63486 /* PlaybackQueue.swift */,
 				BB25826E80F220BFE6A05B3D /* PlaybackService.swift */,
 				F26CF6694394C69F6AC0B84A /* PlaybackURLCache.swift */,
 				4A187AA0404C33C8BC38A76A /* PlaybackURLResolver.swift */,
+				BD1042AAEABD40DCA2E0633F /* PlaylistBackup.swift */,
 				31A1B9444845B790C78ED7B0 /* SecurityBridge.swift */,
+				FF70443412C0145A0BD084EF /* Sonar.entitlements */,
 				C4BE53DF67468C133914605A /* SonarApp.swift */,
+				80A3D173DFB6CE7A7020235B /* SonarBootstrap.swift */,
 				20D71D4430F13816E4463BEB /* SourceModels.swift */,
 				B4873C9CD18E857D410F0903 /* SourceRuntime.swift */,
 				ACC2B15B9CA2543216C4296B /* ThemeState.swift */,
@@ -242,7 +370,7 @@
 				E052AA153D56ACEB24394F29 /* Player */,
 				DDA8625408F5984D05B1E96D /* Resources */,
 				E7F330810D2107F1092301B0 /* Screens */,
-				E10000000000000000000010 /* WidgetShare */,
+				51769965CA92BDA46EE7CD3B /* WidgetShare */,
 			);
 			path = Sonar;
 			sourceTree = "<group>";
@@ -251,7 +379,8 @@
 			isa = PBXGroup;
 			children = (
 				FBCDBA8A850047173492B69E /* Sonar.app */,
-				E1000000000000000000000E /* SonarWidgetExtension.appex */,
+				436336F57FF1148FDBF94FFE /* SonarMac.app */,
+				EB43F02C357C8AEC7CFB2D01 /* SonarWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -268,6 +397,16 @@
 				7E179A67DAA8C9A38B93B5C5 /* ToastOverlay.swift */,
 			);
 			path = Components;
+			sourceTree = "<group>";
+		};
+		B43A16F6DE4B132F45D7D1E1 /* Notch */ = {
+			isa = PBXGroup;
+			children = (
+				3FA05B31AFAD1B518CEA5142 /* NotchGeometry.swift */,
+				954D83BCE2DB35C87029A054 /* NotchPlayerView.swift */,
+				FFED279A43B9C82D356B903C /* NotchWindowController.swift */,
+			);
+			path = Notch;
 			sourceTree = "<group>";
 		};
 		DDA8625408F5984D05B1E96D /* Resources */ = {
@@ -325,12 +464,11 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		E10000000000000000000017 /* SonarWidgetExtension */ = {
+		971030551A536A4848351453 /* SonarWidgetExtension */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = E1000000000000000000001A /* Build configuration list for PBXNativeTarget "SonarWidgetExtension" */;
+			buildConfigurationList = A431898880313EDB59655587 /* Build configuration list for PBXNativeTarget "SonarWidgetExtension" */;
 			buildPhases = (
-				E10000000000000000000012 /* Sources */,
-				E10000000000000000000013 /* Resources */,
+				280F70FD7C0E6E37A7A90252 /* Sources */,
 			);
 			buildRules = (
 			);
@@ -340,7 +478,7 @@
 			packageProductDependencies = (
 			);
 			productName = SonarWidgetExtension;
-			productReference = E1000000000000000000000E /* SonarWidgetExtension.appex */;
+			productReference = EB43F02C357C8AEC7CFB2D01 /* SonarWidgetExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 		A17F7B6FDCF0C29A2AEA81F2 /* Sonar */ = {
@@ -349,19 +487,38 @@
 			buildPhases = (
 				7C988BE8E568319B7F4A0FF2 /* Sources */,
 				64401E30938C031972D59051 /* Resources */,
+				16E8E9FBC248399B7F429A11 /* Embed Foundation Extensions */,
 				8C3A8F0972B6A0900D8008A3 /* Embed local build credentials */,
-				E10000000000000000000014 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				E10000000000000000000016 /* PBXTargetDependency */,
+				5BE2E18B4CA2F1E646B423E5 /* PBXTargetDependency */,
 			);
 			name = Sonar;
 			packageProductDependencies = (
 			);
 			productName = Sonar;
 			productReference = FBCDBA8A850047173492B69E /* Sonar.app */;
+			productType = "com.apple.product-type.application";
+		};
+		CAB459B0285C78BA930D3839 /* SonarMac */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B1C95F77858E531F7AFB95B4 /* Build configuration list for PBXNativeTarget "SonarMac" */;
+			buildPhases = (
+				9D9A4F668871FF64FF012CB8 /* Sources */,
+				3378336B0ADD087E83C4E837 /* Resources */,
+				52F95439874CC9AB2CF8AA03 /* Embed local build credentials */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SonarMac;
+			packageProductDependencies = (
+			);
+			productName = SonarMac;
+			productReference = 436336F57FF1148FDBF94FFE /* SonarMac.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -373,6 +530,9 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					CAB459B0285C78BA930D3839 = {
+						ProvisioningStyle = Manual;
+					};
 				};
 			};
 			buildConfigurationList = 69C2BB67C0034DFAA65AB16D /* Build configuration list for PBXProject "Sonar" */;
@@ -390,16 +550,19 @@
 			projectRoot = "";
 			targets = (
 				A17F7B6FDCF0C29A2AEA81F2 /* Sonar */,
-				E10000000000000000000017 /* SonarWidgetExtension */,
+				971030551A536A4848351453 /* SonarWidgetExtension */,
+				CAB459B0285C78BA930D3839 /* SonarMac */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		E10000000000000000000013 /* Resources */ = {
+		3378336B0ADD087E83C4E837 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9C002202389C410024ECC238 /* Assets.xcassets in Resources */,
+				1E8C7400A1DEB0D76D9DB9E9 /* source-bundle.js in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -415,6 +578,25 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		52F95439874CC9AB2CF8AA03 /* Embed local build credentials */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed local build credentials";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "CREDENTIAL_OUTPUT=\"${DERIVED_FILE_DIR}/BuildCredentials.json\"\nif [ -f \"${SRCROOT}/scripts/generate-build-credentials.mjs\" ]; then\n  node \"${SRCROOT}/scripts/generate-build-credentials.mjs\" \"${CREDENTIAL_OUTPUT}\"\nelse\n  node \"${SRCROOT}/scripts/generate-build-config.mjs\" \"${CREDENTIAL_OUTPUT}\"\nfi\ninstall -d \"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\ninstall -m 600 \"${CREDENTIAL_OUTPUT}\" \"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/BuildCredentials.json\"\n";
+		};
 		8C3A8F0972B6A0900D8008A3 /* Embed local build credentials */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -437,15 +619,15 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		E10000000000000000000012 /* Sources */ = {
+		280F70FD7C0E6E37A7A90252 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E10000000000000000000004 /* WidgetSnapshot.swift in Sources */,
-				E10000000000000000000006 /* SonarWidget.swift in Sources */,
-				E10000000000000000000008 /* NowPlayingWidget.swift in Sources */,
-				E1000000000000000000000A /* QuickShuffleWidget.swift in Sources */,
-				E1000000000000000000000C /* AppIntents.swift in Sources */,
+				B273110055A3987C3E8B61CA /* AppIntents.swift in Sources */,
+				31797BFCD01A15336B821E9D /* NowPlayingWidget.swift in Sources */,
+				3DDBE9B28A88936BAC98B686 /* QuickShuffleWidget.swift in Sources */,
+				5D1B31E068874469A5A8AC70 /* SonarWidget.swift in Sources */,
+				EEC2F7BFEB9C9BD5F13EC1C2 /* WidgetSnapshot.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -453,9 +635,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				8D7F9B5B2809C3F143DCA6F4 /* PlaylistBackup.swift in Sources */,
-				923F78A505478D9E49E529B4 /* BackupDocument.swift in Sources */,
-				966845E7ACF4114C221A0229 /* SonarBootstrap.swift in Sources */,
 				27B2E5179FE340020A5625CE /* AddToPlaylistSheet.swift in Sources */,
 				849E996CB5EA0C8A6FE0A1E2 /* AlbumDetailView.swift in Sources */,
 				43CD3AEBDDCBC0B4765C3E17 /* AlbumFace.swift in Sources */,
@@ -464,6 +643,7 @@
 				47C209A1ED23CFF7F558242A /* ArtistDetailViewModel.swift in Sources */,
 				ECB552CFAFC383946E5F9B35 /* ArtworkPalette.swift in Sources */,
 				F7E9F7607BD999EE802E71E9 /* ArtworkService.swift in Sources */,
+				9530293170B5F5C6B0EB2CF6 /* BackupDocument.swift in Sources */,
 				36418007708D397E8BE4CF28 /* BottomCapsule.swift in Sources */,
 				A9AE8D025631CAF898D158A9 /* BuildCredentialStore.swift in Sources */,
 				7107D4B6F85615FAD72AB260 /* ChkszSourceRuntime.swift in Sources */,
@@ -481,6 +661,7 @@
 				A33731C2FB928F04D0A6E14A /* LibraryStore.swift in Sources */,
 				540EEDA4419A9A732D08D5F6 /* Lyrics.swift in Sources */,
 				27DF39947DBF445C999D2FFB /* M3Scheme.swift in Sources */,
+				04A7EC70D53BC2C31C0837B4 /* PlatformImage.swift in Sources */,
 				27F4265CCD2C3F3429E40095 /* PlaybackQueue.swift in Sources */,
 				D0CF85FDD1BF0F805AAC893F /* PlaybackService.swift in Sources */,
 				15154B117DC173D22B9F67D6 /* PlaybackURLCache.swift in Sources */,
@@ -490,6 +671,7 @@
 				CEC90225BE102E2FC4B0B08E /* PlayerPalette.swift in Sources */,
 				A4AA32949043B0D5D115CF7E /* PlayerPullController.swift in Sources */,
 				53198B5BF3D3961430F76D21 /* PlayingEqualizer.swift in Sources */,
+				7A5895C860E749BE29B29DA7 /* PlaylistBackup.swift in Sources */,
 				09DC6AACFD5438547D5D84AB /* PlaylistDetailActions.swift in Sources */,
 				386AB54DC24767D8C846FE69 /* PlaylistDetailView.swift in Sources */,
 				7647B97C127EC7F0A172D228 /* QualityBadge.swift in Sources */,
@@ -500,6 +682,7 @@
 				26FCAACF94F51F504364CE16 /* SecurityBridge.swift in Sources */,
 				1729AC660D12ABAAA2822994 /* SettingsView.swift in Sources */,
 				081601FE13DC4F6CC4BECB93 /* SonarApp.swift in Sources */,
+				9C44E7CE2642E9E513736D45 /* SonarBootstrap.swift in Sources */,
 				151055174EAF225E4D91E9F4 /* SongRow.swift in Sources */,
 				ADD1640DC2D9A7FD0E69C200 /* SongsView.swift in Sources */,
 				36B26DFAE25D317CC4BA1685 /* SourceModels.swift in Sources */,
@@ -509,92 +692,93 @@
 				F14EC2B8475DB8F382D6ADC7 /* ToastOverlay.swift in Sources */,
 				F5FD0195E6AF7728BE1CD0CD /* TransportBar.swift in Sources */,
 				766580A1DEA22FB604515B4A /* UIPreferences.swift in Sources */,
-				E10000000000000000000002 /* WidgetSnapshot.swift in Sources */,
+				AF2AD686FEB632AFD7890417 /* WidgetSnapshot.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9D9A4F668871FF64FF012CB8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				24EA5E1659CE69C5FD928BD9 /* ArtistDetailViewModel.swift in Sources */,
+				8CD35F2396AEAE42FBF66473 /* ArtworkPalette.swift in Sources */,
+				03B507D5E142354A8E2E020D /* ArtworkService.swift in Sources */,
+				D98C43A6E74D23F95B6C47A1 /* BackupDocument.swift in Sources */,
+				0B14F916B874DED1DBF31BE6 /* BuildCredentialStore.swift in Sources */,
+				EF410A97E099E35275BA6B6C /* ChkszSourceRuntime.swift in Sources */,
+				090006C909B857368B794DBB /* CommonCryptoBridge.swift in Sources */,
+				C4BD769464B5D00A33C12E92 /* DiscoveryViewModel.swift in Sources */,
+				71AA454E378826503DFF8158 /* FallbackPlaybackURLResolver.swift in Sources */,
+				C118FF41E801D98F1D4CD6D6 /* LibraryModels.swift in Sources */,
+				A0FF8E68199039B5B2369E11 /* LibraryStore.swift in Sources */,
+				DE37A96EE60EE520B57EC1D7 /* Lyrics.swift in Sources */,
+				264C9B4E7884B61480A1D69C /* M3Scheme.swift in Sources */,
+				854CE459C258E8F1D8DD7A27 /* MacAppModel.swift in Sources */,
+				DB2BA76D2DDF637BFF3FD7DB /* MacArtworkView.swift in Sources */,
+				7FE1F65FFF9088A4EC9B9A30 /* MacCatalogDetailView.swift in Sources */,
+				081C757D53FE360A465B0143 /* MacDiscoveryView.swift in Sources */,
+				542BAF8189E814883914BBE7 /* MacHomeView.swift in Sources */,
+				60469D3B6128408AA3743CDF /* MacPlaybackControls.swift in Sources */,
+				AA7B15B6AEE1E3EC2250794D /* MacPlayerInspector.swift in Sources */,
+				CE48177ACF39F7D53FECD547 /* MacRootView.swift in Sources */,
+				207EC744AEB0D1E31BCF74C3 /* MacSearchView.swift in Sources */,
+				8B6877C15FAE872321579C79 /* MacSeekSlider.swift in Sources */,
+				D052BF68DC9448B1FE54BAB6 /* MacSettingsView.swift in Sources */,
+				F2E5611E54861C8CFE30DBAB /* MacStatusPanel.swift in Sources */,
+				CD3A97624F1A6F9F17A5AAEE /* MacTrackTable.swift in Sources */,
+				2AC0DF2FE2138AE3456EBEE4 /* MacTransportBar.swift in Sources */,
+				2D15CCA0EC8F5A51393AD4E0 /* NotchGeometry.swift in Sources */,
+				EDDC470E674A41FDB20959DD /* NotchPlayerView.swift in Sources */,
+				F1EE5FDEF276B87C218D7D73 /* NotchWindowController.swift in Sources */,
+				6FC37939D385F70BBF929022 /* PlatformImage.swift in Sources */,
+				C4CECD45B6286235DBB79D39 /* PlaybackQueue.swift in Sources */,
+				91779D83DF56BDC1863D9E13 /* PlaybackService.swift in Sources */,
+				79911F8A373BA75C2C952D34 /* PlaybackURLCache.swift in Sources */,
+				119B5345823C0A8EA9499559 /* PlaybackURLResolver.swift in Sources */,
+				E0C0042DF41593C7DD3B0977 /* PlaylistBackup.swift in Sources */,
+				5B470E72EF556A348CCB0C04 /* QualityBadge.swift in Sources */,
+				3ADB4D1F4D8E0EE940F7F136 /* SearchViewModel.swift in Sources */,
+				3834511C63D829751D798AE6 /* SecurityBridge.swift in Sources */,
+				003DE8178F6E063C5829A4CA /* SonarBootstrap.swift in Sources */,
+				E05F4AB1CCBC458F2C87EB5D /* SonarMacApp.swift in Sources */,
+				76C46E72A3B6425BDF188FD4 /* SourceModels.swift in Sources */,
+				5CBF0B8B60ED5ED5D35E6568 /* SourceRuntime.swift in Sources */,
+				DD93E167257EE4F12191C3C0 /* ThemeState.swift in Sources */,
+				AC2E44788798C9D9E6AEEE1C /* UIPreferences.swift in Sources */,
+				2098A400B160A8CEAD80EA39 /* WidgetSnapshot.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		E10000000000000000000016 /* PBXTargetDependency */ = {
+		5BE2E18B4CA2F1E646B423E5 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = E10000000000000000000017 /* SonarWidgetExtension */;
-			targetProxy = E10000000000000000000015 /* PBXContainerItemProxy */;
+			target = 971030551A536A4848351453 /* SonarWidgetExtension */;
+			targetProxy = DECE27AEE0067A57594D2C53 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		E10000000000000000000018 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = SonarWidgetExtension/SonarWidgetExtension.entitlements;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 20;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = SonarWidgetExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Sonar;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "cn.bobochang.sonar.widget";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SKIP_INSTALL = YES;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
-		};
-		E10000000000000000000019 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = SonarWidgetExtension/SonarWidgetExtension.entitlements;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 20;
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = SonarWidgetExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Sonar;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "cn.bobochang.sonar.widget";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SKIP_INSTALL = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OPTIMIZATION_LEVEL = "-O";
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Release;
-		};
 		14D5DBB0D8CF8B64F58B70AB /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = Sonar/Sonar.entitlements;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Sonar/Sonar.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 21;
 				INFOPLIST_FILE = Sonar/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Sonar;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
+				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = cn.bobochang.sonar;
 				PRODUCT_NAME = Sonar;
 				SDKROOT = iphoneos;
@@ -602,6 +786,54 @@
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
+		};
+		32FA5BE0031274B5CD4964AA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = SonarMac/SonarMac.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 21;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = SonarMac/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = cn.bobochang.sonar.mac;
+				PRODUCT_NAME = SonarMac;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		3C1F3008DC6593E6C06B7D80 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = SonarWidgetExtension/SonarWidgetExtension.entitlements;
+				CURRENT_PROJECT_VERSION = 21;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = SonarWidgetExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Sonar;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = cn.bobochang.sonar.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
 		};
 		5E1F3FD9EA12B3C5224732BB /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -648,21 +880,13 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UIRequiresFullScreen = YES;
-				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SUPPORTS_MACCATALYST = NO;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
@@ -717,39 +941,59 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UIRequiresFullScreen = YES;
-				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SUPPORTS_MACCATALYST = NO;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		B0855B6F86FC923EDCD33E42 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = SonarWidgetExtension/SonarWidgetExtension.entitlements;
+				CURRENT_PROJECT_VERSION = 21;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = SonarWidgetExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Sonar;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = cn.bobochang.sonar.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
 		CEC3700DEDB456784D45944F /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = Sonar/Sonar.entitlements;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Sonar/Sonar.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 21;
 				INFOPLIST_FILE = Sonar/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Sonar;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
+				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = cn.bobochang.sonar;
 				PRODUCT_NAME = Sonar;
 				SDKROOT = iphoneos;
@@ -758,18 +1002,34 @@
 			};
 			name = Release;
 		};
+		F6B13A65ED410430375B1E29 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = SonarMac/SonarMac.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 21;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = SonarMac/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = cn.bobochang.sonar.mac;
+				PRODUCT_NAME = SonarMac;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		E1000000000000000000001A /* Build configuration list for PBXNativeTarget "SonarWidgetExtension" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				E10000000000000000000018 /* Debug */,
-				E10000000000000000000019 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		69C2BB67C0034DFAA65AB16D /* Build configuration list for PBXProject "Sonar" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -784,6 +1044,24 @@
 			buildConfigurations = (
 				14D5DBB0D8CF8B64F58B70AB /* Debug */,
 				CEC3700DEDB456784D45944F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		A431898880313EDB59655587 /* Build configuration list for PBXNativeTarget "SonarWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B0855B6F86FC923EDCD33E42 /* Debug */,
+				3C1F3008DC6593E6C06B7D80 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		B1C95F77858E531F7AFB95B4 /* Build configuration list for PBXNativeTarget "SonarMac" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F6B13A65ED410430375B1E29 /* Debug */,
+				32FA5BE0031274B5CD4964AA /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

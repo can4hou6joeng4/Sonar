@@ -225,6 +225,7 @@ public final class WidgetShareStore: @unchecked Sendable {
     }
 
     public func updateFavoritesCount(_ count: Int) {
+        #if os(iOS)
         let current = loadSnapshot()
         let updated = WidgetPlaybackSnapshot(
             title: current.title,
@@ -237,6 +238,7 @@ public final class WidgetShareStore: @unchecked Sendable {
             updatedAt: Date()
         )
         saveSnapshot(updated)
+        #endif
     }
 
     public func saveArtwork(_ data: Data) {

@@ -1,0 +1,60 @@
+import SwiftUI
+
+struct MacSettingsView: View {
+    @Bindable var model: MacAppModel
+    @AppStorage("macAppearance") private var appearance = "system"
+    @State private var qualityNotice: String?
+
+    var body: some View {
+        TabView {
+            Form {
+                Section("外观") {
+                    Picker("外观模式", selection: $appearance) {
+                        Text("跟随系统").tag("system")
+                        Text("浅色").tag("light")
+                        Text("深色").tag("dark")
+                    }
+                }
+                Section("刘海播放器") {
+                    Toggle("显示在屏幕顶部", isOn: $model.notchEnabled)
+                    Text("将指针移到屏幕顶部，展开播放控制。在没有刘海的显示器上，同样可以使用。")
+                        .font(.callout).foregroundStyle(.secondary)
+                    Button("显示播放器") { model.showNotch() }
+                }
+            }.formStyle(.grouped).tabItem { Label("通用", systemImage: "gearshape") }
+            Form {
+                Section("音频") {
+                    Picker("首选音质", selection: Binding(get: { model.playback.preferredQuality }, set: { quality in
+                        Task {
+                            let result = await model.playback.setPreferredQuality(quality)
+                            switch result {
+                            case .unchanged: qualityNotice = "已使用该音质设置。"
+                            case .reloaded: qualityNotice = "已更新当前歌曲的音质。"
+                            case .deferred: qualityNotice = "下一首歌曲将使用新的音质设置。"
+                            case .failed(let message): qualityNotice = message
+                            }
+                        }
+                    })) {
+                        ForEach(Quality.allCases, id: \.self) { Text($0.macTitle).tag($0) }
+                    }
+                    Text("音源会从首选音质开始尝试，实际音质取决于歌曲与音源可用性。")
+                        .font(.callout).foregroundStyle(.secondary)
+                    Slider(value: Binding(get: { model.playback.volume }, set: { model.playback.setVolume($0) }), in: 0...1) { Text("音量") }
+                    if let qualityNotice { Text(qualityNotice).font(.callout).foregroundStyle(.secondary) }
+                }
+            }.formStyle(.grouped).tabItem { Label("播放", systemImage: "speaker.wave.2") }
+            Form {
+                Section("歌单备份") {
+                    LabeledContent("个人歌单", value: "\(model.libraryTracks.count) 首歌曲")
+                    HStack {
+                        Button("导入备份…") { model.importBackup() }
+                        Button("导出备份…") { model.exportBackup() }
+                    }.disabled(model.library == nil)
+                    Text("备份保存歌曲信息。导入会合并已有收藏并跳过重复歌曲，不包含音频文件。")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+            }.formStyle(.grouped).tabItem { Label("资料库", systemImage: "externaldrive") }
+        }.padding(12).frame(width: 530, height: 360)
+        .preferredColorScheme(appearance == "light" ? .light : appearance == "dark" ? .dark : nil)
+    }
+}

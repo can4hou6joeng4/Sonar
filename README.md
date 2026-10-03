@@ -4,10 +4,11 @@
 
 <h1 align="center">Sonar</h1>
 
-<p align="center"><strong>🐋 在深水里靠声音辨路。原生极简 iOS 音乐播放器，让搜索、收藏与聆听回归纯粹。</strong></p>
+<p align="center"><strong>🐋 在深水里靠声音辨路。原生 iOS 与 macOS 音乐播放器，让搜索、收藏与聆听回归纯粹。</strong></p>
 
 <div align="center">
   <img alt="iOS" src="https://img.shields.io/badge/iOS-17%2B-000000?style=flat-square&logo=apple&logoColor=white" />
+  <img alt="macOS" src="https://img.shields.io/badge/macOS-14%2B-000000?style=flat-square&logo=apple&logoColor=white" />
   <img alt="Swift" src="https://img.shields.io/badge/Swift-5.9%2B-FA7343?style=flat-square&logo=swift&logoColor=white" />
   <img alt="SwiftUI" src="https://img.shields.io/badge/UI-SwiftUI-3E82F7?style=flat-square" />
   <img alt="SwiftData" src="https://img.shields.io/badge/Storage-SwiftData-5E5CE6?style=flat-square" />
@@ -138,6 +139,32 @@ cd build && zip -qr Sonar.ipa Payload && rm -rf Payload && cd ..
 # 产物即为 build/Sonar.ipa
 ```
 
+### 4. 原生 Mac 客户端
+
+在 Xcode 中打开同一个 `Sonar.xcodeproj`，选择 **SonarMac** Scheme 和 **My Mac** 即可运行。Mac 端要求 macOS 14.0+，仅提供灵动岛与状态栏面板，不创建桌面主窗口或显示 Dock 图标，复用 iOS 的音源、播放队列、歌词解析、封面缓存和 SwiftData 资料库实现。
+
+也可以从终端一键构建并启动：
+
+```sh
+./script/build_and_run.sh --verify
+```
+
+该脚本在 `build/macOS/` 中生成并本地 ad-hoc 签名 `SonarMac.app`，不需要个人开发者证书。可选 `--debug` 进入 LLDB，`--logs` 查看运行日志。构建使用已提交的 Xcode 工程，不需要 XcodeGen 或任何本地 Agent 框架；只有修改 `project.yml` 后重新生成工程时才需要 XcodeGen。
+
+Mac 端提供：
+
+- 点击状态栏波形图标，打开紧凑选歌面板：播放控制下方的搜索与播放列表图标按钮可展开对应内容，再次点击可收起。
+- 状态栏与灵动岛共用一个播放服务，提供上下首、播放暂停、进度和音量控制。
+- 播放模式包括随机、单曲循环、顺序播放和歌单循环。单曲循环在歌曲自然结束时重复，手动“下一首”仍会跳过；顺序播放在队列末尾停止，歌单循环则回到开头。
+- Mac 会按当前模式提前解析并缓冲下一首，切歌直接接续已准备的媒体项；插歌、删歌、排序及模式切换会同步更新准备目标。音源尚未准备好时仍需等待网络加载。
+- 参考 [Atoll](https://github.com/Ebullioscopic/Atoll) 交互独立实现的顶部播放器：悬停展开、离开收起、固定展开、封面与同步歌词；点击外部或失焦时收起，无刘海屏幕使用顶部胶囊。
+- 灵动岛的选歌按钮直接打开状态栏面板。灵动岛开关和歌单导入导出位于面板设置内。
+- 启动时仅显示状态栏图标及已启用的灵动岛；点击面板外或失焦时关闭状态栏面板，播放继续。播放模式按钮仅显示图标，悬停可查看当前模式。退出入口位于面板右上角。
+
+排查切歌等待时，可运行 `./script/build_and_run.sh --telemetry`，查看 `PlaybackTransition` 类别中的地址解析、媒体就绪、开始播放及下一首缓冲事件。日志只记录阶段与耗时，不包含歌曲信息、播放地址或凭据；这些耗时反映播放器状态，不等同于音频输出设备的实测静音间隔。
+
+Mac 资料库保存于 `~/Library/Application Support/cn.bobochang.sonar.mac/Sonar.store`（启用 App Sandbox 签名时位于应用容器内对应目录）。首次运行创建独立资料库，可导入 iOS 导出的备份。打开失败时保留原文件并提供重试和原始资料导出，不会自动清空或替换用户资料。
+
 ---
 
 ## 🔐 数据与凭据管理
@@ -178,6 +205,7 @@ cd build && zip -qr Sonar.ipa Payload && rm -rf Payload && cd ..
 ### 致谢
 
 - 感谢 [lx-music-mobile](https://github.com/lyswhut/lx-music-mobile) 及其开源生态，本项目的音源解析脚本在设计时参考了其部分开源实践。
+- Mac 刘海播放器的交互参考 [Atoll](https://github.com/Ebullioscopic/Atoll)；Sonar 使用自己的窗口、界面与播放实现，未引入 Atoll 源代码或素材。
 - 第三方依赖与开源库许可声明请查阅 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与 [LICENSES/](LICENSES/) 目录。
 
 ### 开源许可证

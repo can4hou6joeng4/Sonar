@@ -921,10 +921,6 @@ struct RemotePlaylistArtwork: View {
     }
 }
 
-extension PlaylistSummary {
-    var key: String { "\(source.rawValue):\(id)" }
-}
-
 struct RemotePlaylistDetailView: View {
     let playlist: PlaylistSummary
     private let runtime: SourceRuntime
@@ -1029,8 +1025,4 @@ struct RemotePlaylistDetailView: View {
         .navigationBarBackButtonHidden(true)
         .task { await model.loadInitialIfNeeded(from: playlist) }
     }
-}
-
-extension Track: Identifiable {
-    public var id: String { musicID }
 }

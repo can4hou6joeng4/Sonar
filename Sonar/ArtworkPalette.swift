@@ -1,6 +1,5 @@
 import CoreGraphics
 import Foundation
-import UIKit
 
 public struct ArtworkPalette: Equatable, Sendable {
     public let accentHex: String
@@ -30,8 +29,8 @@ public struct ArtworkPalette: Equatable, Sendable {
         )
     }
 
-    public static func accentHex(from image: UIImage) -> String? {
-        guard let cgImage = image.cgImage else { return nil }
+    public static func accentHex(from image: PlatformImage) -> String? {
+        guard let cgImage = image.sonarCGImage else { return nil }
         let width = 44
         let height = 44
         let colorSpace = CGColorSpaceCreateDeviceRGB()
