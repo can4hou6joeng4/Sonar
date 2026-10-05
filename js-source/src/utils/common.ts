@@ -11,11 +11,16 @@ export const getRandom = (min: number, max: number): number => Math.floor(Math.r
 
 
 export const sizeFormate = (size: number): string => {
-  // https://gist.github.com/thomseddon/3511330
-  if (!size) return '0 B'
-  let units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let number = Math.floor(Math.log(size) / Math.log(1024))
-  return `${(size / Math.pow(1024, Math.floor(number))).toFixed(2)} ${units[number]}`
+  // Sonar implementation: keep the music SDK's binary scale and display labels.
+  if (!Number.isFinite(size) || size <= 0) return '0 B'
+  const labels = ['B', 'KB', 'MB', 'GB', 'TB']
+  let amount = size
+  let unit = 0
+  while (amount >= 1024 && unit < labels.length - 1) {
+    amount /= 1024
+    unit += 1
+  }
+  return `${amount.toFixed(2)} ${labels[unit]}`
 }
 
 /**
@@ -130,37 +135,6 @@ const fileNameRxp = /[\\/:*?#"<>|]/g
 export const filterFileName = (name: string): string => name.replace(fileNameRxp, '')
 
 
-// https://blog.csdn.net/xcxy2015/article/details/77164126#comments
-/**
- *
- * @param a
- * @param b
- */
-export const similar = (a: string, b: string) => {
-  if (!a || !b) return 0
-  if (a.length > b.length) { // 保证 a <= b
-    let t = b
-    b = a
-    a = t
-  }
-  let al = a.length
-  let bl = b.length
-  let mp = [] // 一个表
-  let i, j, ai, lt, tmp // ai：字符串a的第i个字符。 lt：左上角的值。 tmp：暂存新的值。
-  for (i = 0; i <= bl; i++) mp[i] = i
-  for (i = 1; i <= al; i++) {
-    ai = a.charAt(i - 1)
-    lt = mp[0]
-    mp[0] = mp[0] + 1
-    for (j = 1; j <= bl; j++) {
-      tmp = Math.min(mp[j] + 1, mp[j - 1] + 1, lt + (ai == b.charAt(j - 1) ? 0 : 1))
-      lt = mp[j]
-      mp[j] = tmp
-    }
-  }
-  return 1 - (mp[bl] / bl)
-}
-
 /**
  * 排序字符串
  * @param arr
@@ -210,26 +184,6 @@ export const arrPushByPosition = <T>(list: T[], newList: T[], position: number) 
     list.splice(position + i * 1000, 0, ...newList.slice(i * 1000, (i + 1) * 1000))
   }
   return list
-}
-
-
-// https://stackoverflow.com/a/2450976
-export const arrShuffle = <T>(array: T[]) => {
-  let currentIndex = array.length
-  let randomIndex
-
-  // While there remain elements to shuffle.
-  while (currentIndex != 0) {
-    // Pick a remaining element.
-    randomIndex = Math.floor(Math.random() * currentIndex)
-    currentIndex--;
-
-    // And swap it with the current element.
-    [array[currentIndex], array[randomIndex]] = [
-      array[randomIndex], array[currentIndex]]
-  }
-
-  return array
 }
 
 

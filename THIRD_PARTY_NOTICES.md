@@ -1,6 +1,6 @@
 # 第三方代码与许可说明
 
-本文件记录 Sonar 使用的第三方代码及相应许可文本。下列许可证仅覆盖对应的第三方内容，**不构成对 Sonar 自有代码的整体许可证选择**。核对日期：2026-09-07。
+本文件记录 Sonar 使用的第三方代码及相应许可文本。下列许可证仅覆盖对应的第三方内容；Sonar 自有代码采用根目录的 GPL-3.0 许可证。核对日期：2026-10-06。
 
 ## 音源实现
 
@@ -27,19 +27,19 @@ lx-music-mobile 的许可文件来自其上游仓库；核对时根目录没有�
 | esbuild | 0.28.2 | 构建工具 | [MIT](LICENSES/esbuild.txt) |
 | lrc-file-parser | 1.2.7 | 已声明的开发依赖，当前 bundle 中未检测到对应模块 | [MIT](LICENSES/lrc-file-parser.txt) |
 
-## 源码保留的其他参考链接（公开发布前待核实）
+## 已处理的历史辅助代码引用
 
-下列引用由适配源码保留。它们并不自动由 lx-music-mobile 的整体许可覆盖；在未确认实际采用的回答版本及授权条件前，不将本清单视为完整的公开分发许可结论。
+2026-10-06 清理了以下辅助片段。三项未被 Sonar 音源入口调用的函数已移除；两项仍使用的功能已由 Sonar 重新实现。历史来源继续记录在此和 `LICENSES/sources.json`，不将它们归入 lx-music-mobile 的整体许可，也不宣称已取得原片段的额外授权。
 
-| 本地函数 | 引用与作者 | 当前核对状态 |
+| 功能 | 历史引用与作者 | 当前分发版本的处理 |
 | --- | --- | --- |
-| `compareVer` | [Stack Overflow 53387532](https://stackoverflow.com/a/53387532)，[vanowm](https://stackoverflow.com/users/2930038/vanowm) | API 当前页面标注 CC BY-SA 4.0；采用的历史版本尚未确定 |
-| `arrShuffle` | [Stack Overflow 2450976](https://stackoverflow.com/a/2450976)，[ChristopheD](https://stackoverflow.com/users/81179/christophed) | API 当前页面标注 CC BY-SA 4.0；采用的历史版本尚未确定 |
-| `blobToBuffer` | [Stack Overflow 64945178](https://stackoverflow.com/a/64945178)，[Chris Rice](https://stackoverflow.com/users/1148118/chris-rice) | API 当前页面标注 CC BY-SA 4.0；采用的历史版本尚未确定 |
-| `sizeFormate` | [Gist 3511330](https://gist.github.com/thomseddon/3511330)，thomseddon | 已核对公开 Gist 文件列表，未发现单独的许可证文件；许可尚未确认 |
-| `similar` | [CSDN 77164126](https://blog.csdn.net/xcxy2015/article/details/77164126)，链接账号 xcxy2015 | 来源链接仍在代码中，许可尚未确认 |
+| `compareVer` | [Stack Overflow 53387532](https://stackoverflow.com/a/53387532)，[vanowm](https://stackoverflow.com/users/2930038/vanowm) | 未使用，已移除 |
+| `arrShuffle` | [Stack Overflow 2450976](https://stackoverflow.com/a/2450976)，[ChristopheD](https://stackoverflow.com/users/81179/christophed) | 未使用，已移除；App 播放队列使用 Swift 实现 |
+| `blobToBuffer` | [Stack Overflow 64945178](https://stackoverflow.com/a/64945178)，[Chris Rice](https://stackoverflow.com/users/1148118/chris-rice) | 移除原数据 URL/base64 片段，改用原始 ArrayBuffer 字节读取 |
+| `sizeFormate` | [Gist 3511330](https://gist.github.com/thomseddon/3511330)，thomseddon | 移除原片段，改用逐级单位换算，保留音源 SDK 的显示格式 |
+| `similar` | [CSDN 77164126](https://blog.csdn.net/xcxy2015/article/details/77164126)，链接账号 xcxy2015 | 未使用，已移除 |
 
-[CC BY-SA 4.0 参考文本](LICENSES/cc-by-sa-4.0.txt) 从 GitHub 许可证 API 保存；当前页面许可不等于对历史导入版本或整个 Sonar 项目的重新授权。发布前需核对相关版本与条件，或另行处理这些片段。
+`LICENSES/cc-by-sa-4.0.txt` 仅保留为历史核对材料，不再作为当前音源 bundle 的依赖许可拼入。此次处理针对当前分发版本，不改变旧提交的源码或许可情况，也不是对整个 Git 历史的许可审计结论。
 
 ## 分发与维护
 

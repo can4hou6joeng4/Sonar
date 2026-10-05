@@ -3,7 +3,7 @@ import { mkdir, readFile } from 'node:fs/promises'
 
 const licenseFiles = [
   'lx-music-mobile', 'NeteaseCloudMusicApi', 'base64-js', 'buffer',
-  'ieee754', 'he', 'pako', 'pako-zlib', 'esbuild', 'lrc-file-parser', 'cc-by-sa-4.0',
+  'ieee754', 'he', 'pako', 'pako-zlib', 'esbuild', 'lrc-file-parser',
 ]
 const notices = [await readFile('THIRD_PARTY_NOTICES.md', 'utf8')]
 for (const name of licenseFiles) {

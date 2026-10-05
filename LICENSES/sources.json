@@ -103,7 +103,8 @@
         "author": "ChristopheD",
         "author_url": "https://stackoverflow.com/users/81179/christophed",
         "current_page_license": "CC BY-SA 4.0",
-        "imported_revision": "not established"
+        "imported_revision": "not established",
+        "resolution": "removed unused helper"
       },
       {
         "answer_id": 53387532,
@@ -111,7 +112,8 @@
         "author": "vanowm",
         "author_url": "https://stackoverflow.com/users/2930038/vanowm",
         "current_page_license": "CC BY-SA 4.0",
-        "imported_revision": "not established"
+        "imported_revision": "not established",
+        "resolution": "removed unused helper"
       },
       {
         "answer_id": 64945178,
@@ -119,7 +121,8 @@
         "author": "Chris Rice",
         "author_url": "https://stackoverflow.com/users/1148118/chris-rice",
         "current_page_license": "CC BY-SA 4.0",
-        "imported_revision": "not established"
+        "imported_revision": "not established",
+        "resolution": "replaced data-URL/base64 reader with a Sonar ArrayBuffer implementation"
       }
     ],
     "gist": {
@@ -128,13 +131,22 @@
       "files": [
         "gistfile1.js"
       ],
-      "owner": "thomseddon"
+      "owner": "thomseddon",
+      "resolution": "replaced the size formatter with a Sonar iterative binary-unit implementation"
     },
-    "unresolved": [
-      "Gist 3511330 has no separate license file in the inspected file list; permission remains unconfirmed.",
-      "CSDN article 77164126 permission has not been verified.",
-      "Stack Overflow imported revisions and associated license obligations require review before public distribution."
+    "unresolved": [],
+    "cc_by_sa_4_license_source": "https://api.github.com/licenses/cc-by-sa-4.0",
+    "resolution_date": "2026-10-06",
+    "current_distribution": "Historical helper snippets removed or replaced in the current distribution; original imported revisions remain unestablished.",
+    "historical_limitations": [
+      "Original permissions and imported revisions were not resolved; their snippets are no longer present in the current distribution.",
+      "No past commits were rewritten or relicensed by this cleanup."
     ],
-    "cc_by_sa_4_license_source": "https://api.github.com/licenses/cc-by-sa-4.0"
-  }
+    "csdn": {
+      "url": "https://blog.csdn.net/xcxy2015/article/details/77164126",
+      "author": "xcxy2015",
+      "resolution": "removed unused similar helper"
+    }
+  },
+  "reviewed_on": "2026-10-06"
 }

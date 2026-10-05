@@ -155,16 +155,20 @@ const handleRequestData = async(url, {
   }
 }
 
-// https://stackoverflow.com/a/64945178
 const blobToBuffer = (blob) => {
+  // Sonar implementation: read the raw bytes instead of a base64 data URL.
   return new Promise((resolve, reject) => {
     const reader = new global.FileReader()
-    reader.onerror = reject
+    reader.onerror = () => reject(reader.error || new Error('Unable to read binary response'))
+    reader.onabort = () => reject(new Error('Binary response read was aborted'))
     reader.onload = () => {
-      const data = reader.result.slice(reader.result.indexOf('base64,') + 7)
-      resolve(Buffer.from(data, 'base64'))
+      if (!(reader.result instanceof ArrayBuffer)) {
+        reject(new Error('Binary response did not contain an ArrayBuffer'))
+        return
+      }
+      resolve(Buffer.from(new Uint8Array(reader.result)))
     }
-    reader.readAsDataURL(blob)
+    reader.readAsArrayBuffer(blob)
   })
 }
 
