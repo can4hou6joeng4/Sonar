@@ -21,10 +21,17 @@ struct MacStatusPanel: View {
         }
     }
 
+    private struct FavoriteRemovalFeedback {
+        let track: Track
+        var index: Int
+    }
+
     @Bindable var model: MacAppModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var search: SearchViewModel
     @State private var tab: MusicTab?
     @State private var showsSettings = false
+    @State private var removalFeedback: [String: FavoriteRemovalFeedback] = [:]
     @FocusState private var searchFocused: Bool
 
     init(model: MacAppModel) {
@@ -40,6 +47,21 @@ struct MacStatusPanel: View {
         case nil: []
         }
     }
+
+    private var displayedTracks: [Track] {
+        guard tab == .favorites else { return tracks }
+        var result = tracks
+        for feedback in removalFeedback.values.sorted(by: { $0.index < $1.index }) {
+            guard !result.contains(where: { $0.musicID == feedback.track.musicID }) else { continue }
+            result.insert(feedback.track, at: min(feedback.index, result.count))
+        }
+        return result
+    }
+
+    private var removalAnimation: Animation? {
+        reduceMotion ? nil : .easeInOut(duration: 0.42)
+    }
+
     var body: some View {
         VStack(spacing: 12) {
             HStack {
@@ -77,11 +99,21 @@ struct MacStatusPanel: View {
         .padding(16)
         .frame(width: 380)
         .fixedSize(horizontal: false, vertical: true)
-        .onChange(of: tab) { _, _ in searchFocused = false }
+        .onChange(of: tab) { _, _ in
+            searchFocused = false
+            removalFeedback.removeAll()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .sonarStatusPanelDidClose)) { _ in
             tab = nil
             showsSettings = false
             searchFocused = false
+            removalFeedback.removeAll()
+        }
+        .task(id: model.notice) {
+            guard let notice = model.notice else { return }
+            do { try await Task.sleep(for: .seconds(3)) }
+            catch { return }
+            if model.notice == notice { model.notice = nil }
         }
     }
 
@@ -131,10 +163,12 @@ struct MacStatusPanel: View {
                             .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                         Spacer(minLength: 0)
                         if let track = playback.queue.current {
-                            Button { model.collect(track) } label: {
-                                Image(systemName: isFavorite(track) ? "heart.fill" : "heart")
-                            }.buttonStyle(.plain).accessibilityLabel("收藏当前歌曲")
-                                .disabled(model.library == nil)
+                            Button { toggleFavorite(track) } label: {
+                                Image(systemName: model.isFavorite(track) ? "heart.fill" : "heart")
+                            }.buttonStyle(.plain)
+                                .help(model.isFavorite(track) ? "取消收藏当前歌曲" : "收藏当前歌曲")
+                                .accessibilityLabel(model.isFavorite(track) ? "取消收藏当前歌曲" : "收藏当前歌曲")
+                                .disabled(model.library == nil || removalFeedback[track.musicID] != nil)
                         }
                         browseButtons
                     }
@@ -222,7 +256,8 @@ struct MacStatusPanel: View {
     private var songList: some View {
         ScrollView {
             LazyVStack(spacing: 2) {
-                ForEach(Array(tracks.enumerated()), id: \.element.musicID) { index, track in
+                ForEach(Array(displayedTracks.enumerated()), id: \.element.musicID) { index, track in
+                    let wasRemoved = removalFeedback[track.musicID] != nil
                     HStack(spacing: 8) {
                         Button {
                             let requestedTracks = tracks
@@ -244,22 +279,68 @@ struct MacStatusPanel: View {
                                 Spacer(minLength: 0)
                             }.contentShape(Rectangle())
                         }.buttonStyle(.plain).accessibilityLabel("播放 \(track.title)，\(track.artist)")
-                        Button { model.collect(track) } label: { Image(systemName: isFavorite(track) ? "heart.fill" : "heart") }
-                            .buttonStyle(.plain).accessibilityLabel("收藏 \(track.title)").disabled(model.library == nil)
+                            .disabled(wasRemoved)
+                        if wasRemoved {
+                            Label("已移除", systemImage: "checkmark.circle.fill")
+                                .font(.caption).foregroundStyle(.green)
+                                .accessibilityLabel("\(track.title)已移出个人歌单")
+                        } else {
+                            Button { toggleFavorite(track) } label: {
+                                Image(systemName: model.isFavorite(track) ? "heart.fill" : "heart")
+                            }
+                                .buttonStyle(.plain)
+                                .help(model.isFavorite(track) ? "取消收藏 \(track.title)" : "收藏 \(track.title)")
+                                .accessibilityLabel(model.isFavorite(track) ? "取消收藏 \(track.title)" : "收藏 \(track.title)")
+                                .disabled(model.library == nil)
+                        }
                     }.padding(.vertical, 6).padding(.horizontal, 3)
-                    .contextMenu {
-                        Button("下一首播放") { Task { await playback.playNext(track) } }
-                        if tab == .favorites { Button("移除收藏", role: .destructive) { model.removeFavorite(track) } }
-                    }
+                        .background(wasRemoved ? Color.green.opacity(0.10) : .clear,
+                                    in: RoundedRectangle(cornerRadius: 8))
+                        .transition(.asymmetric(
+                            insertion: .opacity,
+                            removal: reduceMotion ? .identity : .opacity.combined(with: .move(edge: .trailing))
+                        ))
+                        .task(id: wasRemoved) {
+                            guard wasRemoved else { return }
+                            do { try await Task.sleep(for: .milliseconds(800)) }
+                            catch {
+                                finishRemovalFeedback(for: track.musicID)
+                                return
+                            }
+                            finishRemovalFeedback(for: track.musicID)
+                        }
                 }
             }
+            .animation(removalAnimation, value: displayedTracks.map(\.musicID))
         }
+        .scrollIndicators(.hidden)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay {
             if tab == .search, search.isLoading { ProgressView("正在搜索…") }
-            else if tracks.isEmpty {
+            else if displayedTracks.isEmpty {
                 Text(tab == .search ? (search.hasSearched ? "没有找到歌曲，试试其他关键词。" : "输入歌名或歌手，按回车搜索。") : "歌单里还没有歌曲。")
                     .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).padding()
+            }
+        }
+    }
+
+    private func toggleFavorite(_ track: Track) {
+        guard removalFeedback[track.musicID] == nil else { return }
+        let index = tab == .favorites && model.isFavorite(track)
+            ? displayedTracks.firstIndex(where: { $0.musicID == track.musicID }) : nil
+        model.toggleFavorite(track)
+        guard let index, !model.isFavorite(track) else { return }
+        removalFeedback[track.musicID] = FavoriteRemovalFeedback(track: track, index: index)
+    }
+
+    private func finishRemovalFeedback(for musicID: String) {
+        guard let removed = removalFeedback[musicID] else { return }
+        withAnimation(removalAnimation) {
+            removalFeedback[musicID] = nil
+            for key in Array(removalFeedback.keys) {
+                if let feedback = removalFeedback[key], feedback.index > removed.index {
+                    removalFeedback[key]?.index -= 1
+                }
             }
         }
     }
@@ -315,6 +396,5 @@ struct MacStatusPanel: View {
         .font(.callout)
     }
 
-    private func isFavorite(_ track: Track) -> Bool { model.libraryTracks.contains { $0.musicID == track.musicID } }
     private func submitSearch() { Task { await search.search(scope: .songs) } }
 }

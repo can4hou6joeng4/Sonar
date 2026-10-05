@@ -78,9 +78,11 @@ struct NotchPlayerView: View {
                 }.font(.system(size: 10, design: .monospaced)).foregroundStyle(.white.opacity(0.45))
             }
             HStack(spacing: 28) {
-                Button { if let track { model.collect(track) } } label: {
+                Button { if let track { model.toggleFavorite(track) } } label: {
                     Image(systemName: isFavorite ? "heart.fill" : "heart")
-                }.help("收藏到个人歌单").accessibilityLabel("收藏当前歌曲").disabled(track == nil)
+                }.help(isFavorite ? "取消收藏当前歌曲" : "收藏到个人歌单")
+                    .accessibilityLabel(isFavorite ? "取消收藏当前歌曲" : "收藏当前歌曲")
+                    .disabled(track == nil || model.library == nil)
                 Spacer(minLength: 0)
                 Button { Task { await playback.previous() } } label: { Image(systemName: "backward.end.fill") }.disabled(track == nil)
                     .accessibilityLabel("上一首")
@@ -119,7 +121,10 @@ struct NotchPlayerView: View {
         }
     }
 
-    private var isFavorite: Bool { model.libraryTracks.contains { $0.musicID == track?.musicID } }
+    private var isFavorite: Bool {
+        guard let track else { return false }
+        return model.isFavorite(track)
+    }
 
     @ViewBuilder private var cover: some View {
         if let image = model.artwork {

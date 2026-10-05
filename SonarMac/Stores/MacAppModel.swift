@@ -101,6 +101,18 @@ final class MacAppModel {
         } catch { errorMessage = "无法打开个人歌单，请重试。" }
     }
 
+    func isFavorite(_ track: Track) -> Bool {
+        libraryTracks.contains { $0.musicID == track.musicID }
+    }
+
+    func toggleFavorite(_ track: Track) {
+        if isFavorite(track) {
+            removeFavorite(track)
+        } else {
+            collect(track)
+        }
+    }
+
     func collect(_ track: Track) {
         guard let library else { return }
         do {
@@ -119,6 +131,7 @@ final class MacAppModel {
             try library.removeItem(at: index, from: playlist)
             playback.onTrackRemovedFromPlaylist(track, playlistID: playlist.id)
             reloadLibrary()
+            notice = "已将「\(track.title)」移出歌单"
         } catch { errorMessage = "未能从歌单移除，请重试。" }
     }
 
