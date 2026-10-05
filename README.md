@@ -57,9 +57,17 @@
 
 Sonar 没有开屏广告或内置社交页面。歌曲、封面和歌词来自第三方服务，可用性与实际播放音质取决于歌曲和音源；歌单备份保存歌曲信息，不包含音频文件。
 
+## English overview
+
+Sonar is a native SwiftUI music player for **iOS 17+ and macOS 14+**. It supports NetEase Cloud Music and QQ Music search, local playlists with JSON backup, synchronized lyrics, and playback queues. The Mac app combines a menu bar library with a notch player; displays without a notch use a top capsule. Both surfaces share playback and library state.
+
+Source code is available under **GPL-3.0**, with separate notices for third-party code. Build both apps from `Sonar.xcodeproj`; iPhone installation requires your own signing setup. Experimental Mac builds are available in [GitHub Releases](https://github.com/can4hou6joeng4/Sonar/releases). These builds are ad-hoc signed and not notarized. Music availability and playback quality depend on third-party services; playlist backups contain metadata, not audio.
+
 ## 运行与安装
 
-目前仅分发源码，仓库不提供预编译 App 或 IPA。两端均可从同一个 Xcode 工程构建。
+两端均可从同一个 Xcode 工程构建。Mac 实验预览包见 [GitHub Releases](https://github.com/can4hou6joeng4/Sonar/releases)，附安装说明与 SHA-256 校验值；仓库不分发预编译 IPA。
+
+Mac 预览包使用本地 ad-hoc 签名，没有 Developer ID 签名或 Apple 公证，首次打开可能被 macOS 拦截。请先核对下载来源与校验值，再按系统「隐私与安全性」中的提示决定是否允许打开；也可以按下方步骤自行构建。
 
 | 平台 | 系统要求 | 运行方式 |
 | --- | --- | --- |
@@ -186,10 +194,10 @@ Mac 会按当前播放模式提前解析并缓冲下一首。插歌、删歌、�
 
 > **请在阅读并理解以下条款后再使用或参与本项目：**
 
-1. **非商业研究用途**：Sonar 为个人兴趣与原生 iOS 架构探索而创建的开源项目，仅用于技术学习、SwiftUI/SwiftData 实践及非商业性研究交流，严禁将本项目及其衍生版本用于任何商业牟利行为。
-2. **纯客户端架构与零数据存储**：本项目为纯客户端应用程序，无任何自建后端或中转服务器；本项目不提供音频存储、不分发受版权保护的音视频文件、不持有任何音频媒体数据。播放过程中涉及的音频流、专辑封面与歌词等数据，均由客户端根据用户指令向第三方服务提供方发起公开请求获取。
+1. **项目目的与代码许可**：Sonar 起源于个人兴趣和原生 iOS/macOS 架构实践。自有代码按 GPL-3.0 授权，使用、修改和再分发的权利与义务以许可证为准，包括许可证允许的商业使用；第三方代码遵循各自的许可。项目目的不构成额外的代码用途限制。
+2. **客户端与本地数据**：本项目不运营音乐后端或音频托管服务，不随仓库或安装包分发受版权保护的音视频文件。歌单与歌曲元数据保存在本机；播放涉及的音频流、封面与歌词由客户端按用户操作向第三方服务请求。
 3. **知识产权归属**：所有由音源返回的歌曲、歌词、专辑图文及商标等合法知识产权均归属于其各自的原始版权方、歌手、唱片公司或对应在线音乐服务平台。
-4. **用户义务**：使用者应遵循所在地区的相关法律法规，尊重音乐版权。体验测试完毕后请在 24 小时内自行删除相关解析与缓存文件，支持并购买正版音乐服务。
+4. **服务与内容的使用**：代码许可证不授予音乐内容、第三方服务接口或商标的使用权。使用者应遵守相应服务的授权范围、使用条款与所在地法律法规，尊重音乐版权，支持正版音乐服务。
 5. **侵权与异议处理**：若任何版权方或个人认为本项目的开源代码对您的合法权益造成了影响，请通过 GitHub Issue 或电子邮件联系维护者，我们将第一时间积极配合下线或调整相关内容。
 
 ## 致谢
