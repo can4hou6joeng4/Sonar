@@ -70,7 +70,17 @@ Sonar 没有开屏广告或内置社交页面。歌曲、封面和歌词来自�
 
 ## 从源码构建
 
-需要 Xcode 与命令行工具，以及 **Node.js 18+**。Xcode 版本应包含目标系统所需的 SDK；仓库已提供共享工程和音源资源，不需要本地 Agent 框架。
+需要一台 Mac、Xcode 与命令行工具，以及 **Node.js 18+ 和 npm**。Xcode 应包含目标系统所需的 iOS / macOS SDK。建议优先使用下面已验证的环境：
+
+| 工具 | 已验证版本 |
+| --- | --- |
+| Xcode | 27.0（27A266a） |
+| Node.js | 24.19.0 |
+| npm | 11.17.0 |
+
+2026-10-05 已在上述环境中从公开仓库独立拉取，完成音源构建、iOS 模拟器构建、未签名 IPA 打包及 Mac 双架构（Apple Silicon / Intel）构建，无需作者的音源凭据。较旧的 Xcode 或 Node.js 18 组合尚未单独验证。
+
+仓库已提供 `Sonar.xcodeproj`、共享 Scheme 和音源资源，不需要本地 Agent 框架。直接使用现有工程即可；仅在修改 `project.yml` 并重新生成工程时需要 XcodeGen。App 与 Widget 的构建版本应保持一致。
 
 ### 获取源码与构建音源
 
@@ -85,7 +95,16 @@ npm run build:source
 
 ### 运行 iOS App
 
-打开 `Sonar.xcodeproj`，选择 **Sonar** Scheme 和 iPhone 模拟器，点击 Run（`⌘R`）。连接真机时，为 **Sonar** 和 **SonarWidgetExtension** 配置自己的开发团队与签名。
+打开 `Sonar.xcodeproj`，选择 **Sonar** Scheme 和 iPhone 模拟器，点击 Run（`⌘R`）。
+
+安装到真机时，在 Xcode 的 **TARGETS → Signing & Capabilities** 中配置：
+
+1. 为 **Sonar** 和 **SonarWidgetExtension** 选择自己的 **Team**，启用自动管理签名。
+2. 为两者设置属于自己的唯一 **Bundle Identifier**，例如 `com.example.sonar` 和 `com.example.sonar.widget`。Widget 标识保持为 App 标识加 `.widget`。
+3. 在两个 Target 的 **App Groups** 中启用同一个组，例如 `group.com.example.sonar`，替换默认的 `group.cn.bobochang.sonar`。确认 `Sonar/Sonar.entitlements`、`SonarWidgetExtension/SonarWidgetExtension.entitlements` 与签名描述文件中的组一致。
+4. 连接并选择自己的 iPhone，点击 Run。
+
+App Groups 的可用性取决于开发者账户及签名工具；免费账户或部分侧载工具可能不支持该能力。构建成功后，仍需确认 App、Widget、Bundle ID 和 App Group 都与所用签名匹配。
 
 ### 运行 Mac App
 
@@ -95,7 +114,9 @@ npm run build:source
 ./script/build_and_run.sh --verify
 ```
 
-脚本会在 `build/macOS/` 生成并本地 ad-hoc 签名 `SonarMac.app`，不需要个人开发者证书。可用 `--debug` 进入 LLDB、`--logs` 查看日志、`--telemetry` 查看播放切换事件。
+脚本会生成 `build/macOS/Build/Products/Debug/SonarMac.app`，使用无需开发者证书的本地 ad-hoc 签名，并启动 App。可用 `--debug` 进入 LLDB、`--logs` 查看日志、`--telemetry` 查看播放切换事件。
+
+本地 ad-hoc 签名适用于自行构建运行。面向其他用户分发时，Developer ID 签名与公证需要另行配置。
 
 Mac 启动后显示状态栏图标及已启用的顶部播放器。点击状态栏图标打开选歌面板；播放列表、搜索、顶部播放器开关和歌单备份均在面板内。面板关闭后播放继续，退出按钮在面板右上角。无刘海屏幕使用顶部胶囊。
 
@@ -105,9 +126,9 @@ Mac 启动后显示状态栏图标及已启用的顶部播放器。点击状态�
 
 取消收藏后，歌曲行会短暂显示“已移除”，再淡出收起；提示带上歌名，便于确认操作结果。
 
-> 直接构建使用仓库中的 `Sonar.xcodeproj`。仅在修改 `project.yml` 并重新生成工程时需要 XcodeGen；App 与 Widget 的构建版本应保持一致。
-
 ### 自行打包 IPA
+
+以下命令生成未签名 IPA；通过 Xcode 安装到真机的签名配置见[运行 iOS App](#运行-ios-app)。
 
 ```sh
 set -e
@@ -127,7 +148,7 @@ mv "$SONAR_IPA_STAGE/Sonar.ipa" build/Sonar.ipa
 rm -rf "$SONAR_IPA_STAGE"
 ```
 
-产物为 `build/Sonar.ipa`，未签名，安装前需按设备支持的方式处理。若构建时注入了个人音源凭据，安装包也会包含这些值，请勿公开分发。
+产物为 `build/Sonar.ipa`。使用个人签名工具安装时，需同时处理 App 与内嵌 Widget 的签名，并保持 Bundle ID、App Group 与描述文件一致；具体安装方式以设备和工具的支持范围为准。若构建时注入了个人音源凭据，安装包也会包含这些值，请勿公开分发。
 
 ## 数据与音源
 
@@ -139,7 +160,7 @@ Mac 资料库位于 `~/Library/Application Support/cn.bobochang.sonar.mac/Sonar.
 
 ### 可选音源凭据
 
-公开源码不包含个人音源凭据。可通过构建环境变量配置相应服务：
+公开源码不包含个人音源凭据，未配置凭据也可以构建和打包；实际播放与音质仍取决于第三方音源的可用性。可通过构建环境变量配置相应服务：
 
 | 变量 | 用途 |
 | --- | --- |
