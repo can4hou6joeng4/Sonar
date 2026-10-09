@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit 配置：安静模式，只做中文审查与概要，不发诗、不发装饰性内容。
+language: zh-CN
+early_access: false
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  review_status: false
+  review_details: false
+  poem: false
+  in_progress_fortune: false
+  sequence_diagrams: false
+  estimate_code_review_effort: false
+  related_prs: false
+  suggested_labels: false
+  suggested_reviewers: false
+  collapse_walkthrough: true
+  auto_review:
+    enabled: true
+    drafts: false
+    ignore_title_keywords:
+      - "WIP"
+      - "[skip review]"
+  path_filters:
+    - "!LICENSES/**"
+    - "!**/*.xcodeproj/**"
+    - "!THIRD_PARTY_NOTICES.md"
+    - "!**/package-lock.json"
+    - "!**/*.lock"
+    - "!**/go.sum"
+    - "!**/*.min.js"
+    - "!**/*.png"
+    - "!**/*.jpg"
+    - "!**/*.jpeg"
+    - "!**/*.gif"
+    - "!**/*.webp"
+    - "!**/*.ico"
+    - "!**/*.mp4"
+    - "!**/*.m4a"
+    - "!**/*.woff"
+    - "!**/*.woff2"
+    - "!**/*.ttf"
+chat:
+  art: false
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    # 默认已包含 AGENTS.md / CLAUDE.md 等；这里补充仓库自己的贡献规范
+    filePatterns:
+      - "**/AGENTS.md"
