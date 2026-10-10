@@ -29,8 +29,10 @@
 ### iOS
 
 <p align="center">
-  <a href="assets/previews/ios-main.png"><img src="assets/previews/ios-main.png" width="900" alt="iOS 歌单、搜索与播放器实图" /></a>
+  <a href="assets/previews/ios-main.png"><img src="assets/previews/ios-main.png" width="900" alt="iOS 歌单、原页搜索遮罩与搜索结果实图" /></a>
 </p>
+
+搜索在原页面展开，保留歌单背景；输入关键词后在遮罩中显示结果。
 
 <p align="center">
   <a href="assets/previews/ios-details.png"><img src="assets/previews/ios-details.png" width="900" alt="iOS 同步歌词、设置与歌单备份实图" /></a>
