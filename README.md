@@ -60,24 +60,32 @@ Sonar 没有开屏广告或内置社交页面。歌曲、封面和歌词来自�
 
 ## English overview
 
-Sonar is a native SwiftUI music player for **iOS 17+ and macOS 14+**. Song search supports QQ Music and NetEase through ChKSz; artist and playlist browsing use QQ Music. It provides local playlists, JSON backup, synchronized lyrics, and playback queues. The Mac app combines a menu bar library with a notch player; displays without a notch use a top capsule. Both surfaces share playback and library state.
+Sonar is a native SwiftUI music player for **iOS 17+ and macOS 14+**. Song search supports QQ Music through QQ client endpoints and NetEase through ChKSz; artist and playlist browsing use QQ Music. It provides local playlists, JSON backup, synchronized lyrics, and playback queues. The Mac app combines a menu bar library with a notch player; displays without a notch use a top capsule. Both surfaces share playback and library state.
 
 Public QQ Music and NetEase playlists can be imported from a share link or playlist ID, with a preview and deduplication before merging into the personal library.
 
-Source code is available under **GPL-3.0**, with separate notices for third-party code. Build both apps from `Sonar.xcodeproj`; iPhone installation requires your own signing setup. Experimental Mac builds are available in [GitHub Releases](https://github.com/can4hou6joeng4/Sonar/releases). These builds are ad-hoc signed and not notarized. Music availability and playback quality depend on third-party services; playlist backups contain metadata, not audio.
+Source code is available under **GPL-3.0**, with separate notices for third-party code. Build both apps from `Sonar.xcodeproj`. [GitHub Releases](https://github.com/can4hou6joeng4/Sonar/releases) provides an unsigned iOS preview IPA and an earlier experimental Mac build. The IPA requires your own signing and provisioning; the Mac build is ad-hoc signed and not notarized. Public packages contain no personal API credentials. QQ playback and NetEase search, lyrics, playlist import, and playback require your own ChKSz key configured during a source build. Music availability and playback quality depend on third-party services; playlist backups contain metadata, not audio.
 
 ## 运行与安装
 
-两端均可从同一个 Xcode 工程构建。Mac 实验预览包见 [GitHub Releases](https://github.com/can4hou6joeng4/Sonar/releases)，附安装说明与 SHA-256 校验值；仓库不分发预编译 IPA。
+两端均可从同一个 Xcode 工程构建。[v1.0.0-preview.2](https://github.com/can4hou6joeng4/Sonar/releases/tag/v1.0.0-preview.2) 提供 iOS 未签名 IPA、安装说明与 SHA-256 校验值，App 与 Widget 版本为 **1.0 (22)**。Mac 的既有实验预览包仍见 [v1.0.0-preview.1](https://github.com/can4hou6joeng4/Sonar/releases/tag/v1.0.0-preview.1)；双端最新源码的变化见 [更新记录](CHANGELOG.md)。
 
 Mac 预览包使用本地 ad-hoc 签名，没有 Developer ID 签名或 Apple 公证，首次打开可能被 macOS 拦截。请先核对下载来源与校验值，再按系统「隐私与安全性」中的提示决定是否允许打开；也可以按下方步骤自行构建。
 
 | 平台 | 系统要求 | 运行方式 |
 | --- | --- | --- |
-| iPhone | iOS 17.0+ | 在 Xcode 中选择 `Sonar`，运行到模拟器或配置个人签名后安装到真机 |
+| iPhone | iOS 17.0+ | 下载未签名 IPA 后自行签名，或在 Xcode 中选择 `Sonar` 并配置个人签名后安装 |
 | Mac | macOS 14.0+ | 在 Xcode 中选择 `SonarMac`，或使用下方构建脚本 |
 
 自行打包的 iOS App 可通过适用的个人签名工具安装。TrollStore 仅适用于其支持的系统与设备，请先核对兼容性。
+
+### 安装公开 IPA
+
+1. 从上述 iOS Release 下载 `Sonar-1.0-build22-unsigned.ipa`、同名 `.sha256` 和 `INSTALL-iOS.md`。
+2. 在下载目录运行 `shasum -a 256 -c Sonar-1.0-build22-unsigned.ipa.sha256`，确认校验通过。
+3. 使用适用的个人签名工具签名 App 与内嵌 Widget，并按工具要求配置 Bundle ID、App Group 和描述文件，再安装到 iPhone。该 IPA 未签名，不能直接当作 App Store 安装包使用。
+
+公开 IPA 不包含个人 API 凭据，可使用 QQ 搜索、歌词、公开 QQ 歌单预览及本地资料库。QQ 播放以及网易云搜索、歌词、歌单导入和播放需要有效 ChKSz 凭据；当前通过[构建环境变量](#播放解析凭据)配置，需使用自己的 Key 从源码重新构建。预览包尚未完成本轮真机验收，第三方服务的 503 错误仍可能影响播放。
 
 ## 从源码构建
 
