@@ -935,7 +935,9 @@ public final class PlaybackService {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            self?.handleAudioSessionInterruption(notification)
+            MainActor.assumeIsolated {
+                self?.handleAudioSessionInterruption(notification)
+            }
         }
 
         routeChangeObserver = NotificationCenter.default.addObserver(
@@ -943,7 +945,9 @@ public final class PlaybackService {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            self?.handleAudioSessionRouteChange(notification)
+            MainActor.assumeIsolated {
+                self?.handleAudioSessionRouteChange(notification)
+            }
         }
 
         silenceHintObserver = NotificationCenter.default.addObserver(
@@ -951,7 +955,9 @@ public final class PlaybackService {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            self?.handleAudioSessionSilenceHint(notification)
+            MainActor.assumeIsolated {
+                self?.handleAudioSessionSilenceHint(notification)
+            }
         }
 
         didBecomeActiveObserver = NotificationCenter.default.addObserver(
@@ -959,7 +965,9 @@ public final class PlaybackService {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.handleAppDidBecomeActive()
+            MainActor.assumeIsolated {
+                self?.handleAppDidBecomeActive()
+            }
         }
         #endif
     }
