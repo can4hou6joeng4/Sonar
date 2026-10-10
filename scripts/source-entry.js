@@ -1,12 +1,11 @@
 import { Buffer } from 'buffer'
 import musicSdk from '../js-source/src/utils/musicSdk/index.js'
 import txMusicInfo from '../js-source/src/utils/musicSdk/tx/musicInfo.js'
-import wyMusicDetail from '../js-source/src/utils/musicSdk/wy/musicDetail.js'
 
 globalThis.Buffer = Buffer
 
 const normalizeSource = source => {
-  if (source !== 'wy' && source !== 'tx') throw new Error(`Unsupported source: ${source}`)
+  if (source !== 'tx') throw new Error(`Unsupported source: ${source}`)
   return source
 }
 
@@ -35,7 +34,7 @@ globalThis.__source__ = Object.freeze({
     return result
   },
   async tipSearch(keyword) {
-    const sdk = sdkFor('wy')
+    const sdk = sdkFor('tx')
     const value = String(keyword)
     try {
       const result = await sdk.tipSearch.search(value)
@@ -74,10 +73,7 @@ globalThis.__source__ = Object.freeze({
   },
   async playlistDetail(source, id, page = 1) {
     const sdk = sdkFor(source)
-    // QQ 的第二个参数是重试次数，不是页码；传入 page 会让首次请求直接被当成重试。
-    const request = source === 'tx'
-      ? sdk.songList.getListDetail(String(id))
-      : sdk.songList.getListDetail(String(id), Number(page))
+    const request = sdk.songList.getListDetail(String(id), Number(page))
     const result = await unwrapRequest(request)
     if (!result || !Array.isArray(result.list)) throw new Error('音源返回歌单详情异常')
     return result
@@ -112,17 +108,9 @@ globalThis.__source__ = Object.freeze({
     return result
   },
   async musicInfo(source, songmid) {
-    const normalized = normalizeSource(source)
-    const mid = String(songmid)
-    if (normalized === 'tx') {
-      const result = await unwrapRequest(txMusicInfo(mid))
-      if (!result) throw new Error('音源返回曲目信息异常')
-      return result
-    } else if (normalized === 'wy') {
-      const result = await unwrapRequest(wyMusicDetail.getList([mid]))
-      if (!result || !Array.isArray(result.list) || result.list.length === 0) throw new Error('音源返回曲目信息异常')
-      return result.list[0]
-    }
-    throw new Error(`Unsupported source: ${source}`)
+    normalizeSource(source)
+    const result = await unwrapRequest(txMusicInfo(String(songmid)))
+    if (!result) throw new Error('音源返回曲目信息异常')
+    return result
   },
 })

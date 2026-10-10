@@ -22,10 +22,11 @@ struct TrackQualityOption: Identifiable, Equatable {
 }
 
 extension Quality {
-    static let displayOrder: [Quality] = [.hiRes, .lossless, .high, .standard]
+    static let displayOrder = Quality.descendingOrder
 
     var title: String {
         switch self {
+        case .master: "母带（最高优先）"
         case .hiRes: "Hi-Res"
         case .lossless: "无损 FLAC"
         case .high: "高品质 320K"
@@ -35,6 +36,7 @@ extension Quality {
 
     var badgeTitle: String {
         switch self {
+        case .master: "母带"
         case .hiRes: "Hi-Res"
         case .lossless: "无损"
         case .high: "320K"
@@ -67,7 +69,7 @@ struct QualityBadge: View {
 
     private var background: Color {
         switch quality {
-        case .hiRes: scheme.tertiaryContainer
+        case .master, .hiRes: scheme.tertiaryContainer
         case .lossless: scheme.secondaryContainer
         case .high, .standard: scheme.surfaceContainerHighest
         }
@@ -75,7 +77,7 @@ struct QualityBadge: View {
 
     private var foreground: Color {
         switch quality {
-        case .hiRes: scheme.onTertiaryContainer
+        case .master, .hiRes: scheme.onTertiaryContainer
         case .lossless: scheme.onSecondaryContainer
         case .high, .standard: scheme.onSurfaceVariant
         }

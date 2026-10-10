@@ -1,6 +1,7 @@
-// Sonar adaptation of lx-music-mobile for the JavaScriptCore WY/TX runtime.
+// Sonar adaptation of lx-music-mobile for the JavaScriptCore QQ Music runtime.
 // Modified distribution; see repository-root THIRD_PARTY_NOTICES.md and LICENSES/.
 import { httpFetch } from '../../request'
+import { request } from './request'
 import { decodeName, formatPlayTime, sizeFormate, dateFormat, formatPlayCount } from '../../index'
 import { formatSingerName } from '../utils'
 
@@ -9,7 +10,7 @@ export default {
   _requestObj_hotTags: null,
   _requestObj_list: null,
   limit_list: 36,
-  limit_song: 100000,
+  limit_song: 1000,
   successCode: 0,
   sortList: [
     {
@@ -62,11 +63,7 @@ export default {
           },
       }))}`
   },
-  getListDetailUrl(id) {
-    return `https://c.y.qq.com/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg?type=1&json=1&utf8=1&onlysong=0&new_format=1&disstid=${id}&loginUin=0&hostUin=0&format=json&inCharset=utf8&outCharset=utf-8&notice=0&platform=yqq.json&needNewCode=0`
-  },
 
-  // http://nplserver.kuwo.cn/pl.svc?op=getlistinfo&pid=2849349915&pn=0&rn=100&encode=utf8&keyset=pl2012&identity=kuwo&pcmp4=1&vipver=MUSIC_9.0.5.0_W1&newver=1
   // 获取标签
   getTag(tryNum = 0) {
     if (this._requestObj_tags) this._requestObj_tags.cancelHttp()
@@ -197,33 +194,33 @@ export default {
     return id
   },
   // 获取歌曲列表内的音乐
-  async getListDetail(id, tryNum = 0) {
-    if (tryNum > 2) return Promise.reject(new Error('try max num'))
-
+  async getListDetail(id, page = 1) {
     id = await this.getListId(id)
-
-    const requestObj_listDetail = httpFetch(this.getListDetailUrl(id), {
-      headers: {
-        Origin: 'https://y.qq.com',
-        Referer: `https://y.qq.com/n/yqq/playsquare/${id}.html`,
-      },
-    })
-    const { body } = await requestObj_listDetail.promise
-
-    if (body.code !== this.successCode) return this.getListDetail(id, ++tryNum)
-    const cdlist = body.cdlist[0]
+    const normalizedPage = Math.max(1, Number(page))
+    const data = await request('music.srfDissInfo.aiDissInfo', 'uniform_get_Dissinfo', {
+      disstid: Number(id),
+      song_begin: (normalizedPage - 1) * this.limit_song,
+      song_num: this.limit_song,
+      userinfo: 1,
+      order: 0,
+      onlysong: 0,
+      tag: 1,
+      enc_hostuin: '',
+    }, 'QQ 歌单详情暂时不可用')
+    if (!Array.isArray(data.songlist) || !data.dirinfo) throw new Error('QQ 歌单详情返回数据异常')
+    const info = data.dirinfo
     return {
-      list: this.filterListDetail(cdlist.songlist),
-      page: 1,
-      limit: cdlist.songlist.length + 1,
-      total: cdlist.songlist.length,
+      list: this.filterListDetail(data.songlist),
+      page: normalizedPage,
+      limit: this.limit_song,
+      total: Number(data.total_song_num ?? info.songnum ?? data.songlist.length),
       source: 'tx',
       info: {
-        name: cdlist.dissname,
-        img: cdlist.logo,
-        desc: decodeName(cdlist.desc).replace(/<br>/g, '\n'),
-        author: cdlist.nickname,
-        play_count: formatPlayCount(cdlist.visitnum),
+        name: decodeName(info.title || ''),
+        img: String(info.picurl || '').replace(/^http:\/\//i, 'https://'),
+        desc: decodeName(info.desc || '').replace(/<br\s*\/?\s*>/gi, '\n'),
+        author: decodeName(info.host_nick || info.creator?.nick || ''),
+        play_count: formatPlayCount(info.listennum || 0),
       },
     }
   },
@@ -293,37 +290,39 @@ export default {
     return `https://y.qq.com/n/ryqq/playlist/${id}`
   },
 
-  search(text, page, limit = 20, retryNum = 0) {
-    if (retryNum > 5) throw new Error('max retry')
-    return httpFetch(`http://c.y.qq.com/soso/fcgi-bin/client_music_search_songlist?page_no=${page - 1}&num_per_page=${limit}&format=json&query=${encodeURIComponent(text)}&remoteplace=txt.yqq.playlist&inCharset=utf8&outCharset=utf-8`, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; WOW64; Trident/5.0)',
-        Referer: 'http://y.qq.com/portal/search.html',
-      },
-    })
-      .promise.then(({ body }) => {
-        if (body.code != 0) return this.search(text, page, limit, ++retryNum)
-        // console.log(body.data.list)
-        return {
-          list: body.data.list.map(item => {
-            return {
-              play_count: formatPlayCount(item.listennum),
-              id: String(item.dissid),
-              author: decodeName(item.creator.name),
-              name: decodeName(item.dissname),
-              time: dateFormat(item.createtime, 'Y-M-D'),
-              img: item.imgurl,
-              // grade: item.favorcnt / 10,
-              total: item.song_count,
-              desc: decodeName(decodeName(item.introduction)).replace(/<br>/g, '\n'),
-              source: 'tx',
-            }
-          }),
-          limit,
-          total: body.data.sum,
-          source: 'tx',
-        }
-      })
+  async search(text, page = 1, limit = 20) {
+    const data = await request('music.search.SearchCgiService', 'DoSearchForQQMusicMobile', {
+      search_type: 3,
+      query: String(text),
+      page_num: Number(page),
+      num_per_page: Number(limit),
+      highlight: 0,
+      nqc_flag: 0,
+      multi_zhida: 0,
+      cat: 2,
+      grp: 1,
+      sin: 0,
+      sem: 0,
+    }, 'QQ 歌单搜索暂时不可用')
+    const items = data.body?.item_songlist
+    if (!Array.isArray(items)) throw new Error('QQ 歌单搜索返回数据异常')
+    return {
+      list: items.filter(item => item.dissid != null && item.dissname).map(item => ({
+        play_count: item.listennum_str || formatPlayCount(item.listennum || 0),
+        id: String(item.dissid),
+        author: decodeName(item.nickname || ''),
+        name: decodeName(item.dissname).replace(/<[^>]*>/g, ''),
+        time: item.createtime || '',
+        img: String(item.logo || '').replace(/^http:\/\//i, 'https://'),
+        total: Number(item.songnum || 0),
+        desc: decodeName(item.subhead || '').replace(/<br\s*\/?\s*>/gi, '\n'),
+        source: 'tx',
+      })),
+      page: Number(page),
+      limit: Number(limit),
+      total: Number(data.meta?.sum ?? data.meta?.estimate_sum ?? items.length),
+      source: 'tx',
+    }
   },
 }
 

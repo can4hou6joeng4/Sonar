@@ -1,4 +1,4 @@
-// Sonar adaptation of lx-music-mobile for the JavaScriptCore WY/TX runtime.
+// Sonar adaptation of lx-music-mobile for the JavaScriptCore QQ Music runtime.
 // Modified distribution; see repository-root THIRD_PARTY_NOTICES.md and LICENSES/.
 import leaderboard from './leaderboard'
 import lyric from './lyric'
@@ -8,10 +8,10 @@ import { apis } from '../api-source'
 import hotSearch from './hotSearch'
 import comment from './comment'
 import artist from './artist'
-// import tipSearch from './tipSearch'
+import tipSearch from './tipSearch'
 
 const tx = {
-  // tipSearch,
+  tipSearch,
   leaderboard,
   songList,
   musicSearch,

@@ -4,7 +4,7 @@ struct MacDiscoveryView: View {
     let model: MacAppModel
     let discovery: DiscoveryViewModel
     let open: (MacCatalogDestination) -> Void
-    @State private var source: MusicSource = .wy
+    private let source: MusicSource = .tx
 
     private var state: DiscoveryPageState { discovery.state(for: source) }
 
@@ -21,9 +21,7 @@ struct MacDiscoveryView: View {
                         .disabled(state.isLoading)
                 }
                 HStack {
-                    Picker("音源", selection: $source) {
-                        ForEach(MusicSource.allCases, id: \.self) { Text($0.displayName).tag($0) }
-                    }.pickerStyle(.segmented).frame(width: 220)
+                    Text("QQ 音乐歌单").foregroundStyle(.secondary)
                     Spacer()
                     if source.playlistCategories.count > 1 {
                         Picker("分类", selection: Binding(get: { discovery.selectedCategory(for: source).id }, set: { id in

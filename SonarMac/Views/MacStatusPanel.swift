@@ -26,11 +26,17 @@ struct MacStatusPanel: View {
         var index: Int
     }
 
+    private struct ImportPresentation: Identifiable {
+        let id = UUID()
+        let library: LibraryStore
+    }
+
     @Bindable var model: MacAppModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var search: SearchViewModel
     @State private var tab: MusicTab?
     @State private var showsSettings = false
+    @State private var importPresentation: ImportPresentation?
     @State private var removalFeedback: [String: FavoriteRemovalFeedback] = [:]
     @FocusState private var searchFocused: Bool
 
@@ -83,8 +89,18 @@ struct MacStatusPanel: View {
             player
             if showsSettings || tab != nil { Divider() }
             if showsSettings {
-                settings
-                messages
+                if let presentation = importPresentation {
+                    OnlinePlaylistImportView(service: model.onlinePlaylistImporter, library: presentation.library,
+                                             artworkService: model.artworkService, onImported: model.reloadLibrary,
+                                             onClose: { importPresentation = nil })
+                        .id(presentation.id)
+                        .frame(height: 440)
+                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                } else {
+                    settings
+                    messages
+                }
             } else {
                 if tab == .search { searchField }
                 messages
@@ -103,9 +119,13 @@ struct MacStatusPanel: View {
             searchFocused = false
             removalFeedback.removeAll()
         }
+        .onChange(of: showsSettings) { _, shown in
+            if !shown { importPresentation = nil }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .sonarStatusPanelDidClose)) { _ in
             tab = nil
             showsSettings = false
+            importPresentation = nil
             searchFocused = false
             removalFeedback.removeAll()
         }
@@ -231,8 +251,6 @@ struct MacStatusPanel: View {
                 Spacer(minLength: 0)
                 Button("关闭") { model.errorMessage = nil }
             }
-        } else if tab == .search, let warning = search.partialSourceWarning {
-            compactMessage(warning) { Task { await search.retryFailedSource() } }
         } else if tab == .search, let error = search.errorMessage {
             compactMessage(error, action: submitSearch)
         } else if let notice = model.notice {
@@ -366,6 +384,28 @@ struct MacStatusPanel: View {
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
 
             VStack(alignment: .leading, spacing: 10) {
+                Button {
+                    if let library = model.library { importPresentation = ImportPresentation(library: library) }
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "music.note.list")
+                            .frame(width: 18).foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("从其他播放器导入").fontWeight(.medium)
+                            Text("QQ 音乐或网易云公开歌单")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 8)
+                        Image(systemName: "chevron.right")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(model.library == nil)
+                .accessibilityIdentifier("mac-settings-import-online-playlist")
+                Divider()
                 HStack {
                     Text("歌单备份").fontWeight(.medium)
                     Spacer()

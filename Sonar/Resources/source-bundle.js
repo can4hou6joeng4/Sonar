@@ -8,11 +8,14 @@
 | 来源 | 使用范围 | 许可材料 |
 | --- | --- | --- |
 | [lx-music-mobile](https://github.com/lyswhut/lx-music-mobile) | `js-source/` 中保留并适配的音源与辅助代码，以及生成 bundle 中的对应内容 | [Apache License 2.0](LICENSES/lx-music-mobile.txt) |
-| [NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi) / Binaryify | 网易模块中标注的歌曲详情、歌单、歌词和加密实现参考；来源链接保留在对应源码中 | [MIT，Copyright (c) 2013–2022 Binaryify](LICENSES/NeteaseCloudMusicApi.txt) |
 
-`js-source/` 是为 Sonar 修改的分发版本，不能视为未经修改的上游发布版。适配包括 JavaScriptCore 宿主桥接、仅保留网易与 QQ 路径，以及搜索、歌手和专辑等入口调整。文件中的原有来源说明保留，并增加了修改版本标记。
+`js-source/` 是为 Sonar 修改的分发版本，不能视为未经修改的上游发布版。适配包括 JavaScriptCore 宿主桥接、仅保留 QQ 音乐路径，以及搜索、歌手和专辑等入口调整。文件中的原有来源说明保留，并增加了修改版本标记。
 
-lx-music-mobile 的许可文件来自其上游仓库；核对时根目录没有独立 NOTICE 文件。NeteaseCloudMusicApi 当前归档仓库仅保留说明文件，因此使用其原始 npm 包 `NeteaseCloudMusicApi@4.28.0` 中的 LICENSE 核对 MIT 文本，下载内容已通过发布元数据的 SHA-512 校验。这里的版本用于追溯许可文本，**不表示 Sonar 的全部适配代码准确源自该版本**。
+lx-music-mobile 的许可文件来自其上游仓库；核对时根目录没有独立 NOTICE 文件。
+
+网易适配器及其参考的 [NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi) 实现已从当前分发代码中移除。[MIT 许可文本](LICENSES/NeteaseCloudMusicApi.txt)和 `LICENSES/sources.json` 中的原始核对记录仍保留，用于追溯历史版本。
+
+当前网易云歌曲搜索、歌词和播放通过 Sonar 的 Swift 适配器请求 ChKSz API，未恢复上述 JavaScript 网易客户端实现。
 
 ## npm 依赖
 
@@ -252,30 +255,6 @@ lx-music-mobile 的许可文件来自其上游仓库；核对时根目录没有�
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
-
-
-===== NeteaseCloudMusicApi =====
-The MIT License (MIT)
-
-Copyright (c) 2013-2022 Binaryify
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
 
 
 ===== base64-js =====
@@ -4456,9 +4435,9 @@ SOFTWARE.
     return Object.prototype.hasOwnProperty.call(obj, key);
   };
   var assign = function(obj) {
-    const sources3 = Array.prototype.slice.call(arguments, 1);
-    while (sources3.length) {
-      const source = sources3.shift();
+    const sources2 = Array.prototype.slice.call(arguments, 1);
+    while (sources2.length) {
+      const source = sources2.shift();
       if (!source) {
         continue;
       }
@@ -6978,11 +6957,7 @@ SOFTWARE.
     return import_he.default.decode(str);
   };
 
-  // scripts/js-shims/quick-md5.js
-  var stringMd5 = (input) => globalThis.__sonar_md5__(String(input));
-
   // js-source/src/utils/musicSdk/utils.js
-  var toMD5 = (str) => stringMd5(str);
   var formatSingerName = (singers, nameKey = "name", join = "\u3001") => {
     if (Array.isArray(singers)) {
       const singer = [];
@@ -7236,13 +7211,57 @@ SOFTWARE.
     }
   };
 
+  // js-source/src/utils/musicSdk/tx/request.js
+  var comm = {
+    ct: "11",
+    cv: "14090508",
+    v: "14090508",
+    tmeAppID: "qqmusic",
+    phonetype: "EBG-AN10",
+    deviceScore: "553.47",
+    devicelevel: "50",
+    newdevicelevel: "20",
+    rom: "HuaWei/EMOTION/EmotionUI_14.2.0",
+    os_ver: "12",
+    OpenUDID: "0",
+    OpenUDID2: "0",
+    QIMEI36: "0",
+    udid: "0",
+    chid: "0",
+    aid: "0",
+    oaid: "0",
+    taid: "0",
+    tid: "0",
+    wid: "0",
+    uid: "0",
+    sid: "0",
+    modeSwitch: "6",
+    teenMode: "0",
+    ui_mode: "2",
+    nettype: "1020",
+    v4ip: ""
+  };
+  var request = async (module, method, param, failureMessage = "QQ \u6B4C\u624B\u670D\u52A1\u6682\u65F6\u4E0D\u53EF\u7528") => {
+    const { statusCode, body } = await httpFetch("https://u.y.qq.com/cgi-bin/musicu.fcg", {
+      method: "post",
+      headers: { "User-Agent": "QQMusic 14090508(android 12)" },
+      body: { comm, req: { module, method, param } }
+    }).promise;
+    const data = body?.req?.data;
+    if (statusCode !== 200 || body?.code !== 0 || body?.req?.code !== 0 || data?.code != null && data.code !== 0) {
+      throw new Error(failureMessage);
+    }
+    if (!data || typeof data !== "object") throw new Error(failureMessage);
+    return data;
+  };
+
   // js-source/src/utils/musicSdk/tx/songList.js
   var songList_default = {
     _requestObj_tags: null,
     _requestObj_hotTags: null,
     _requestObj_list: null,
     limit_list: 36,
-    limit_song: 1e5,
+    limit_song: 1e3,
     successCode: 0,
     sortList: [
       {
@@ -7294,10 +7313,6 @@ SOFTWARE.
         }
       }))}`;
     },
-    getListDetailUrl(id) {
-      return `https://c.y.qq.com/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg?type=1&json=1&utf8=1&onlysong=0&new_format=1&disstid=${id}&loginUin=0&hostUin=0&format=json&inCharset=utf8&outCharset=utf-8&notice=0&platform=yqq.json&needNewCode=0`;
-    },
-    // http://nplserver.kuwo.cn/pl.svc?op=getlistinfo&pid=2849349915&pn=0&rn=100&encode=utf8&keyset=pl2012&identity=kuwo&pcmp4=1&vipver=MUSIC_9.0.5.0_W1&newver=1
     // 获取标签
     getTag(tryNum = 0) {
       if (this._requestObj_tags) this._requestObj_tags.cancelHttp();
@@ -7418,30 +7433,33 @@ SOFTWARE.
       return id;
     },
     // 获取歌曲列表内的音乐
-    async getListDetail(id, tryNum = 0) {
-      if (tryNum > 2) return Promise.reject(new Error("try max num"));
+    async getListDetail(id, page = 1) {
       id = await this.getListId(id);
-      const requestObj_listDetail = httpFetch(this.getListDetailUrl(id), {
-        headers: {
-          Origin: "https://y.qq.com",
-          Referer: `https://y.qq.com/n/yqq/playsquare/${id}.html`
-        }
-      });
-      const { body } = await requestObj_listDetail.promise;
-      if (body.code !== this.successCode) return this.getListDetail(id, ++tryNum);
-      const cdlist = body.cdlist[0];
+      const normalizedPage = Math.max(1, Number(page));
+      const data = await request("music.srfDissInfo.aiDissInfo", "uniform_get_Dissinfo", {
+        disstid: Number(id),
+        song_begin: (normalizedPage - 1) * this.limit_song,
+        song_num: this.limit_song,
+        userinfo: 1,
+        order: 0,
+        onlysong: 0,
+        tag: 1,
+        enc_hostuin: ""
+      }, "QQ \u6B4C\u5355\u8BE6\u60C5\u6682\u65F6\u4E0D\u53EF\u7528");
+      if (!Array.isArray(data.songlist) || !data.dirinfo) throw new Error("QQ \u6B4C\u5355\u8BE6\u60C5\u8FD4\u56DE\u6570\u636E\u5F02\u5E38");
+      const info = data.dirinfo;
       return {
-        list: this.filterListDetail(cdlist.songlist),
-        page: 1,
-        limit: cdlist.songlist.length + 1,
-        total: cdlist.songlist.length,
+        list: this.filterListDetail(data.songlist),
+        page: normalizedPage,
+        limit: this.limit_song,
+        total: Number(data.total_song_num ?? info.songnum ?? data.songlist.length),
         source: "tx",
         info: {
-          name: cdlist.dissname,
-          img: cdlist.logo,
-          desc: decodeName(cdlist.desc).replace(/<br>/g, "\n"),
-          author: cdlist.nickname,
-          play_count: formatPlayCount(cdlist.visitnum)
+          name: decodeName(info.title || ""),
+          img: String(info.picurl || "").replace(/^http:\/\//i, "https://"),
+          desc: decodeName(info.desc || "").replace(/<br\s*\/?\s*>/gi, "\n"),
+          author: decodeName(info.host_nick || info.creator?.nick || ""),
+          play_count: formatPlayCount(info.listennum || 0)
         }
       };
     },
@@ -7504,35 +7522,39 @@ SOFTWARE.
       id = await this.getListId(id);
       return `https://y.qq.com/n/ryqq/playlist/${id}`;
     },
-    search(text, page, limit = 20, retryNum = 0) {
-      if (retryNum > 5) throw new Error("max retry");
-      return httpFetch(`http://c.y.qq.com/soso/fcgi-bin/client_music_search_songlist?page_no=${page - 1}&num_per_page=${limit}&format=json&query=${encodeURIComponent(text)}&remoteplace=txt.yqq.playlist&inCharset=utf8&outCharset=utf-8`, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; WOW64; Trident/5.0)",
-          Referer: "http://y.qq.com/portal/search.html"
-        }
-      }).promise.then(({ body }) => {
-        if (body.code != 0) return this.search(text, page, limit, ++retryNum);
-        return {
-          list: body.data.list.map((item) => {
-            return {
-              play_count: formatPlayCount(item.listennum),
-              id: String(item.dissid),
-              author: decodeName(item.creator.name),
-              name: decodeName(item.dissname),
-              time: dateFormat(item.createtime, "Y-M-D"),
-              img: item.imgurl,
-              // grade: item.favorcnt / 10,
-              total: item.song_count,
-              desc: decodeName(decodeName(item.introduction)).replace(/<br>/g, "\n"),
-              source: "tx"
-            };
-          }),
-          limit,
-          total: body.data.sum,
+    async search(text, page = 1, limit = 20) {
+      const data = await request("music.search.SearchCgiService", "DoSearchForQQMusicMobile", {
+        search_type: 3,
+        query: String(text),
+        page_num: Number(page),
+        num_per_page: Number(limit),
+        highlight: 0,
+        nqc_flag: 0,
+        multi_zhida: 0,
+        cat: 2,
+        grp: 1,
+        sin: 0,
+        sem: 0
+      }, "QQ \u6B4C\u5355\u641C\u7D22\u6682\u65F6\u4E0D\u53EF\u7528");
+      const items = data.body?.item_songlist;
+      if (!Array.isArray(items)) throw new Error("QQ \u6B4C\u5355\u641C\u7D22\u8FD4\u56DE\u6570\u636E\u5F02\u5E38");
+      return {
+        list: items.filter((item) => item.dissid != null && item.dissname).map((item) => ({
+          play_count: item.listennum_str || formatPlayCount(item.listennum || 0),
+          id: String(item.dissid),
+          author: decodeName(item.nickname || ""),
+          name: decodeName(item.dissname).replace(/<[^>]*>/g, ""),
+          time: item.createtime || "",
+          img: String(item.logo || "").replace(/^http:\/\//i, "https://"),
+          total: Number(item.songnum || 0),
+          desc: decodeName(item.subhead || "").replace(/<br\s*\/?\s*>/gi, "\n"),
           source: "tx"
-        };
-      });
+        })),
+        page: Number(page),
+        limit: Number(limit),
+        total: Number(data.meta?.sum ?? data.meta?.estimate_sum ?? items.length),
+        source: "tx"
+      };
     }
   };
 
@@ -8180,46 +8202,6 @@ SOFTWARE.
   };
 
   // js-source/src/utils/musicSdk/tx/artist.js
-  var comm = {
-    ct: "11",
-    cv: "14090508",
-    v: "14090508",
-    tmeAppID: "qqmusic",
-    phonetype: "EBG-AN10",
-    deviceScore: "553.47",
-    devicelevel: "50",
-    newdevicelevel: "20",
-    rom: "HuaWei/EMOTION/EmotionUI_14.2.0",
-    os_ver: "12",
-    OpenUDID: "0",
-    OpenUDID2: "0",
-    QIMEI36: "0",
-    udid: "0",
-    chid: "0",
-    aid: "0",
-    oaid: "0",
-    taid: "0",
-    tid: "0",
-    wid: "0",
-    uid: "0",
-    sid: "0",
-    modeSwitch: "6",
-    teenMode: "0",
-    ui_mode: "2",
-    nettype: "1020",
-    v4ip: ""
-  };
-  var request = async (module, method, param) => {
-    const { statusCode, body } = await httpFetch("https://u.y.qq.com/cgi-bin/musicu.fcg", {
-      method: "post",
-      headers: { "User-Agent": "QQMusic 14090508(android 12)" },
-      body: { comm, req: { module, method, param } }
-    }).promise;
-    if (statusCode !== 200 || body?.code !== 0 || body?.req?.code !== 0) {
-      throw new Error("QQ \u6B4C\u624B\u670D\u52A1\u6682\u65F6\u4E0D\u53EF\u7528");
-    }
-    return body.req.data || {};
-  };
   var httpsImage = (value) => typeof value === "string" ? value.replace(/^http:\/\//i, "https://") : "";
   var singerImage = (mid) => mid ? `https://y.gtimg.cn/music/photo_new/T001R500x500M000${mid}.jpg` : "";
   var albumImage = (mid) => mid ? `https://y.gtimg.cn/music/photo_new/T002R500x500M000${mid}.jpg` : "";
@@ -8233,7 +8215,7 @@ SOFTWARE.
     const mid = item?.mid || item?.songmid;
     const name = item?.name || item?.title;
     if (!mid || !name) return null;
-    const album3 = item.album || {};
+    const album2 = item.album || {};
     const file = item.file || {};
     const types = [];
     const typeMap = {};
@@ -8255,10 +8237,10 @@ SOFTWARE.
       strMediaMid: file.media_mid || mid,
       name,
       singer: formatSingerName(item.singer || [], "name"),
-      albumName: album3.name || "",
-      albumId: album3.mid || "",
-      albumMid: album3.mid || "",
-      img: albumImage(album3.mid) || singerImage(item.singer?.[0]?.mid),
+      albumName: album2.name || "",
+      albumId: album2.mid || "",
+      albumMid: album2.mid || "",
+      img: albumImage(album2.mid) || singerImage(item.singer?.[0]?.mid),
       interval: Number(item.interval) > 0 ? formatPlayTime(Number(item.interval)) : null,
       types,
       _types: typeMap,
@@ -8347,9 +8329,38 @@ SOFTWARE.
     }
   };
 
+  // js-source/src/utils/musicSdk/tx/tipSearch.js
+  var tipSearch_default = {
+    // regExps: {
+    //   relWord: /RELWORD=(.+)/,
+    // },
+    requestObj: null,
+    tipSearch(str) {
+      this.cancelTipSearch();
+      this.requestObj = httpFetch(`https://c.y.qq.com/splcloud/fcgi-bin/smartbox_new.fcg?is_xml=0&format=json&key=${encodeURIComponent(str)}&loginUin=0&hostUin=0&format=json&inCharset=utf8&outCharset=utf-8&notice=0&platform=yqq&needNewCode=0`, {
+        headers: {
+          Referer: "https://y.qq.com/portal/player.html"
+        }
+      });
+      return this.requestObj.promise.then(({ statusCode, body }) => {
+        if (statusCode != 200 || body.code != 0) return Promise.reject(new Error("\u8BF7\u6C42\u5931\u8D25"));
+        return body.data;
+      });
+    },
+    handleResult(rawData) {
+      return rawData.map((info) => `${info.name} - ${info.singer}`);
+    },
+    cancelTipSearch() {
+      if (this.requestObj && this.requestObj.cancelHttp) this.requestObj.cancelHttp();
+    },
+    async search(str) {
+      return this.tipSearch(str).then((result) => this.handleResult(result?.song?.itemlist || []));
+    }
+  };
+
   // js-source/src/utils/musicSdk/tx/index.js
   var tx = {
-    // tipSearch,
+    tipSearch: tipSearch_default,
     leaderboard: leaderboard_default,
     songList: songList_default,
     musicSearch: musicSearch_default,
@@ -8371,1379 +8382,21 @@ SOFTWARE.
   };
   var tx_default = tx;
 
-  // scripts/js-shims/quick-base64.js
-  var btoa = (input) => globalThis.__sonar_b64_encode__(String(input));
-
-  // scripts/js-shims/crypto.js
-  var AES_MODE = {
-    CBC_128_PKCS7Padding: "AES/CBC/PKCS7Padding",
-    ECB_128_NoPadding: "AES"
-  };
-  var RSA_PADDING = {
-    OAEPWithSHA1AndMGF1Padding: "RSA/ECB/OAEPWithSHA1AndMGF1Padding",
-    NoPadding: "RSA/ECB/NoPadding"
-  };
-  var aesEncryptSync = (data, key, iv2, mode) => globalThis.__sonar_aes_encrypt__(data, mode, key, iv2);
-  var rsaEncryptSync = (data, key, padding) => globalThis.__sonar_rsa_encrypt__(
-    data,
-    key.replace("-----BEGIN PUBLIC KEY-----", "").replace("-----END PUBLIC KEY-----", "").replace(/\s/g, ""),
-    padding
-  );
-
-  // js-source/src/utils/musicSdk/wy/utils/crypto.js
-  var iv = btoa("0102030405060708");
-  var presetKey = btoa("0CoJUm6Qyw8W8jud");
-  var linuxapiKey = btoa("rFgB&h#%2?^eDg:Q");
-  var publicKey = "-----BEGIN PUBLIC KEY-----\nMIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDgtQn2JZ34ZC28NWYpAUd98iZ37BUrX/aKzmFbt7clFSs6sXqHauqKWqdtLkF2KexO40H1YTX8z2lSgBBOAxLsvaklV8k4cBFK9snQXE9/DDaFt6Rr7iVZMldczhC0JNgTz+SHXT6CBHuX3e9SdB1Ua44oncaTWz7OBGLbCiK45wIDAQAB\n-----END PUBLIC KEY-----";
-  var eapiKey = btoa("e82ckenh8dichen8");
-  var aesEncrypt = (b64, mode, key, iv2) => {
-    return aesEncryptSync(b64, key, iv2, mode);
-  };
-  var rsaEncrypt = (buffer, key) => {
-    buffer = Buffer.concat([Buffer.alloc(128 - buffer.length), buffer]);
-    return Buffer.from(rsaEncryptSync(buffer.toString("base64"), key, RSA_PADDING.NoPadding), "base64");
-  };
-  var weapi = (object) => {
-    const text = JSON.stringify(object);
-    const secretKey = String(Math.random()).substring(2, 18);
-    return {
-      params: aesEncrypt(btoa(aesEncrypt(Buffer.from(text).toString("base64"), AES_MODE.CBC_128_PKCS7Padding, presetKey, iv)), AES_MODE.CBC_128_PKCS7Padding, btoa(secretKey), iv),
-      encSecKey: rsaEncrypt(Buffer.from(secretKey).reverse(), publicKey).toString("hex")
-    };
-  };
-  var linuxapi = (object) => {
-    const text = JSON.stringify(object);
-    return {
-      eparams: Buffer.from(aesEncrypt(Buffer.from(text).toString("base64"), AES_MODE.ECB_128_NoPadding, linuxapiKey, ""), "base64").toString("hex").toUpperCase()
-    };
-  };
-  var eapi = (url, object) => {
-    const text = typeof object === "object" ? JSON.stringify(object) : object;
-    const message = `nobody${url}use${text}md5forencrypt`;
-    const digest = toMD5(message);
-    const data = `${url}-36cd479b6b5-${text}-36cd479b6b5-${digest}`;
-    return {
-      params: Buffer.from(aesEncrypt(Buffer.from(data).toString("base64"), AES_MODE.ECB_128_NoPadding, eapiKey, ""), "base64").toString("hex").toUpperCase()
-    };
-  };
-
-  // js-source/src/utils/musicSdk/wy/musicDetail.js
-  var musicDetail_default = {
-    getSinger(singers) {
-      let arr = [];
-      singers?.forEach((singer) => {
-        arr.push(singer.name);
-      });
-      return arr.join("\u3001");
-    },
-    filterList({ songs, privileges }) {
-      const list = [];
-      songs.forEach((item, index) => {
-        const types = [];
-        const _types = {};
-        let size;
-        let privilege = privileges[index];
-        if (privilege.id !== item.id) privilege = privileges.find((p) => p.id === item.id);
-        if (!privilege) return;
-        if (privilege.maxBrLevel == "hires") {
-          size = item.hr ? sizeFormate(item.hr.size) : null;
-          types.push({ type: "flac24bit", size });
-          _types.flac24bit = {
-            size
-          };
-        }
-        switch (privilege.maxbr) {
-          case 999e3:
-            size = item.sq ? sizeFormate(item.sq.size) : null;
-            types.push({ type: "flac", size });
-            _types.flac = {
-              size
-            };
-          case 32e4:
-            size = item.h ? sizeFormate(item.h.size) : null;
-            types.push({ type: "320k", size });
-            _types["320k"] = {
-              size
-            };
-          case 192e3:
-          case 128e3:
-            size = item.l ? sizeFormate(item.l.size) : null;
-            types.push({ type: "128k", size });
-            _types["128k"] = {
-              size
-            };
-        }
-        types.reverse();
-        if (item.pc) {
-          list.push({
-            singer: item.pc.ar ?? "",
-            name: item.pc.sn ?? "",
-            albumName: item.pc.alb ?? "",
-            albumId: item.al?.id,
-            source: "wy",
-            interval: formatPlayTime(item.dt / 1e3),
-            songmid: item.id,
-            img: item.al?.picUrl ?? "",
-            lrc: null,
-            otherSource: null,
-            types,
-            _types,
-            typeUrl: {}
-          });
-        } else {
-          list.push({
-            singer: this.getSinger(item.ar),
-            name: item.name ?? "",
-            albumName: item.al?.name,
-            albumId: item.al?.id,
-            source: "wy",
-            interval: formatPlayTime(item.dt / 1e3),
-            songmid: item.id,
-            img: item.al?.picUrl,
-            lrc: null,
-            otherSource: null,
-            types,
-            _types,
-            typeUrl: {}
-          });
-        }
-      });
-      return list;
-    },
-    async getList(ids = [], retryNum = 0) {
-      if (retryNum > 2) return Promise.reject(new Error("try max num"));
-      const requestObj = httpFetch("https://music.163.com/weapi/v3/song/detail", {
-        method: "post",
-        headers: {
-          "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36",
-          origin: "https://music.163.com"
-        },
-        form: weapi({
-          c: "[" + ids.map((id) => '{"id":' + id + "}").join(",") + "]",
-          ids: "[" + ids.join(",") + "]"
-        })
-      });
-      const { body, statusCode } = await requestObj.promise;
-      if (statusCode != 200 || body.code !== 200) throw new Error("\u83B7\u53D6\u6B4C\u66F2\u8BE6\u60C5\u5931\u8D25");
-      return { source: "wy", list: this.filterList(body) };
-    }
-  };
-
-  // js-source/src/utils/musicSdk/wy/leaderboard.js
-  var topList = [
-    { id: "wy__19723756", name: "\u98D9\u5347\u699C", bangid: "19723756" },
-    { id: "wy__3779629", name: "\u65B0\u6B4C\u699C", bangid: "3779629" },
-    { id: "wy__2884035", name: "\u539F\u521B\u699C", bangid: "2884035" },
-    { id: "wy__3778678", name: "\u70ED\u6B4C\u699C", bangid: "3778678" },
-    { id: "wy__991319590", name: "\u8BF4\u5531\u699C", bangid: "991319590" },
-    { id: "wy__71384707", name: "\u53E4\u5178\u699C", bangid: "71384707" },
-    { id: "wy__1978921795", name: "\u7535\u97F3\u699C", bangid: "1978921795" },
-    { id: "wy__5453912201", name: "\u9ED1\u80F6VIP\u7231\u542C\u699C", bangid: "5453912201" },
-    { id: "wy__71385702", name: "ACG\u699C", bangid: "71385702" },
-    { id: "wy__745956260", name: "\u97E9\u8BED\u699C", bangid: "745956260" },
-    { id: "wy__10520166", name: "\u56FD\u7535\u699C", bangid: "10520166" },
-    { id: "wy__180106", name: "UK\u6392\u884C\u699C\u5468\u699C", bangid: "180106" },
-    { id: "wy__60198", name: "\u7F8E\u56FDBillboard\u699C", bangid: "60198" },
-    { id: "wy__3812895", name: "Beatport\u5168\u7403\u7535\u5B50\u821E\u66F2\u699C", bangid: "3812895" },
-    { id: "wy__21845217", name: "KTV\u551B\u699C", bangid: "21845217" },
-    { id: "wy__60131", name: "\u65E5\u672COricon\u699C", bangid: "60131" },
-    { id: "wy__2809513713", name: "\u6B27\u7F8E\u70ED\u6B4C\u699C", bangid: "2809513713" },
-    { id: "wy__2809577409", name: "\u6B27\u7F8E\u65B0\u6B4C\u699C", bangid: "2809577409" },
-    { id: "wy__27135204", name: "\u6CD5\u56FD NRJ Vos Hits \u5468\u699C", bangid: "27135204" },
-    { id: "wy__3001835560", name: "ACG\u52A8\u753B\u699C", bangid: "3001835560" },
-    { id: "wy__3001795926", name: "ACG\u6E38\u620F\u699C", bangid: "3001795926" },
-    { id: "wy__3001890046", name: "ACG VOCALOID\u699C", bangid: "3001890046" },
-    { id: "wy__3112516681", name: "\u4E2D\u56FD\u65B0\u4E61\u6751\u97F3\u4E50\u6392\u884C\u699C", bangid: "3112516681" },
-    { id: "wy__5059644681", name: "\u65E5\u8BED\u699C", bangid: "5059644681" },
-    { id: "wy__5059633707", name: "\u6447\u6EDA\u699C", bangid: "5059633707" },
-    { id: "wy__5059642708", name: "\u56FD\u98CE\u699C", bangid: "5059642708" },
-    { id: "wy__5338990334", name: "\u6F5C\u529B\u7206\u6B3E\u699C", bangid: "5338990334" },
-    { id: "wy__5059661515", name: "\u6C11\u8C23\u699C", bangid: "5059661515" },
-    { id: "wy__6688069460", name: "\u542C\u6B4C\u8BC6\u66F2\u699C", bangid: "6688069460" },
-    { id: "wy__6723173524", name: "\u7F51\u7EDC\u70ED\u6B4C\u699C", bangid: "6723173524" },
-    { id: "wy__6732051320", name: "\u4FC4\u8BED\u699C", bangid: "6732051320" },
-    { id: "wy__6732014811", name: "\u8D8A\u5357\u8BED\u699C", bangid: "6732014811" },
-    { id: "wy__6886768100", name: "\u4E2D\u6587DJ\u699C", bangid: "6886768100" },
-    { id: "wy__6939992364", name: "\u4FC4\u7F57\u65AFtop hit\u6D41\u884C\u97F3\u4E50\u699C", bangid: "6939992364" },
-    { id: "wy__7095271308", name: "\u6CF0\u8BED\u699C", bangid: "7095271308" },
-    { id: "wy__7356827205", name: "BEAT\u6392\u884C\u699C", bangid: "7356827205" },
-    { id: "wy__7325478166", name: "\u7F16\u8F91\u63A8\u8350\u699CVOL.44 \u5929\u624D\u5973\u5B50\u6447\u6EDA\u4E50\u961Fboygenius\u5256\u767D\u5351\u5FAE\u5FC3\u8FF9", bangid: "7325478166" },
-    { id: "wy__7603212484", name: "LOOK\u76F4\u64AD\u6B4C\u66F2\u699C", bangid: "7603212484" },
-    { id: "wy__7775163417", name: "\u8D4F\u97F3\u699C", bangid: "7775163417" },
-    { id: "wy__7785123708", name: "\u9ED1\u80F6VIP\u65B0\u6B4C\u699C", bangid: "7785123708" },
-    { id: "wy__7785066739", name: "\u9ED1\u80F6VIP\u70ED\u6B4C\u699C", bangid: "7785066739" },
-    { id: "wy__7785091694", name: "\u9ED1\u80F6VIP\u7231\u641C\u699C", bangid: "7785091694" }
-  ];
-  var leaderboard_default2 = {
-    limit: 1e5,
-    list: [
-      {
-        id: "wybsb",
-        name: "\u98D9\u5347\u699C",
-        bangid: "19723756"
-      },
-      {
-        id: "wyrgb",
-        name: "\u70ED\u6B4C\u699C",
-        bangid: "3778678"
-      },
-      {
-        id: "wyxgb",
-        name: "\u65B0\u6B4C\u699C",
-        bangid: "3779629"
-      },
-      {
-        id: "wyycb",
-        name: "\u539F\u521B\u699C",
-        bangid: "2884035"
-      },
-      {
-        id: "wygdb",
-        name: "\u53E4\u5178\u699C",
-        bangid: "71384707"
-      },
-      {
-        id: "wydouyb",
-        name: "\u6296\u97F3\u699C",
-        bangid: "2250011882"
-      },
-      {
-        id: "wyhyb",
-        name: "\u97E9\u8BED\u699C",
-        bangid: "745956260"
-      },
-      {
-        id: "wydianyb",
-        name: "\u7535\u97F3\u699C",
-        bangid: "1978921795"
-      },
-      {
-        id: "wydjb",
-        name: "\u7535\u7ADE\u699C",
-        bangid: "2006508653"
-      },
-      {
-        id: "wyktvbb",
-        name: "KTV\u551B\u699C",
-        bangid: "21845217"
-      }
-    ],
-    getUrl(id) {
-      return `https://music.163.com/discover/toplist?id=${id}`;
-    },
-    regExps: {
-      list: /<textarea id="song-list-pre-data" style="display:none;">(.+?)<\/textarea>/
-    },
-    _requestBoardsObj: null,
-    getBoardsData() {
-      if (this._requestBoardsObj) this._requestBoardsObj.cancelHttp();
-      this._requestBoardsObj = httpFetch("https://music.163.com/weapi/toplist", {
-        method: "post",
-        form: weapi({})
-      });
-      return this._requestBoardsObj.promise;
-    },
-    getData(id) {
-      const requestBoardsDetailObj = httpFetch("https://music.163.com/weapi/v3/playlist/detail", {
-        method: "post",
-        form: weapi({
-          id,
-          n: 1e5,
-          p: 1
-        })
-      });
-      return requestBoardsDetailObj.promise;
-    },
-    filterBoardsData(rawList) {
-      let list = [];
-      for (const board of rawList) {
-        list.push({
-          id: "wy__" + board.id,
-          name: board.name,
-          bangid: String(board.id)
-        });
-      }
-      return list;
-    },
-    async getBoards(retryNum = 0) {
-      this.list = topList;
-      return {
-        list: topList,
-        source: "wy"
-      };
-    },
-    async getList(bangid, page, retryNum = 0) {
-      if (++retryNum > 6) return Promise.reject(new Error("try max num"));
-      let resp;
-      try {
-        resp = await this.getData(bangid);
-      } catch (err2) {
-        if (err2.message == "try max num") {
-          throw err2;
-        } else {
-          return this.getList(bangid, page, retryNum);
-        }
-      }
-      if (resp.statusCode !== 200 || resp.body.code !== 200) return this.getList(bangid, page, retryNum);
-      let musicDetail;
-      try {
-        musicDetail = await musicDetail_default.getList(resp.body.playlist.trackIds.map((trackId) => trackId.id));
-      } catch (err2) {
-        console.log(err2);
-        if (err2.message == "try max num") {
-          throw err2;
-        } else {
-          return this.getList(bangid, page, retryNum);
-        }
-      }
-      return {
-        total: musicDetail.list.length,
-        list: musicDetail.list,
-        limit: this.limit,
-        page,
-        source: "wy"
-      };
-    },
-    getDetailPageUrl(id) {
-      if (typeof id == "string") id = id.replace("wy__", "");
-      return `https://music.163.com/#/discover/toplist?id=${id}`;
-    }
-  };
-
-  // js-source/src/utils/musicSdk/wy/lyric.js
-  var eapiRequest = (url, data) => {
-    return httpFetch("https://interface3.music.163.com/eapi/song/lyric/v1", {
-      method: "post",
-      headers: {
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36",
-        origin: "https://music.163.com"
-        // cookie: 'os=pc; deviceId=A9C064BB4584D038B1565B58CB05F95290998EE8B025AA2D07AE; osver=Microsoft-Windows-10-Home-China-build-19043-64bit; appver=2.5.2.197409; channel=netease; MUSIC_A=37a11f2eb9de9930cad479b2ad495b0e4c982367fb6f909d9a3f18f876c6b49faddb3081250c4980dd7e19d4bd9bf384e004602712cf2b2b8efaafaab164268a00b47359f85f22705cc95cb6180f3aee40f5be1ebf3148d888aa2d90636647d0c3061cd18d77b7a0; __csrf=05b50d54082694f945d7de75c210ef94; mode=Z7M-KP5(7)GZ; NMTID=00OZLp2VVgq9QdwokUgq3XNfOddQyIAAAF_6i8eJg; ntes_kaola_ad=1',
-      },
-      form: eapi(url, data)
-    });
-  };
-  var parseTools = {
-    rxps: {
-      info: /^{"/,
-      lineTime: /^\[(\d+),\d+\]/,
-      wordTime: /\(\d+,\d+,\d+\)/,
-      wordTimeAll: /(\(\d+,\d+,\d+\))/g
-    },
-    msFormat(timeMs) {
-      if (Number.isNaN(timeMs)) return "";
-      let ms = timeMs % 1e3;
-      timeMs /= 1e3;
-      let m = parseInt(timeMs / 60).toString().padStart(2, "0");
-      timeMs %= 60;
-      let s = parseInt(timeMs).toString().padStart(2, "0");
-      return `[${m}:${s}.${ms}]`;
-    },
-    parseLyric(lines) {
-      const lxlrcLines = [];
-      const lrcLines = [];
-      for (let line of lines) {
-        line = line.trim();
-        let result = this.rxps.lineTime.exec(line);
-        if (!result) {
-          if (line.startsWith("[offset")) {
-            lxlrcLines.push(line);
-            lrcLines.push(line);
-          }
-          continue;
-        }
-        const startMsTime = parseInt(result[1]);
-        const startTimeStr = this.msFormat(startMsTime);
-        if (!startTimeStr) continue;
-        let words = line.replace(this.rxps.lineTime, "");
-        lrcLines.push(`${startTimeStr}${words.replace(this.rxps.wordTimeAll, "")}`);
-        let times = words.match(this.rxps.wordTimeAll);
-        if (!times) continue;
-        times = times.map((time) => {
-          const result2 = /\((\d+),(\d+),\d+\)/.exec(time);
-          return `<${Math.max(parseInt(result2[1]) - startMsTime, 0)},${result2[2]}>`;
-        });
-        const wordArr = words.split(this.rxps.wordTime);
-        wordArr.shift();
-        const newWords = times.map((time, index) => `${time}${wordArr[index]}`).join("");
-        lxlrcLines.push(`${startTimeStr}${newWords}`);
-      }
-      return {
-        lyric: lrcLines.join("\n"),
-        lxlyric: lxlrcLines.join("\n")
-      };
-    },
-    parseHeaderInfo(str) {
-      str = str.trim();
-      str = str.replace(/\r/g, "");
-      if (!str) return null;
-      const lines = str.split("\n");
-      return lines.map((line) => {
-        if (!this.rxps.info.test(line)) return line;
-        try {
-          const info = JSON.parse(line);
-          const timeTag = this.msFormat(info.t);
-          return timeTag ? `${timeTag}${info.c.map((t) => t.tx).join("")}` : "";
-        } catch {
-          return "";
-        }
-      });
-    },
-    getIntv(interval) {
-      if (!interval) return 0;
-      if (!interval.includes(".")) interval += ".0";
-      let arr = interval.split(/:|\./);
-      while (arr.length < 3) arr.unshift("0");
-      const [m, s, ms] = arr;
-      return parseInt(m) * 36e5 + parseInt(s) * 1e3 + parseInt(ms);
-    },
-    fixTimeTag(lrc, targetlrc) {
-      let lrcLines = lrc.split("\n");
-      const targetlrcLines = targetlrc.split("\n");
-      const timeRxp = /^\[([\d:.]+)\]/;
-      let temp = [];
-      let newLrc = [];
-      targetlrcLines.forEach((line) => {
-        const result = timeRxp.exec(line);
-        if (!result) return;
-        const words = line.replace(timeRxp, "");
-        if (!words.trim()) return;
-        const t1 = this.getIntv(result[1]);
-        while (lrcLines.length) {
-          const lrcLine = lrcLines.shift();
-          const lrcLineResult = timeRxp.exec(lrcLine);
-          if (!lrcLineResult) continue;
-          const t2 = this.getIntv(lrcLineResult[1]);
-          if (Math.abs(t1 - t2) < 100) {
-            const lrc2 = line.replace(timeRxp, lrcLineResult[0]).trim();
-            if (!lrc2) continue;
-            newLrc.push(lrc2);
-            break;
-          }
-          temp.push(lrcLine);
-        }
-        lrcLines = [...temp, ...lrcLines];
-        temp = [];
-      });
-      return newLrc.join("\n");
-    },
-    parse(ylrc, ytlrc, yrlrc, lrc, tlrc, rlrc) {
-      const info = {
-        lyric: "",
-        tlyric: "",
-        rlyric: "",
-        lxlyric: ""
-      };
-      if (ylrc) {
-        let lines = this.parseHeaderInfo(ylrc);
-        if (lines) {
-          const result = this.parseLyric(lines);
-          if (ytlrc) {
-            const lines2 = this.parseHeaderInfo(ytlrc);
-            if (lines2) {
-              info.tlyric = this.fixTimeTag(result.lyric, lines2.join("\n"));
-            }
-          }
-          if (yrlrc) {
-            const lines2 = this.parseHeaderInfo(yrlrc);
-            if (lines2) {
-              info.rlyric = this.fixTimeTag(result.lyric, lines2.join("\n"));
-            }
-          }
-          const timeRxp = /^\[[\d:.]+\]/;
-          const headers2 = lines.filter((l) => timeRxp.test(l)).join("\n");
-          info.lyric = `${headers2}
-${result.lyric}`;
-          info.lxlyric = result.lxlyric;
-          return info;
-        }
-      }
-      if (lrc) {
-        const lines = this.parseHeaderInfo(lrc);
-        if (lines) info.lyric = lines.join("\n");
-      }
-      if (tlrc) {
-        const lines = this.parseHeaderInfo(tlrc);
-        if (lines) info.tlyric = lines.join("\n");
-      }
-      if (rlrc) {
-        const lines = this.parseHeaderInfo(rlrc);
-        if (lines) info.rlyric = lines.join("\n");
-      }
-      return info;
-    }
-  };
-  var fixTimeLabel = (lrc, tlrc, romalrc) => {
-    if (lrc) {
-      let newLrc = lrc.replace(/\[(\d{2}:\d{2}):(\d{2})]/g, "[$1.$2]");
-      let newTlrc = tlrc?.replace(/\[(\d{2}:\d{2}):(\d{2})]/g, "[$1.$2]") ?? tlrc;
-      if (newLrc != lrc || newTlrc != tlrc) {
-        lrc = newLrc;
-        tlrc = newTlrc;
-        if (romalrc) romalrc = romalrc.replace(/\[(\d{2}:\d{2}):(\d{2,3})]/g, "[$1.$2]").replace(/\[(\d{2}:\d{2}\.\d{2})0]/g, "[$1]");
-      }
-    }
-    return { lrc, tlrc, romalrc };
-  };
-  var lyric_default2 = (songmid) => {
-    const requestObj = eapiRequest("/api/song/lyric/v1", {
-      id: songmid,
-      cp: false,
-      tv: 0,
-      lv: 0,
-      rv: 0,
-      kv: 0,
-      yv: 0,
-      ytv: 0,
-      yrv: 0
-    });
-    requestObj.promise = requestObj.promise.then(({ body }) => {
-      if (body.code !== 200 || !body?.lrc?.lyric) return Promise.reject(new Error("Get lyric failed"));
-      const fixTimeLabelLrc = fixTimeLabel(body.lrc.lyric, body.tlyric?.lyric, body.romalrc?.lyric);
-      const info = parseTools.parse(body.yrc?.lyric, body.ytlrc?.lyric, body.yromalrc?.lyric, fixTimeLabelLrc.lrc, fixTimeLabelLrc.tlrc, fixTimeLabelLrc.romalrc);
-      if (!info.lyric) return Promise.reject(new Error("Get lyric failed"));
-      return info;
-    });
-    return requestObj;
-  };
-
-  // js-source/src/utils/musicSdk/wy/musicInfo.js
-  var musicInfo_default2 = (songmid) => {
-    const requestObj = httpFetch("https://music.163.com/weapi/v3/song/detail", {
-      method: "post",
-      headers: {
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36",
-        Referer: "https://music.163.com/song?id=" + songmid,
-        origin: "https://music.163.com"
-      },
-      form: weapi({
-        c: `[{"id":${songmid}}]`,
-        ids: `[${songmid}]`
-      })
-    });
-    requestObj.promise = requestObj.promise.then(({ body }) => {
-      if (body.code !== 200 || !body.songs.length) return Promise.reject(new Error("\u83B7\u53D6\u6B4C\u66F2\u4FE1\u606F\u5931\u8D25"));
-      return body.songs[0];
-    });
-    return requestObj;
-  };
-
-  // js-source/src/utils/musicSdk/wy/utils/index.js
-  var eapiRequest2 = (url, data) => {
-    return httpFetch("https://interface.music.163.com/eapi/batch", {
-      method: "post",
-      headers: {
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36",
-        origin: "https://music.163.com"
-        // cookie: 'os=pc; deviceId=A9C064BB4584D038B1565B58CB05F95290998EE8B025AA2D07AE; osver=Microsoft-Windows-10-Home-China-build-19043-64bit; appver=2.5.2.197409; channel=netease; MUSIC_A=37a11f2eb9de9930cad479b2ad495b0e4c982367fb6f909d9a3f18f876c6b49faddb3081250c4980dd7e19d4bd9bf384e004602712cf2b2b8efaafaab164268a00b47359f85f22705cc95cb6180f3aee40f5be1ebf3148d888aa2d90636647d0c3061cd18d77b7a0; __csrf=05b50d54082694f945d7de75c210ef94; mode=Z7M-KP5(7)GZ; NMTID=00OZLp2VVgq9QdwokUgq3XNfOddQyIAAAF_6i8eJg; ntes_kaola_ad=1',
-      },
-      form: eapi(url, data)
-    });
-  };
-
-  // js-source/src/utils/musicSdk/wy/musicSearch.js
-  var musicSearch_default2 = {
-    limit: 30,
-    total: 0,
-    page: 0,
-    allPage: 1,
-    musicSearch(str, page, limit) {
-      const searchRequest = eapiRequest2("/api/search/song/list/page", {
-        keyword: str,
-        needCorrect: "1",
-        channel: "typing",
-        offset: limit * (page - 1),
-        scene: "normal",
-        total: page == 1,
-        limit
-      });
-      return searchRequest.promise.then(({ body }) => body);
-    },
-    getSinger(singers) {
-      let arr = [];
-      singers.forEach((singer) => {
-        arr.push(singer.name);
-      });
-      return arr.join("\u3001");
-    },
-    handleResult(rawList) {
-      if (!rawList) return [];
-      return rawList.map((item) => {
-        item = item.baseInfo.simpleSongData;
-        const types = [];
-        const _types = {};
-        let size;
-        if (item.privilege.maxBrLevel == "hires") {
-          size = item.hr ? sizeFormate(item.hr.size) : null;
-          types.push({ type: "flac24bit", size });
-          _types.flac24bit = {
-            size
-          };
-        }
-        switch (item.privilege.maxbr) {
-          case 999e3:
-            size = item.sq ? sizeFormate(item.sq.size) : null;
-            types.push({ type: "flac", size });
-            _types.flac = {
-              size
-            };
-          case 32e4:
-            size = item.h ? sizeFormate(item.h.size) : null;
-            types.push({ type: "320k", size });
-            _types["320k"] = {
-              size
-            };
-          case 192e3:
-          case 128e3:
-            size = item.l ? sizeFormate(item.l.size) : null;
-            types.push({ type: "128k", size });
-            _types["128k"] = {
-              size
-            };
-        }
-        types.reverse();
-        return {
-          singer: this.getSinger(item.ar),
-          name: item.name,
-          albumName: item.al.name,
-          albumId: item.al.id,
-          source: "wy",
-          interval: formatPlayTime(item.dt / 1e3),
-          songmid: item.id,
-          img: item.al.picUrl,
-          lrc: null,
-          types,
-          _types,
-          typeUrl: {}
-        };
-      });
-    },
-    search(str, page = 1, limit, retryNum = 0) {
-      if (++retryNum > 3) return Promise.reject(new Error("try max num"));
-      if (limit == null) limit = this.limit;
-      return this.musicSearch(str, page, limit).then((result) => {
-        if (!result || result.code !== 200) return this.search(str, page, limit, retryNum);
-        let list = this.handleResult(result.data.resources || []);
-        if (list == null) return this.search(str, page, limit, retryNum);
-        this.total = result.data.totalCount || 0;
-        this.page = page;
-        this.allPage = Math.ceil(this.total / this.limit);
-        return {
-          list,
-          allPage: this.allPage,
-          limit: this.limit,
-          total: this.total,
-          source: "wy"
-        };
-      });
-    }
-  };
-
-  // js-source/src/utils/musicSdk/wy/songList.js
-  var songList_default2 = {
-    _requestObj_tags: null,
-    _requestObj_hotTags: null,
-    _requestObj_list: null,
-    limit_list: 30,
-    limit_song: 1e5,
-    successCode: 200,
-    cookie: "MUSIC_U=",
-    sortList: [
-      {
-        name: "\u6700\u70ED",
-        tid: "hot",
-        id: "hot"
-      }
-      // {
-      //   name: '最新',
-      //   tid: 'new',
-      //   id: 'new',
-      // },
-    ],
-    regExps: {
-      listDetailLink: /^.+(?:\?|&)id=(\d+)(?:&.*$|#.*$|$)/,
-      listDetailLink2: /^.+\/playlist\/(\d+)\/\d+\/.+$/
-    },
-    async handleParseId(link, retryNum = 0) {
-      if (retryNum > 2) throw new Error("link try max num");
-      const requestObj_listDetailLink = httpFetch(link);
-      const { url, statusCode } = await requestObj_listDetailLink.promise;
-      if (statusCode > 400) return this.handleParseId(link, ++retryNum);
-      return this.regExps.listDetailLink.test(url) ? url.replace(this.regExps.listDetailLink, "$1") : url.replace(this.regExps.listDetailLink2, "$1");
-    },
-    async getListId(id) {
-      let cookie;
-      if (/###/.test(id)) {
-        const [url, token] = id.split("###");
-        id = url;
-        cookie = `MUSIC_U=${token}`;
-      }
-      if (/[?&:/]/.test(id)) {
-        if (this.regExps.listDetailLink.test(id)) {
-          id = id.replace(this.regExps.listDetailLink, "$1");
-        } else if (this.regExps.listDetailLink2.test(id)) {
-          id = id.replace(this.regExps.listDetailLink2, "$1");
-        } else {
-          id = await this.handleParseId(id);
-        }
-      }
-      return { id, cookie };
-    },
-    async getListDetail(rawId, page, tryNum = 0) {
-      if (tryNum > 2) return Promise.reject(new Error("try max num"));
-      const { id, cookie } = await this.getListId(rawId);
-      if (cookie) this.cookie = cookie;
-      const requestObj_listDetail = httpFetch("https://music.163.com/api/linux/forward", {
-        method: "post",
-        headers: {
-          "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36",
-          Cookie: this.cookie
-        },
-        credentials: "omit",
-        cache: "default",
-        form: linuxapi({
-          method: "POST",
-          url: "https://music.163.com/api/v3/playlist/detail",
-          params: {
-            id,
-            n: this.limit_song,
-            s: 8
-          }
-        })
-      });
-      const { statusCode, body } = await requestObj_listDetail.promise;
-      if (statusCode !== 200 || body.code !== this.successCode) return this.getListDetail(id, page, ++tryNum);
-      let limit = 1e3;
-      let rangeStart = (page - 1) * limit;
-      let list;
-      if (body.playlist.trackIds.length == body.privileges.length) {
-        list = this.filterListDetail(body);
-      } else {
-        try {
-          list = (await musicDetail_default.getList(body.playlist.trackIds.slice(rangeStart, limit * page).map((trackId) => trackId.id))).list;
-        } catch (err2) {
-          console.log(err2);
-          if (err2.message == "try max num") {
-            throw err2;
-          } else {
-            return this.getListDetail(id, page, ++tryNum);
-          }
-        }
-      }
-      return {
-        list,
-        page,
-        limit,
-        total: body.playlist.trackIds.length,
-        source: "wy",
-        info: {
-          play_count: formatPlayCount(body.playlist.playCount),
-          name: body.playlist.name,
-          img: body.playlist.coverImgUrl,
-          desc: body.playlist.description,
-          author: body.playlist.creator.nickname
-        }
-      };
-    },
-    filterListDetail({ playlist: { tracks }, privileges }) {
-      const list = [];
-      tracks.forEach((item, index) => {
-        const types = [];
-        const _types = {};
-        let size;
-        let privilege = privileges[index];
-        if (privilege.id !== item.id) privilege = privileges.find((p) => p.id === item.id);
-        if (!privilege) return;
-        if (privilege.maxBrLevel == "hires") {
-          size = item.hr ? sizeFormate(item.hr.size) : null;
-          types.push({ type: "flac24bit", size });
-          _types.flac24bit = {
-            size
-          };
-        }
-        switch (privilege.maxbr) {
-          case 999e3:
-            size = null;
-            types.push({ type: "flac", size });
-            _types.flac = {
-              size
-            };
-          case 32e4:
-            size = item.h ? sizeFormate(item.h.size) : null;
-            types.push({ type: "320k", size });
-            _types["320k"] = {
-              size
-            };
-          case 192e3:
-          case 128e3:
-            size = item.l ? sizeFormate(item.l.size) : null;
-            types.push({ type: "128k", size });
-            _types["128k"] = {
-              size
-            };
-        }
-        types.reverse();
-        if (item.pc) {
-          list.push({
-            singer: item.pc.ar ?? "",
-            name: item.pc.sn ?? "",
-            albumName: item.pc.alb ?? "",
-            albumId: item.al?.id,
-            source: "wy",
-            interval: formatPlayTime(item.dt / 1e3),
-            songmid: item.id,
-            img: item.al?.picUrl ?? "",
-            lrc: null,
-            otherSource: null,
-            types,
-            _types,
-            typeUrl: {}
-          });
-        } else {
-          list.push({
-            singer: formatSingerName(item.ar, "name"),
-            name: item.name ?? "",
-            albumName: item.al?.name,
-            albumId: item.al?.id,
-            source: "wy",
-            interval: formatPlayTime(item.dt / 1e3),
-            songmid: item.id,
-            img: item.al?.picUrl,
-            lrc: null,
-            otherSource: null,
-            types,
-            _types,
-            typeUrl: {}
-          });
-        }
-      });
-      return list;
-    },
-    // 获取列表数据
-    getList(sortId, tagId, page, tryNum = 0) {
-      if (tryNum > 2) return Promise.reject(new Error("try max num"));
-      if (this._requestObj_list) this._requestObj_list.cancelHttp();
-      this._requestObj_list = httpFetch("https://music.163.com/weapi/playlist/list", {
-        method: "post",
-        form: weapi({
-          cat: tagId || "\u5168\u90E8",
-          // 全部,华语,欧美,日语,韩语,粤语,小语种,流行,摇滚,民谣,电子,舞曲,说唱,轻音乐,爵士,乡村,R&B/Soul,古典,民族,英伦,金属,朋克,蓝调,雷鬼,世界音乐,拉丁,另类/独立,New Age,古风,后摇,Bossa Nova,清晨,夜晚,学习,工作,午休,下午茶,地铁,驾车,运动,旅行,散步,酒吧,怀旧,清新,浪漫,性感,伤感,治愈,放松,孤独,感动,兴奋,快乐,安静,思念,影视原声,ACG,儿童,校园,游戏,70后,80后,90后,网络歌曲,KTV,经典,翻唱,吉他,钢琴,器乐,榜单,00后
-          order: sortId,
-          // hot,new
-          limit: this.limit_list,
-          offset: this.limit_list * (page - 1),
-          total: true
-        })
-      });
-      return this._requestObj_list.promise.then(({ body }) => {
-        if (body.code !== this.successCode) return this.getList(sortId, tagId, page, ++tryNum);
-        return {
-          list: this.filterList(body.playlists),
-          total: parseInt(body.total),
-          page,
-          limit: this.limit_list,
-          source: "wy"
-        };
-      });
-    },
-    filterList(rawData) {
-      return rawData.map((item) => ({
-        play_count: formatPlayCount(item.playCount),
-        id: String(item.id),
-        author: item.creator.nickname,
-        name: item.name,
-        time: item.createTime ? dateFormat(item.createTime, "Y-M-D") : "",
-        img: item.coverImgUrl,
-        grade: item.grade,
-        total: item.trackCount,
-        desc: item.description,
-        source: "wy"
-      }));
-    },
-    // 获取标签
-    getTag(tryNum = 0) {
-      if (this._requestObj_tags) this._requestObj_tags.cancelHttp();
-      if (tryNum > 2) return Promise.reject(new Error("try max num"));
-      this._requestObj_tags = httpFetch("https://music.163.com/weapi/playlist/catalogue", {
-        method: "post",
-        form: weapi({})
-      });
-      return this._requestObj_tags.promise.then(({ body }) => {
-        if (body.code !== this.successCode) return this.getTag(++tryNum);
-        return this.filterTagInfo(body);
-      });
-    },
-    filterTagInfo({ sub, categories }) {
-      const subList = {};
-      for (const item of sub) {
-        if (!subList[item.category]) subList[item.category] = [];
-        subList[item.category].push({
-          parent_id: categories[item.category],
-          parent_name: categories[item.category],
-          id: item.name,
-          name: item.name,
-          source: "wy"
-        });
-      }
-      const list = [];
-      for (const key of Object.keys(categories)) {
-        list.push({
-          name: categories[key],
-          list: subList[key],
-          source: "wy"
-        });
-      }
-      return list;
-    },
-    // 获取热门标签
-    getHotTag(tryNum = 0) {
-      if (this._requestObj_hotTags) this._requestObj_hotTags.cancelHttp();
-      if (tryNum > 2) return Promise.reject(new Error("try max num"));
-      this._requestObj_hotTags = httpFetch("https://music.163.com/weapi/playlist/hottags", {
-        method: "post",
-        form: weapi({})
-      });
-      return this._requestObj_hotTags.promise.then(({ body }) => {
-        if (body.code !== this.successCode) return this.getTag(++tryNum);
-        return this.filterHotTagInfo(body.tags);
-      });
-    },
-    filterHotTagInfo(rawList) {
-      return rawList.map((item) => ({
-        id: item.playlistTag.name,
-        name: item.playlistTag.name,
-        source: "wy"
-      }));
-    },
-    getTags() {
-      return Promise.all([this.getTag(), this.getHotTag()]).then(([tags, hotTag]) => ({ tags, hotTag, source: "wy" }));
-    },
-    async getDetailPageUrl(rawId) {
-      const { id } = await this.getListId(rawId);
-      return `https://music.163.com/#/playlist?id=${id}`;
-    },
-    search(text, page, limit = 20) {
-      return eapiRequest2("/api/cloudsearch/pc", {
-        s: text,
-        type: 1e3,
-        // 1: 单曲, 10: 专辑, 100: 歌手, 1000: 歌单, 1002: 用户, 1004: MV, 1006: 歌词, 1009: 电台, 1014: 视频
-        limit,
-        total: page == 1,
-        offset: limit * (page - 1)
-      }).promise.then(({ body }) => {
-        if (body.code != this.successCode) throw new Error("filed");
-        return {
-          list: this.filterList(body.result.playlists),
-          limit,
-          total: body.result.playlistCount,
-          source: "wy"
-        };
-      });
-    }
-  };
-
-  // js-source/src/utils/musicSdk/wy/hotSearch.js
-  var hotSearch_default2 = {
-    _requestObj: null,
-    async getList(retryNum = 0) {
-      if (this._requestObj) this._requestObj.cancelHttp();
-      if (retryNum > 2) return Promise.reject(new Error("try max num"));
-      const _requestObj = eapiRequest2("/api/search/chart/detail", {
-        id: "HOT_SEARCH_SONG#@#"
-      });
-      const { body, statusCode } = await _requestObj.promise;
-      if (statusCode != 200 || body.code !== 200) throw new Error("\u83B7\u53D6\u70ED\u641C\u8BCD\u5931\u8D25");
-      return { source: "wy", list: this.filterList(body.data.itemList) };
-    },
-    filterList(rawList) {
-      return rawList.map((item) => item.searchWord);
-    }
-  };
-
-  // js-source/src/utils/musicSdk/wy/comment.js
-  var emojis2 = [
-    ["\u5927\u7B11", "\u{1F603}"],
-    ["\u53EF\u7231", "\u{1F60A}"],
-    ["\u61A8\u7B11", "\u263A\uFE0F"],
-    ["\u8272", "\u{1F60D}"],
-    ["\u4EB2\u4EB2", "\u{1F619}"],
-    ["\u60CA\u6050", "\u{1F631}"],
-    ["\u6D41\u6CEA", "\u{1F62D}"],
-    ["\u4EB2", "\u{1F61A}"],
-    ["\u5446", "\u{1F633}"],
-    ["\u54C0\u4F24", "\u{1F614}"],
-    ["\u5472\u7259", "\u{1F601}"],
-    ["\u5410\u820C", "\u{1F61D}"],
-    ["\u6487\u5634", "\u{1F612}"],
-    ["\u6012", "\u{1F621}"],
-    ["\u5978\u7B11", "\u{1F60F}"],
-    ["\u6C57", "\u{1F613}"],
-    ["\u75DB\u82E6", "\u{1F616}"],
-    ["\u60F6\u6050", "\u{1F630}"],
-    ["\u751F\u75C5", "\u{1F628}"],
-    ["\u53E3\u7F69", "\u{1F637}"],
-    ["\u5927\u54ED", "\u{1F602}"],
-    ["\u6655", "\u{1F635}"],
-    ["\u53D1\u6012", "\u{1F47F}"],
-    ["\u5F00\u5FC3", "\u{1F604}"],
-    ["\u9B3C\u8138", "\u{1F61C}"],
-    ["\u76B1\u7709", "\u{1F61E}"],
-    ["\u6D41\u611F", "\u{1F622}"],
-    ["\u7231\u5FC3", "\u2764\uFE0F"],
-    ["\u5FC3\u788E", "\u{1F494}"],
-    ["\u949F\u60C5", "\u{1F498}"],
-    ["\u661F\u661F", "\u2B50\uFE0F"],
-    ["\u751F\u6C14", "\u{1F4A2}"],
-    ["\u4FBF\u4FBF", "\u{1F4A9}"],
-    ["\u5F3A", "\u{1F44D}"],
-    ["\u5F31", "\u{1F44E}"],
-    ["\u62DC", "\u{1F64F}"],
-    ["\u7275\u624B", "\u{1F46B}"],
-    ["\u8DF3\u821E", "\u{1F46F}\u200D\u2640\uFE0F"],
-    ["\u7981\u6B62", "\u{1F645}\u200D\u2640\uFE0F"],
-    ["\u8FD9\u8FB9", "\u{1F481}\u200D\u2640\uFE0F"],
-    ["\u7231\u610F", "\u{1F48F}"],
-    ["\u793A\u7231", "\u{1F469}\u200D\u2764\uFE0F\u200D\u{1F468}"],
-    ["\u5634\u5507", "\u{1F444}"],
-    ["\u72D7", "\u{1F436}"],
-    ["\u732B", "\u{1F431}"],
-    ["\u732A", "\u{1F437}"],
-    ["\u5154\u5B50", "\u{1F430}"],
-    ["\u5C0F\u9E21", "\u{1F424}"],
-    ["\u516C\u9E21", "\u{1F414}"],
-    ["\u5E7D\u7075", "\u{1F47B}"],
-    ["\u5723\u8BDE", "\u{1F385}"],
-    ["\u5916\u661F", "\u{1F47D}"],
-    ["\u94BB\u77F3", "\u{1F48E}"],
-    ["\u793C\u7269", "\u{1F381}"],
-    ["\u7537\u5B69", "\u{1F466}"],
-    ["\u5973\u5B69", "\u{1F467}"],
-    ["\u86CB\u7CD5", "\u{1F382}"],
-    ["18", "\u{1F51E}"],
-    ["\u5708", "\u2B55"],
-    ["\u53C9", "\u274C"]
-  ];
-  var applyEmoji = (text) => {
-    for (const e of emojis2) text = text.replaceAll(`[${e[0]}]`, e[1]);
-    return text;
-  };
-  var cursorTools = {
-    cache: {},
-    getCursor(id, page, limit) {
-      let cacheData = this.cache[id];
-      if (!cacheData) cacheData = this.cache[id] = {};
-      let orderType;
-      let cursor;
-      let offset;
-      if (page == 1) {
-        cacheData.page = 1;
-        cursor = cacheData.cursor = cacheData.prevCursor = Date.now();
-        orderType = 1;
-        offset = 0;
-      } else if (cacheData.page) {
-        cursor = cacheData.cursor;
-        if (page > cacheData.page) {
-          orderType = 1;
-          offset = (page - cacheData.page - 1) * limit;
-        } else if (page < cacheData.page) {
-          orderType = 0;
-          offset = (cacheData.page - page - 1) * limit;
-        } else {
-          cursor = cacheData.cursor = cacheData.prevCursor;
-          offset = cacheData.offset;
-          orderType = cacheData.orderType;
-        }
-      }
-      return {
-        orderType,
-        cursor,
-        offset
-      };
-    },
-    setCursor(id, cursor, orderType, offset, page) {
-      let cacheData = this.cache[id];
-      if (!cacheData) cacheData = this.cache[id] = {};
-      cacheData.prevCursor = cacheData.cursor;
-      cacheData.cursor = cursor;
-      cacheData.orderType = orderType;
-      cacheData.offset = offset;
-      cacheData.page = page;
-    }
-  };
-  var comment_default2 = {
-    _requestObj: null,
-    _requestObj2: null,
-    async getComment({ songmid }, page = 1, limit = 20) {
-      if (this._requestObj) this._requestObj.cancelHttp();
-      const id = "R_SO_4_" + songmid;
-      const cursorInfo = cursorTools.getCursor(songmid, page, limit);
-      const _requestObj = httpFetch("https://music.163.com/weapi/comment/resource/comments/get", {
-        method: "post",
-        headers: {
-          "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36",
-          origin: "https://music.163.com",
-          Refere: "http://music.163.com/"
-        },
-        form: weapi({
-          cursor: cursorInfo.cursor,
-          offset: cursorInfo.offset,
-          orderType: cursorInfo.orderType,
-          pageNo: page,
-          pageSize: limit,
-          rid: id,
-          threadId: id
-        })
-      });
-      const { body, statusCode } = await _requestObj.promise;
-      if (statusCode != 200 || body.code !== 200) throw new Error("\u83B7\u53D6\u8BC4\u8BBA\u5931\u8D25");
-      cursorTools.setCursor(songmid, body.data.cursor, cursorInfo.orderType, cursorInfo.offset, page);
-      return { source: "wy", comments: this.filterComment(body.data.comments), total: body.data.totalCount, page, limit, maxPage: Math.ceil(body.data.totalCount / limit) || 1 };
-    },
-    async getHotComment({ songmid }, page = 1, limit = 100) {
-      if (this._requestObj2) this._requestObj2.cancelHttp();
-      const id = "R_SO_4_" + songmid;
-      const _requestObj2 = httpFetch(`https://music.163.com/weapi/v1/resource/hotcomments/${id}`, {
-        method: "post",
-        headers: {
-          "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36",
-          origin: "https://music.163.com",
-          Refere: "http://music.163.com/"
-        },
-        form: weapi({
-          rid: id,
-          limit,
-          offset: limit * (page - 1),
-          beforeTime: Date.now().toString()
-        })
-      });
-      const { body, statusCode } = await _requestObj2.promise;
-      if (statusCode != 200 || body.code !== 200) throw new Error("\u83B7\u53D6\u70ED\u95E8\u8BC4\u8BBA\u5931\u8D25");
-      const total = body.total ?? 0;
-      return { source: "wy", comments: this.filterComment(body.hotComments), total, page, limit, maxPage: Math.ceil(total / limit) || 1 };
-    },
-    filterComment(rawList) {
-      return rawList.map((item) => {
-        let data = {
-          id: item.commentId,
-          text: item.content ? applyEmoji(item.content) : "",
-          time: item.time ? item.time : "",
-          timeStr: item.time ? dateFormat2(item.time) : "",
-          location: item.ipLocation?.location,
-          userName: item.user.nickname,
-          avatar: item.user.avatarUrl,
-          userId: item.user.userId,
-          likedCount: item.likedCount,
-          reply: []
-        };
-        let replyData = item.beReplied && item.beReplied[0];
-        return replyData ? {
-          id: item.commentId,
-          rootId: replyData.beRepliedCommentId,
-          text: replyData.content ? applyEmoji(replyData.content) : "",
-          time: item.time,
-          timeStr: null,
-          location: replyData.ipLocation?.location,
-          userName: replyData.user.nickname,
-          avatar: replyData.user.avatarUrl,
-          userId: replyData.user.userId,
-          likedCount: null,
-          reply: [data]
-        } : data;
-      });
-    }
-  };
-
-  // js-source/src/utils/musicSdk/wy/tipSearch.js
-  var tipSearch_default = {
-    requestObj: null,
-    cancelTipSearch() {
-      if (this.requestObj && this.requestObj.cancelHttp) this.requestObj.cancelHttp();
-    },
-    tipSearchBySong(str) {
-      this.cancelTipSearch();
-      this.requestObj = httpFetch("https://music.163.com/weapi/search/suggest/web", {
-        method: "POST",
-        headers: {
-          referer: "https://music.163.com/",
-          origin: "https://music.163.com/"
-        },
-        form: weapi({
-          s: str
-        })
-      });
-      return this.requestObj.promise.then(({ statusCode, body }) => {
-        if (statusCode != 200 || body.code != 200) {
-          return Promise.reject(new Error(`\u7F51\u6613\u8054\u60F3\u8BF7\u6C42\u5931\u8D25: HTTP ${statusCode}, code ${body?.code ?? "unknown"}`));
-        }
-        return body.result?.songs ?? [];
-      });
-    },
-    handleResult(rawData) {
-      return rawData.map((info) => `${info.name} - ${formatSingerName(info.artists, "name")}`);
-    },
-    async search(str) {
-      return this.tipSearchBySong(str).then((result) => this.handleResult(result));
-    }
-  };
-
-  // js-source/src/utils/musicSdk/wy/artist.js
-  var requestJSON = async (url, options) => {
-    const { statusCode, body } = await httpFetch(url, options).promise;
-    if (statusCode !== 200 || !body || body.code != null && body.code !== 200) {
-      throw new Error("\u7F51\u6613\u4E91\u6B4C\u624B\u670D\u52A1\u6682\u65F6\u4E0D\u53EF\u7528");
-    }
-    return body;
-  };
-  var track2 = (item) => {
-    const id = item?.id;
-    const name = item?.name;
-    if (id == null || typeof name !== "string" || name.length === 0) return null;
-    const album3 = item.al || item.album || {};
-    const artists = item.ar || item.artists || [];
-    const duration = Number(item.dt ?? item.duration ?? 0);
-    const types = [];
-    const _types = {};
-    let size;
-    const privilege = item.privilege || {};
-    const maxBrLevel = String(privilege.maxBrLevel || "").toLowerCase();
-    const maxbr = Number(privilege.maxbr || 0);
-    if (maxBrLevel === "hires" || item.hr) {
-      size = item.hr?.size ? sizeFormate(item.hr.size) : null;
-      types.push({ type: "flac24bit", size });
-      _types.flac24bit = { size };
-    }
-    if (maxBrLevel === "lossless" || maxbr >= 999e3 || item.sq) {
-      size = item.sq?.size ? sizeFormate(item.sq.size) : null;
-      types.push({ type: "flac", size });
-      _types.flac = { size };
-    }
-    if (item.h || maxbr >= 32e4) {
-      size = item.h?.size ? sizeFormate(item.h.size) : null;
-      types.push({ type: "320k", size });
-      _types["320k"] = { size };
-    }
-    if (item.l || item.m || maxbr >= 128e3 || types.length === 0) {
-      const lowItem = item.l || item.m;
-      size = lowItem?.size ? sizeFormate(lowItem.size) : null;
-      types.push({ type: "128k", size });
-      _types["128k"] = { size };
-    }
-    types.reverse();
-    return {
-      source: "wy",
-      songmid: id,
-      name,
-      singer: formatSingerName(artists, "name"),
-      albumName: album3.name || "",
-      albumId: album3.id,
-      img: album3.picUrl || "",
-      interval: duration > 0 ? formatPlayTime(duration / 1e3) : null,
-      types,
-      _types,
-      typeUrl: {}
-    };
-  };
-  var album2 = (item) => {
-    const id = item?.id;
-    const name = item?.name;
-    if (id == null || typeof name !== "string" || name.length === 0) return null;
-    return {
-      id: String(id),
-      source: "wy",
-      name,
-      artist: item.artist?.name || formatSingerName(item.artists || [], "name"),
-      img: item.picUrl || item.blurPicUrl || "",
-      releaseDate: item.publishTime ? new Date(item.publishTime).toISOString().slice(0, 10) : "",
-      trackCount: item.size == null ? null : Number(item.size)
-    };
-  };
-  var artist_default2 = {
-    async search(keyword, page = 1, limit = 10) {
-      const offset = Math.max(0, Number(page) - 1) * Number(limit);
-      const query = `s=${encodeURIComponent(String(keyword))}&type=100&limit=${Number(limit)}&offset=${offset}`;
-      const body = await requestJSON(`https://music.163.com/api/search/get?${query}`);
-      const values = body.result?.artists || [];
-      return {
-        list: values.map((item) => ({
-          id: String(item.id),
-          source: "wy",
-          name: item.name,
-          img: item.picUrl || item.img1v1Url || "",
-          songCount: item.musicSize == null ? null : Number(item.musicSize),
-          albumCount: item.albumSize == null ? null : Number(item.albumSize)
-        })).filter((item) => item.id && item.name),
-        total: Number(body.result?.artistCount ?? values.length),
-        source: "wy"
-      };
-    },
-    async popular(artistId) {
-      const body = await requestJSON(`https://music.163.com/api/artist/top/song?id=${encodeURIComponent(artistId)}`);
-      return (body.songs || []).map(track2).filter(Boolean);
-    },
-    async albums(artistId, page = 1, limit = 30) {
-      const offset = Math.max(0, Number(page) - 1) * Number(limit);
-      const body = await requestJSON(`https://music.163.com/api/artist/albums/${encodeURIComponent(artistId)}?limit=${limit}&offset=${offset}`);
-      const list = (body.hotAlbums || []).map(album2).filter(Boolean);
-      return { list, total: Number(body.artist?.albumSize ?? list.length), source: "wy" };
-    },
-    async albumTracks(albumId) {
-      const body = await requestJSON(`https://music.163.com/api/album/${encodeURIComponent(albumId)}`);
-      return {
-        info: album2(body.album || { id: albumId, name: "" }),
-        list: (body.songs || body.album?.songs || []).map(track2).filter(Boolean),
-        source: "wy"
-      };
-    }
-  };
-
-  // js-source/src/utils/musicSdk/wy/index.js
-  var wy = {
-    tipSearch: tipSearch_default,
-    artist: artist_default2,
-    leaderboard: leaderboard_default2,
-    musicSearch: musicSearch_default2,
-    songList: songList_default2,
-    hotSearch: hotSearch_default2,
-    comment: comment_default2,
-    getMusicUrl(songInfo, type) {
-      return apis("wy").getMusicUrl(songInfo, type);
-    },
-    getLyric(songInfo) {
-      return lyric_default2(songInfo.songmid);
-    },
-    getPic(songInfo) {
-      const requestObj = musicInfo_default2(songInfo.songmid);
-      return requestObj.promise.then((info) => info.al.picUrl);
-    },
-    getMusicDetailPageUrl(songInfo) {
-      return `https://music.163.com/#/song?id=${songInfo.songmid}`;
-    }
-  };
-  var wy_default = wy;
-
   // js-source/src/utils/musicSdk/index.js
-  var sources2 = {
-    sources: [
-      {
-        name: "QQ\u97F3\u4E50",
-        id: "tx"
-      },
-      {
-        name: "\u7F51\u6613\u97F3\u4E50",
-        id: "wy"
-      }
-    ],
-    tx: tx_default,
-    wy: wy_default
+  var init = async () => {
+    if (tx_default.init) await tx_default.init();
   };
   var musicSdk_default = {
-    ...sources2,
+    sources: [{ name: "QQ\u97F3\u4E50", id: "tx" }],
+    tx: tx_default,
+    init,
     supportQuality
   };
 
   // scripts/source-entry.js
   globalThis.Buffer = import_buffer.Buffer;
   var normalizeSource = (source) => {
-    if (source !== "wy" && source !== "tx") throw new Error(`Unsupported source: ${source}`);
+    if (source !== "tx") throw new Error(`Unsupported source: ${source}`);
     return source;
   };
   var sdkFor = (source) => musicSdk_default[normalizeSource(source)];
@@ -9770,7 +8423,7 @@ ${result.lyric}`;
       return result;
     },
     async tipSearch(keyword) {
-      const sdk = sdkFor("wy");
+      const sdk = sdkFor("tx");
       const value = String(keyword);
       try {
         const result = await sdk.tipSearch.search(value);
@@ -9779,9 +8432,9 @@ ${result.lyric}`;
       }
       const page = await sdk.musicSearch.search(value, 1, 10);
       if (!page || !Array.isArray(page.list)) throw new Error("\u97F3\u6E90\u8FD4\u56DE\u8054\u60F3\u7ED3\u679C\u5F02\u5E38");
-      return [...new Set(page.list.map((track3) => {
-        const artist = typeof track3.singer === "string" ? track3.singer : "";
-        return artist ? `${track3.name} - ${artist}` : track3.name;
+      return [...new Set(page.list.map((track2) => {
+        const artist = typeof track2.singer === "string" ? track2.singer : "";
+        return artist ? `${track2.name} - ${artist}` : track2.name;
       }).filter(Boolean))];
     },
     async hotSearch(source) {
@@ -9809,7 +8462,7 @@ ${result.lyric}`;
     },
     async playlistDetail(source, id, page = 1) {
       const sdk = sdkFor(source);
-      const request2 = source === "tx" ? sdk.songList.getListDetail(String(id)) : sdk.songList.getListDetail(String(id), Number(page));
+      const request2 = sdk.songList.getListDetail(String(id), Number(page));
       const result = await unwrapRequest(request2);
       if (!result || !Array.isArray(result.list)) throw new Error("\u97F3\u6E90\u8FD4\u56DE\u6B4C\u5355\u8BE6\u60C5\u5F02\u5E38");
       return result;
@@ -9842,18 +8495,10 @@ ${result.lyric}`;
       return result;
     },
     async musicInfo(source, songmid) {
-      const normalized = normalizeSource(source);
-      const mid = String(songmid);
-      if (normalized === "tx") {
-        const result = await unwrapRequest(musicInfo_default(mid));
-        if (!result) throw new Error("\u97F3\u6E90\u8FD4\u56DE\u66F2\u76EE\u4FE1\u606F\u5F02\u5E38");
-        return result;
-      } else if (normalized === "wy") {
-        const result = await unwrapRequest(musicDetail_default.getList([mid]));
-        if (!result || !Array.isArray(result.list) || result.list.length === 0) throw new Error("\u97F3\u6E90\u8FD4\u56DE\u66F2\u76EE\u4FE1\u606F\u5F02\u5E38");
-        return result.list[0];
-      }
-      throw new Error(`Unsupported source: ${source}`);
+      normalizeSource(source);
+      const result = await unwrapRequest(musicInfo_default(String(songmid)));
+      if (!result) throw new Error("\u97F3\u6E90\u8FD4\u56DE\u66F2\u76EE\u4FE1\u606F\u5F02\u5E38");
+      return result;
     }
   });
 })();

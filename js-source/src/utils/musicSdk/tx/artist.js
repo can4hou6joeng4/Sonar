@@ -1,28 +1,8 @@
-// Sonar adaptation of lx-music-mobile for the JavaScriptCore WY/TX runtime.
+// Sonar adaptation of lx-music-mobile for the JavaScriptCore QQ Music runtime.
 // Modified distribution; see repository-root THIRD_PARTY_NOTICES.md and LICENSES/.
-import { httpFetch } from '../../request'
+import { request } from './request'
 import { sizeFormate, formatPlayTime } from '../../index'
 import { formatSingerName } from '../utils'
-
-const comm = {
-  ct: '11', cv: '14090508', v: '14090508', tmeAppID: 'qqmusic',
-  phonetype: 'EBG-AN10', deviceScore: '553.47', devicelevel: '50', newdevicelevel: '20',
-  rom: 'HuaWei/EMOTION/EmotionUI_14.2.0', os_ver: '12', OpenUDID: '0', OpenUDID2: '0',
-  QIMEI36: '0', udid: '0', chid: '0', aid: '0', oaid: '0', taid: '0', tid: '0', wid: '0',
-  uid: '0', sid: '0', modeSwitch: '6', teenMode: '0', ui_mode: '2', nettype: '1020', v4ip: '',
-}
-
-const request = async(module, method, param) => {
-  const { statusCode, body } = await httpFetch('https://u.y.qq.com/cgi-bin/musicu.fcg', {
-    method: 'post',
-    headers: { 'User-Agent': 'QQMusic 14090508(android 12)' },
-    body: { comm, req: { module, method, param } },
-  }).promise
-  if (statusCode !== 200 || body?.code !== 0 || body?.req?.code !== 0) {
-    throw new Error('QQ 歌手服务暂时不可用')
-  }
-  return body.req.data || {}
-}
 
 const httpsImage = value => typeof value === 'string' ? value.replace(/^http:\/\//i, 'https://') : ''
 const singerImage = mid => mid ? `https://y.gtimg.cn/music/photo_new/T001R500x500M000${mid}.jpg` : ''

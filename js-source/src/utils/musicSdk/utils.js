@@ -1,4 +1,4 @@
-// Sonar adaptation of lx-music-mobile for the JavaScriptCore WY/TX runtime.
+// Sonar adaptation of lx-music-mobile for the JavaScriptCore QQ Music runtime.
 // Modified distribution; see repository-root THIRD_PARTY_NOTICES.md and LICENSES/.
 import { stringMd5 } from 'react-native-quick-md5'
 import { decodeName } from '../index'

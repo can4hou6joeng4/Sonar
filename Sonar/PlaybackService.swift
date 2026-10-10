@@ -80,6 +80,8 @@ public final class PlaybackService {
     }
 
     private static let preferredQualityKey = "preferredPlaybackQuality"
+    private static let qualityPolicyVersionKey = "playbackQualityPolicyVersion"
+    private static let qualityPolicyVersion = 1
     private static let playbackModeKey = "playbackMode"
     private static let volumeKey = "macPlaybackVolume"
 
@@ -204,8 +206,14 @@ public final class PlaybackService {
             .flatMap(PlaybackMode.init(rawValue:)) ?? .sequence
         playbackMode = restoredMode
         queue = PlaybackQueue(randomIndex: randomIndex)
-        preferredQuality = defaults.string(forKey: Self.preferredQualityKey)
-            .flatMap(Quality.init(rawValue:)) ?? .hiRes
+        // Apply highest-first once when upgrading; subsequent manual choices remain explicit.
+        let migrateQuality = defaults.integer(forKey: Self.qualityPolicyVersionKey) < Self.qualityPolicyVersion
+        preferredQuality = migrateQuality ? .master : defaults.string(forKey: Self.preferredQualityKey)
+            .flatMap(Quality.init(rawValue:)) ?? .master
+        if migrateQuality {
+            defaults.set(preferredQuality.rawValue, forKey: Self.preferredQualityKey)
+            defaults.set(Self.qualityPolicyVersion, forKey: Self.qualityPolicyVersionKey)
+        }
         queue.setShuffled(restoredMode == .shuffle)
         installTimeObserver()
         installTimeControlObserver()
@@ -560,6 +568,7 @@ public final class PlaybackService {
         let revision = intentRevision
         state = .loading
         do {
+            try track.source.requireEnabled()
             let url = try await resolver.musicURL(for: track, quality: quality)
             try Task.checkCancellation()
             guard recoveryGate.isCurrent(generation), queue.current?.musicID == track.musicID else {
@@ -650,6 +659,7 @@ public final class PlaybackService {
         hasPrefetchedUpcomingForCurrentTrack = false
         updateNowPlaying()
         do {
+            try track.source.requireEnabled()
             if let preparedItem, let asset = preparedItem.asset as? AVURLAsset {
                 // No suspension between adopting the queued item and advancing:
                 // a mode or queue edit cannot insert a different item ahead of it.
@@ -706,7 +716,7 @@ public final class PlaybackService {
                 endTransitionBackgroundTask()
                 return
             }
-            let shouldSkip = playbackRequested
+            let shouldSkip = playbackRequested && track.source.isEnabled
             let revision = intentRevision
             playbackRequested = false
             state = .failed(
@@ -796,6 +806,7 @@ public final class PlaybackService {
     private func prefetchUpcomingTrackIfNeeded() {
         guard playbackMode != .repeatOne,
               let nextTrack = queue.peekNext(wrapping: playbackMode != .playInOrder),
+              nextTrack.source.isEnabled,
               nextTrack.musicID != queue.current?.musicID else {
             discardUpcoming()
             return
@@ -1470,6 +1481,7 @@ public final class PlaybackService {
 
         let qualityString: String
         switch preferredQuality {
+        case .master: qualityString = "最高优先"
         case .hiRes: qualityString = "Hi-Res"
         case .lossless: qualityString = "无损"
         case .high: qualityString = "320K"

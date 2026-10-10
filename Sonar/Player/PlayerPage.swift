@@ -75,6 +75,7 @@ public actor LyricsService {
     }
 
     public func lyrics(for track: Track, now: Date = Date()) async throws -> LyricInfo {
+        try track.source.requireEnabled()
         try Task.checkCancellation()
         let key = track.musicID
         let cached = readEntry(for: key)

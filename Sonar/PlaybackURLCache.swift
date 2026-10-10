@@ -58,12 +58,13 @@ public actor PlaybackURLCache {
 }
 
 extension Quality {
-    fileprivate var rank: Int {
+    var rank: Int {
         switch self {
         case .standard: 0
         case .high: 1
         case .lossless: 2
         case .hiRes: 3
+        case .master: 4
         }
     }
 }

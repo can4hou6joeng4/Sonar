@@ -22,7 +22,7 @@ public final class ChkszAPIClient: ChkszAPIRequesting, @unchecked Sendable {
     public func request(path: String, parameters: [String: String]) async throws -> Data {
         guard let key = credentials.chkszKey?.trimmingCharacters(in: .whitespacesAndNewlines),
               !key.isEmpty else {
-            throw SourceError.credentialRequired(hint: "未配置 ChKSz Key，备用音源不可用")
+            throw SourceError.credentialRequired(hint: "未配置第三方音源凭据，暂不可用")
         }
         if let blockedMessage = await breaker.blockedMessage() {
             throw SourceError.source(message: blockedMessage)
@@ -50,12 +50,12 @@ public final class ChkszAPIClient: ChkszAPIRequesting, @unchecked Sendable {
             }
         }
 
-        try await validateHTTP(response)
+        try await validateHTTP(response, path: path)
         try await validateEnvelope(response.body)
         return response.body
     }
 
-    private func validateHTTP(_ response: PlaybackHTTPResponse) async throws {
+    private func validateHTTP(_ response: PlaybackHTTPResponse, path: String) async throws {
         switch response.statusCode {
         case 200:
             return
@@ -69,7 +69,9 @@ public final class ChkszAPIClient: ChkszAPIRequesting, @unchecked Sendable {
             await breaker.deferAfterRateLimit(seconds: Self.retryDelay(from: response))
             throw SourceError.source(message: "ChKSz 请求过于频繁（HTTP 429）")
         default:
-            throw SourceError.source(message: "ChKSz: HTTP " + String(response.statusCode))
+            let operation = path.hasSuffix("music") ? "播放解析" : path.hasSuffix("lyric") ? "歌词请求"
+                : path.hasSuffix("playlist") ? "歌单读取" : "搜索"
+            throw SourceError.source(message: "第三方\(operation)失败（HTTP " + String(response.statusCode) + "）")
         }
     }
 
@@ -115,6 +117,102 @@ public final class ChkszAPIClient: ChkszAPIRequesting, @unchecked Sendable {
         default:
             return nil
         }
+    }
+}
+
+/// QQ catalog requests retain their JavaScript adapter. NetEase song requests
+/// go directly to ChKSz, without restoring the retired NetEase client APIs.
+public final class ChkszSourceRuntime: SourceRuntime, @unchecked Sendable {
+    private let qq: SourceRuntime
+    private let netease: ChkszNetEaseProviding
+
+    public init(qq: SourceRuntime, netease: ChkszNetEaseProviding) {
+        self.qq = qq
+        self.netease = netease
+    }
+
+    public func search(_ keyword: String, source: MusicSource, page: Int) async throws -> SearchPage {
+        switch source {
+        case .tx: try await qq.search(keyword, source: source, page: page)
+        case .wy: try await netease.search(keyword, page: page, limit: 25)
+        }
+    }
+
+    public func lyric(_ track: Track) async throws -> LyricInfo {
+        switch track.source {
+        case .tx: try await qq.lyric(track)
+        case .wy: try await netease.lyric(track)
+        }
+    }
+
+    public func picURL(_ track: Track) async throws -> URL {
+        guard track.source == .wy else { return try await qq.picURL(track) }
+        let payload = track.rawPayload
+        let candidate = (payload["picUrl"] as? String)
+            ?? (payload["img"] as? String)
+            ?? ((payload["al"] as? [String: Any])?["picUrl"] as? String)
+            ?? ((payload["album"] as? [String: Any])?["picUrl"] as? String)
+        guard let candidate, var components = URLComponents(string: candidate),
+              ["http", "https"].contains(components.scheme?.lowercased()),
+              components.host?.isEmpty == false,
+              components.user == nil, components.password == nil else {
+            throw SourceError.source(message: "网易云歌曲暂无封面")
+        }
+        components.scheme = "https"
+        guard let url = components.url else { throw SourceError.source(message: "封面地址异常") }
+        return url
+    }
+
+    public func trackDetail(_ track: Track) async throws -> Track {
+        track.source == .wy ? track : try await qq.trackDetail(track)
+    }
+
+    public func tipSearch(_ keyword: String) async throws -> [String] {
+        try await qq.tipSearch(keyword)
+    }
+
+    public func hotSearch(source: MusicSource) async throws -> [String] {
+        try source.requireQQClientSupport()
+        return try await qq.hotSearch(source: source)
+    }
+
+    public func playlistSearch(_ keyword: String, source: MusicSource, page: Int) async throws -> PlaylistCatalogPage {
+        try source.requireQQClientSupport()
+        return try await qq.playlistSearch(keyword, source: source, page: page)
+    }
+
+    public func playlistCatalog(source: MusicSource, sortId: String, tagId: String?, page: Int) async throws -> PlaylistCatalogPage {
+        try source.requireQQClientSupport()
+        return try await qq.playlistCatalog(source: source, sortId: sortId, tagId: tagId, page: page)
+    }
+
+    public func playlistDetail(source: MusicSource, id: String, page: Int) async throws -> PlaylistDetail {
+        try source.requireQQClientSupport()
+        return try await qq.playlistDetail(source: source, id: id, page: page)
+    }
+
+    public func searchArtists(_ keyword: String, source: MusicSource, page: Int) async throws -> ArtistSearchPage {
+        try await searchArtists(keyword, source: source, page: page, limit: 25)
+    }
+
+    public func searchArtists(_ keyword: String, source: MusicSource, page: Int, limit: Int) async throws -> ArtistSearchPage {
+        try source.requireQQClientSupport()
+        return try await qq.searchArtists(keyword, source: source, page: page, limit: limit)
+    }
+
+    public func artistPopularTracks(_ artist: ArtistSummary) async throws -> [Track] {
+        try artist.source.requireQQClientSupport()
+        return try await qq.artistPopularTracks(artist)
+    }
+
+    public func artistAlbums(_ artist: ArtistSummary, page: Int) async throws -> AlbumPage {
+        try artist.source.requireQQClientSupport()
+        return try await qq.artistAlbums(artist, page: page)
+    }
+
+    public func albumTracks(_ album: AlbumSummary) async throws -> AlbumDetail {
+        try album.source.requireQQClientSupport()
+        return try await qq.albumTracks(album)
     }
 }
 
@@ -175,6 +273,7 @@ public final class ChkszNetEaseClient: ChkszNetEaseProviding, @unchecked Sendabl
     }
 
     public func lyric(_ track: Track) async throws -> LyricInfo {
+        try Self.requireNetEaseTrack(track)
         let data = try await api.request(
             path: "/api/163_lyric",
             parameters: ["id": track.songmid]
@@ -193,11 +292,13 @@ public final class ChkszNetEaseClient: ChkszNetEaseProviding, @unchecked Sendabl
     }
 
     public func musicURL(for track: Track, quality: Quality) async throws -> ChkszPlaybackResult {
+        try Self.requireNetEaseTrack(track)
         let level: String = switch quality {
         case .standard: "standard"
         case .high: "exhigh"
         case .lossless: "lossless"
         case .hiRes: "hires"
+        case .master: "jymaster"
         }
         let data = try await api.request(
             path: "/api/163_music",
@@ -210,18 +311,17 @@ public final class ChkszNetEaseClient: ChkszNetEaseProviding, @unchecked Sendabl
         let object = try Self.object(from: data)
         guard let payload = object["data"] as? [String: Any],
               let rawURL = payload["url"] as? String,
-              let url = URL(string: rawURL),
-              Self.isHTTP(url) else {
+              let url = Self.normalizedURL(rawURL) else {
             throw SourceError.source(message: "ChKSz 网易播放未返回可用链接")
         }
         return ChkszPlaybackResult(
             url: url,
-            actualQuality: Self.quality(level: payload["level"] as? String, bitrate: Self.integer(payload["br"]), fallback: quality)
+            actualQuality: Self.quality(level: payload["level"] as? String, bitrate: Self.integer(payload["br"]))
         )
     }
 
     private static func track(from song: [String: Any]) throws -> Track {
-        guard let songID = string(song["id"]),
+        guard let songID = string(song["id"]), Int64(songID).map({ $0 > 0 }) == true,
               let name = nonEmptyString(song["name"]),
               let artist = artistName(song["artists"]) else {
             throw SourceError.source(message: "ChKSz 网易搜索结果缺少曲目信息")
@@ -235,8 +335,8 @@ public final class ChkszNetEaseClient: ChkszNetEaseProviding, @unchecked Sendabl
         if let duration = integer(song["duration"]), duration > 0 {
             raw["interval"] = interval(milliseconds: duration)
         }
-        if let picURL = nonEmptyString(song["picUrl"]), let url = URL(string: picURL), isHTTP(url) {
-            raw["picUrl"] = picURL
+        if let picURL = nonEmptyString(song["picUrl"]), let url = normalizedURL(picURL) {
+            raw["picUrl"] = url.absoluteString
         }
         return try Track(source: .wy, raw: raw)
     }
@@ -259,12 +359,13 @@ public final class ChkszNetEaseClient: ChkszNetEaseProviding, @unchecked Sendabl
         return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 
-    private static func quality(level: String?, bitrate: Int?, fallback: Quality) -> Quality {
+    private static func quality(level: String?, bitrate: Int?) -> Quality {
         switch level?.lowercased() {
         case "standard": return .standard
         case "exhigh": return .high
         case "lossless": return .lossless
-        case "hires", "jymaster", "sky", "jyeffect": return .hiRes
+        case "jymaster": return .master
+        case "hires", "sky", "jyeffect": return .hiRes
         default:
             if let bitrate {
                 if bitrate >= 1_500_000 { return .hiRes }
@@ -272,7 +373,7 @@ public final class ChkszNetEaseClient: ChkszNetEaseProviding, @unchecked Sendabl
                 if bitrate >= 300_000 { return .high }
                 return .standard
             }
-            return fallback
+            return .standard
         }
     }
 
@@ -305,129 +406,18 @@ public final class ChkszNetEaseClient: ChkszNetEaseProviding, @unchecked Sendabl
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    private static func isHTTP(_ url: URL) -> Bool {
-        ["http", "https"].contains(url.scheme?.lowercased())
-    }
-}
-
-public final class FallbackSourceRuntime: SourceRuntime, @unchecked Sendable {
-    private let primary: SourceRuntime
-    private let neteaseFallback: ChkszNetEaseProviding
-
-    public init(primary: SourceRuntime, neteaseFallback: ChkszNetEaseProviding) {
-        self.primary = primary
-        self.neteaseFallback = neteaseFallback
-    }
-
-    public func search(_ keyword: String, source: MusicSource, page: Int) async throws -> SearchPage {
-        guard source == .wy else {
-            return try await primary.search(keyword, source: source, page: page)
-        }
-
-        var emptyPrimary: SearchPage?
-        do {
-            let result = try await primary.search(keyword, source: source, page: page)
-            if !result.list.isEmpty { return result }
-            emptyPrimary = result
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            // The fallback error is more actionable when the primary path failed.
-        }
-
-        do {
-            return try await neteaseFallback.search(keyword, page: page, limit: 25)
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            if let emptyPrimary { return emptyPrimary }
-            throw error
+    private static func requireNetEaseTrack(_ track: Track) throws {
+        guard track.source == .wy, Int64(track.songmid).map({ $0 > 0 }) == true else {
+            throw SourceError.source(message: "网易云歌曲标识无效")
         }
     }
 
-    public func lyric(_ track: Track) async throws -> LyricInfo {
-        guard track.source == .wy else { return try await primary.lyric(track) }
-        do {
-            return try await primary.lyric(track)
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            return try await neteaseFallback.lyric(track)
-        }
-    }
-
-    public func picURL(_ track: Track) async throws -> URL {
-        let payload = track.rawPayload
-        if track.source == .wy {
-            let candidate = (payload["picUrl"] as? String)
-                ?? (payload["img"] as? String)
-                ?? ((payload["al"] as? [String: Any])?["picUrl"] as? String)
-                ?? ((payload["album"] as? [String: Any])?["picUrl"] as? String)
-            if let candidate = candidate?.trimmingCharacters(in: .whitespacesAndNewlines),
-               let url = URL(string: candidate),
-               ["http", "https"].contains(url.scheme?.lowercased()) {
-                return url
-            }
-        } else if track.source == .tx {
-            let albumId = (payload["albumId"] as? String)
-                ?? (payload["albumMid"] as? String)
-                ?? ((payload["album"] as? [String: Any])?["mid"] as? String)
-                ?? ((payload["album"] as? [String: Any])?["id"] as? String)
-            if let albumId = albumId?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !albumId.isEmpty,
-               let url = URL(string: "https://y.gtimg.cn/music/photo_new/T002R500x500M000\(albumId).jpg") {
-                return url
-            }
-        }
-        return try await primary.picURL(track)
-    }
-
-    public func tipSearch(_ keyword: String) async throws -> [String] {
-        try await primary.tipSearch(keyword)
-    }
-
-    public func hotSearch(source: MusicSource) async throws -> [String] {
-        try await primary.hotSearch(source: source)
-    }
-
-    public func playlistSearch(_ keyword: String, source: MusicSource, page: Int) async throws -> PlaylistCatalogPage {
-        try await primary.playlistSearch(keyword, source: source, page: page)
-    }
-
-    public func playlistCatalog(source: MusicSource, sortId: String, tagId: String?, page: Int) async throws -> PlaylistCatalogPage {
-        try await primary.playlistCatalog(source: source, sortId: sortId, tagId: tagId, page: page)
-    }
-
-    public func playlistDetail(source: MusicSource, id: String, page: Int) async throws -> PlaylistDetail {
-        try await primary.playlistDetail(source: source, id: id, page: page)
-    }
-
-    public func searchArtists(_ keyword: String, source: MusicSource, page: Int) async throws -> ArtistSearchPage {
-        try await primary.searchArtists(keyword, source: source, page: page)
-    }
-
-    public func searchArtists(
-        _ keyword: String,
-        source: MusicSource,
-        page: Int,
-        limit: Int
-    ) async throws -> ArtistSearchPage {
-        try await primary.searchArtists(keyword, source: source, page: page, limit: limit)
-    }
-
-    public func artistPopularTracks(_ artist: ArtistSummary) async throws -> [Track] {
-        try await primary.artistPopularTracks(artist)
-    }
-
-    public func artistAlbums(_ artist: ArtistSummary, page: Int) async throws -> AlbumPage {
-        try await primary.artistAlbums(artist, page: page)
-    }
-
-    public func albumTracks(_ album: AlbumSummary) async throws -> AlbumDetail {
-        try await primary.albumTracks(album)
-    }
-
-    public func trackDetail(_ track: Track) async throws -> Track {
-        try await primary.trackDetail(track)
+    private static func normalizedURL(_ value: String) -> URL? {
+        guard var components = URLComponents(string: value),
+              ["http", "https"].contains(components.scheme?.lowercased()),
+              components.host?.isEmpty == false,
+              components.user == nil, components.password == nil else { return nil }
+        components.scheme = "https"
+        return components.url
     }
 }

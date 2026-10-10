@@ -76,6 +76,7 @@ func macTime(_ value: TimeInterval) -> String {
 extension Quality {
     var macTitle: String {
         switch self {
+        case .master: "母带 · 最高优先"
         case .standard: "标准 · 128 kbps"
         case .high: "高品质 · 320 kbps"
         case .lossless: "无损 · FLAC"

@@ -7,11 +7,14 @@
 | 来源 | 使用范围 | 许可材料 |
 | --- | --- | --- |
 | [lx-music-mobile](https://github.com/lyswhut/lx-music-mobile) | `js-source/` 中保留并适配的音源与辅助代码，以及生成 bundle 中的对应内容 | [Apache License 2.0](LICENSES/lx-music-mobile.txt) |
-| [NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi) / Binaryify | 网易模块中标注的歌曲详情、歌单、歌词和加密实现参考；来源链接保留在对应源码中 | [MIT，Copyright (c) 2013–2022 Binaryify](LICENSES/NeteaseCloudMusicApi.txt) |
 
-`js-source/` 是为 Sonar 修改的分发版本，不能视为未经修改的上游发布版。适配包括 JavaScriptCore 宿主桥接、仅保留网易与 QQ 路径，以及搜索、歌手和专辑等入口调整。文件中的原有来源说明保留，并增加了修改版本标记。
+`js-source/` 是为 Sonar 修改的分发版本，不能视为未经修改的上游发布版。适配包括 JavaScriptCore 宿主桥接、仅保留 QQ 音乐路径，以及搜索、歌手和专辑等入口调整。文件中的原有来源说明保留，并增加了修改版本标记。
 
-lx-music-mobile 的许可文件来自其上游仓库；核对时根目录没有独立 NOTICE 文件。NeteaseCloudMusicApi 当前归档仓库仅保留说明文件，因此使用其原始 npm 包 `NeteaseCloudMusicApi@4.28.0` 中的 LICENSE 核对 MIT 文本，下载内容已通过发布元数据的 SHA-512 校验。这里的版本用于追溯许可文本，**不表示 Sonar 的全部适配代码准确源自该版本**。
+lx-music-mobile 的许可文件来自其上游仓库；核对时根目录没有独立 NOTICE 文件。
+
+网易适配器及其参考的 [NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi) 实现已从当前分发代码中移除。[MIT 许可文本](LICENSES/NeteaseCloudMusicApi.txt)和 `LICENSES/sources.json` 中的原始核对记录仍保留，用于追溯历史版本。
+
+当前网易云歌曲搜索、歌词和播放通过 Sonar 的 Swift 适配器请求 ChKSz API，未恢复上述 JavaScript 网易客户端实现。
 
 ## npm 依赖
 

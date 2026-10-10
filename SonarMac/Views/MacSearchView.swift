@@ -36,8 +36,17 @@ struct MacSearchView: View {
                     ForEach(SearchScope.allCases) { Text($0.rawValue).tag($0) }
                 }.pickerStyle(.segmented).frame(width: 290)
                     .onChange(of: search.selectedScope) { _, scope in Task { await search.loadScopeIfNeeded(scope) } }
-                if let warning = search.partialSourceWarning, search.selectedScope == .songs {
-                    MacInlineError(message: warning) { Task { await search.retryFailedSource() } }
+                if search.selectedScope == .songs {
+                    Picker("歌曲音源", selection: Binding(
+                        get: { search.selectedSongSource },
+                        set: { source in Task { await search.selectSongSource(source) } }
+                    )) {
+                        ForEach(MusicSource.allCases, id: \.self) { source in
+                            Text(source.displayName).tag(source)
+                        }
+                    }.pickerStyle(.segmented).frame(width: 220)
+                } else {
+                    Text("QQ 音乐\(search.selectedScope.rawValue)").font(.caption).foregroundStyle(.secondary)
                 }
                 if let error = search.errorMessage { MacInlineError(message: error, retry: submit) }
                 if search.selectedScope == .artists, !search.artistSourceWarnings.isEmpty {

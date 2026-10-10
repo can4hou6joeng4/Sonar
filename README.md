@@ -48,18 +48,21 @@
 
 ## 功能
 
-- **双源搜索**：接入网易云与 QQ，按歌曲、歌手、歌单分类检索。
+- **音乐搜索**：歌曲可手动选择 QQ 音乐或网易云；歌手、歌单、联想、热搜与发现歌单使用 QQ 音乐。
 - **封面与歌词**：播放页随封面取色，支持明暗外观、同步歌词与逐字高亮；缺少逐字时间时会明确标注合成效果。
 - **本地歌单**：用 SwiftData 保存收藏和歌曲信息，支持 JSON 导入、导出与重复歌曲去重。
 - **播放队列**：支持下一首播放、加入待播，以及随机、单曲循环、顺序播放和列表循环。
 - **Mac 随手播控**：状态栏选歌面板与顶部播放器共享播放、收藏状态，支持悬停展开、封面、歌词、进度和音量控制；取消收藏提供确认高亮与收起动画。
-- **音源回退**：在适用的音源或音质错误下，尝试降低音质、跨源匹配和公共流解析。全部失败时提示不可用。
+- **最高音质优先**：默认先请求母带，再按 Hi-Res、无损、320K、128K 逐级尝试；保持同一音源和歌曲 ID。
+- **歌单迁移**：粘贴 QQ 音乐或网易云音乐的公开歌单链接或 ID，预览后按原顺序合并，自动跳过已收藏歌曲。
 
 Sonar 没有开屏广告或内置社交页面。歌曲、封面和歌词来自第三方服务，可用性与实际播放音质取决于歌曲和音源；歌单备份保存歌曲信息，不包含音频文件。
 
 ## English overview
 
-Sonar is a native SwiftUI music player for **iOS 17+ and macOS 14+**. It supports NetEase Cloud Music and QQ Music search, local playlists with JSON backup, synchronized lyrics, and playback queues. The Mac app combines a menu bar library with a notch player; displays without a notch use a top capsule. Both surfaces share playback and library state.
+Sonar is a native SwiftUI music player for **iOS 17+ and macOS 14+**. Song search supports QQ Music and NetEase through ChKSz; artist and playlist browsing use QQ Music. It provides local playlists, JSON backup, synchronized lyrics, and playback queues. The Mac app combines a menu bar library with a notch player; displays without a notch use a top capsule. Both surfaces share playback and library state.
+
+Public QQ Music and NetEase playlists can be imported from a share link or playlist ID, with a preview and deduplication before merging into the personal library.
 
 Source code is available under **GPL-3.0**, with separate notices for third-party code. Build both apps from `Sonar.xcodeproj`; iPhone installation requires your own signing setup. Experimental Mac builds are available in [GitHub Releases](https://github.com/can4hou6joeng4/Sonar/releases). These builds are ad-hoc signed and not notarized. Music availability and playback quality depend on third-party services; playlist backups contain metadata, not audio.
 
@@ -164,23 +167,32 @@ rm -rf "$SONAR_IPA_STAGE"
 
 歌单与歌曲元数据保存在本机。iOS 设置中的「歌单备份」和 Mac 面板设置支持 JSON 导入、导出；导入会追加新歌曲并跳过重复项。两端资料库独立，可用备份手动迁移。
 
+当前启用 QQ 音乐和通过 ChKSz 提供的网易云歌曲及歌单导入接口。歌曲搜索页可手动选择音源；搜索结果与收藏保留原来的来源和歌曲 ID，播放失败时不会自动换平台或换成同名歌曲。旧网易云收藏及备份可继续使用其原 ID 请求歌词和播放地址。
+
 Mac 资料库位于 `~/Library/Application Support/cn.bobochang.sonar.mac/Sonar.store`；启用 App Sandbox 签名时位于应用容器对应目录。资料库打开失败时保留原文件，并提供重试与原始资料导出。
 
-### 可选音源凭据
+### 播放解析凭据
 
-公开源码不包含个人音源凭据，未配置凭据也可以构建和打包；实际播放与音质仍取决于第三方音源的可用性。可通过构建环境变量配置相应服务：
+公开源码不包含个人音源凭据，未配置凭据也可以构建，并使用 QQ 搜索、歌词和公开歌单导入。QQ 播放地址，以及网易云歌曲搜索、歌词、歌单读取和播放地址，均通过 ChKSz 获取，需要配置有效凭据；实际播放与音质仍取决于第三方服务的可用性。可通过构建环境变量配置：
 
 | 变量 | 用途 |
 | --- | --- |
-| `SONAR_WY_TOKEN` | 网易云相关接口的访问凭据 |
-| `SONAR_CHKSZ_KEY` | ChKSz 解析接口的访问凭据 |
+| `SONAR_CHKSZ_KEY` | ChKSz 的 QQ 播放解析及网易云歌曲、歌单接口凭据 |
 
 构建脚本生成 `BuildCredentials.json` 并打包到 App。该文件已被 Git 忽略；使用凭据应遵循相应服务的授权范围和使用条款。
 
 <details>
 <summary>播放解析与切歌</summary>
 
-播放解析会从所选音质开始，在适用错误下依次尝试更低音质，再按歌曲标题、歌手和时长寻找另一来源的匹配项，必要时尝试公共流解析。网络错误等情况不会无限重试，可用性仍取决于第三方服务。
+两种音源的播放地址均使用 ChKSz，不再回退 QQ 游客接口或网易客户端直连接口。网易云使用 `/api/163_search`、`/api/163_lyric`、`/api/163_music`，并通过 `/api/163_playlist` 导入公开歌单；在线歌手与歌单浏览继续使用 QQ 音乐。
+
+默认从接口支持的最高母带音质开始：QQ 按 `master → hires → flac → 320k → 128k`，网易云按 `jymaster → hires → lossless → exhigh → standard` 请求。更新到此策略时，原来的首选音质会迁移为母带优先；之后手动选择其他音质仍可调整起点。搜索结果中的音质标记不限制播放解析的尝试档位。
+
+在 iOS 设置或 Mac 状态栏面板的设置中选择「从其他播放器导入」，粘贴公开歌单分享链接或输入歌单 ID。链接会自动识别音源，纯 ID 使用所选音源。QQ 复用公开歌单详情并读取后续分页；网易云使用 ChKSz 的 [`/api/163_playlist`](https://api.chksz.com/docs/163_playlist.html)，沿用现有构建凭据。普通长链接及通过 HTTP 跳转的官方短链接可用；无法识别的短链接可改用完整链接或 ID。
+
+导入前显示歌单名称、来源和歌曲数量，预览不会写入资料库。确认后按「音源＋歌曲 ID」去重并保留顺序，合并到个人歌单；不按歌名跨来源替换。一次最多读取 5,000 首；缺失或无效歌曲明确显示，部分结果需点击「导入已读取的歌曲」。服务失败或保存失败保留已有数据，未提供私密歌单登录或自动同步。
+
+未返回可用链接、已知音质或歌曲权限错误、返回了低于请求档位的音质时，尝试下一档；媒体链接经 HTTPS 和有界探测验证后，按返回音质缓存。网络错误、凭据缺失和 HTTP 503 等服务错误会直接停止并提示失败。两种音源依赖同一第三方服务，恢复网易云并不保证能避开服务整体故障。参数以 [QQ 文档](https://api.chksz.com/docs/qq_music.html)和[网易云文档](https://api.chksz.com/docs/163_music.html)为准。
 
 Mac 会按当前播放模式提前解析并缓冲下一首。插歌、删歌、排序和模式切换会更新准备目标；音源尚未就绪时仍需等待网络。`--telemetry` 记录解析、媒体就绪和开始播放的阶段耗时，不包含歌曲信息、播放地址或凭据，也不等同于音频输出设备的实测静音间隔。
 

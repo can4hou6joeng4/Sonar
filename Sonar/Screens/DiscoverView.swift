@@ -3,10 +3,10 @@ import SwiftUI
 
 struct DiscoverView: View {
     let isActive: Bool
+    let onOpenSearch: () -> Void
     let onOpenSettings: () -> Void
     let onSettingsDragChanged: (DragGesture.Value) -> Void
     let onSettingsDragEnded: (DragGesture.Value) -> Void
-    private let runtime: SourceRuntime
 
     @Environment(PlaybackService.self) private var playbackService
     @Environment(ToastCenter.self) private var toastCenter
@@ -18,17 +18,17 @@ struct DiscoverView: View {
     @State private var selectedTrackForActions: Track?
 
     init(
-        runtime: SourceRuntime,
         isActive: Bool,
+        onOpenSearch: @escaping () -> Void = {},
         onOpenSettings: @escaping () -> Void = {},
         onSettingsDragChanged: @escaping (DragGesture.Value) -> Void = { _ in },
         onSettingsDragEnded: @escaping (DragGesture.Value) -> Void = { _ in }
     ) {
         self.isActive = isActive
+        self.onOpenSearch = onOpenSearch
         self.onOpenSettings = onOpenSettings
         self.onSettingsDragChanged = onSettingsDragChanged
         self.onSettingsDragEnded = onSettingsDragEnded
-        self.runtime = runtime
     }
 
     private var personalPlaylist: Playlist? {
@@ -110,9 +110,7 @@ struct DiscoverView: View {
                 .font(.system(size: 24, weight: .bold))
                 .foregroundStyle(scheme.onSurface)
             Spacer()
-            NavigationLink {
-                NCMSearchView(runtime: runtime)
-            } label: {
+            Button(action: onOpenSearch) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 20, weight: .medium))
                     .foregroundStyle(scheme.onSurface)
@@ -318,40 +316,71 @@ struct DiscoverView: View {
     }
 }
 
-private struct NCMSearchView: View {
+struct HomeSearchOverlay: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.dismiss) private var dismiss
     @Environment(PlaybackService.self) private var playbackService
     @Environment(ToastCenter.self) private var toastCenter
     @Environment(\.m3Scheme) private var scheme
+    @Environment(\.sonarReduceMotion) private var reduceMotion
 
-    @State private var model: SearchViewModel
+    @Bindable var model: SearchViewModel
+    let focusOnAppear: Bool
+    let onClose: () -> Void
+    let onOpenArtist: (ArtistSummary) -> Void
+    let onOpenPlaylist: (PlaylistSummary) -> Void
     @State private var selectedTrackForActions: Track?
     @FocusState private var focused: Bool
-    private let runtime: SourceRuntime
-
-    init(runtime: SourceRuntime) {
-        self.runtime = runtime
-        _model = State(initialValue: SearchViewModel(runtime: runtime))
-    }
 
     var body: some View {
-        VStack(spacing: 0) {
-            searchBar
-            if !trimmedQuery.isEmpty {
-                searchScopePicker
+        GeometryReader { proxy in
+            ZStack(alignment: .top) {
+                Button(action: closeSearch) {
+                    Color.black.opacity(0.38)
+                        .ignoresSafeArea()
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("关闭搜索")
+                .accessibilityIdentifier("search-backdrop")
+                .accessibilitySortPriority(-1)
+
+                VStack(spacing: 10) {
+                    searchBar
+                    if !trimmedQuery.isEmpty {
+                        VStack(spacing: 0) {
+                            searchFilters
+                            Divider().overlay(scheme.outlineVariant)
+                            searchContent
+                        }
+                        .frame(maxHeight: min(max(proxy.size.height - 84, 0), 600))
+                        .background(scheme.appSurface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .shadow(color: .black.opacity(0.16), radius: 20, y: 8)
+                        .foregroundStyle(scheme.onSurface)
+                        .transition(.opacity)
+                    }
+                }
+                .frame(maxWidth: 640)
+                .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
+                .padding(.top, 6)
+                .padding(.bottom, 16)
             }
-            searchContent
         }
-        .background(scheme.appSurface.ignoresSafeArea())
-        .toolbar(.hidden, for: .navigationBar)
-        .navigationBarBackButtonHidden(true)
-        .ncmEdgeSwipeBack()
+        .animation(AppMotion.emphasized(duration: AppMotion.short, reduceMotion: reduceMotion), value: trimmedQuery.isEmpty)
+        .accessibilityElement(children: .contain)
+        .accessibilityAction(.escape, closeSearch)
+        .onKeyPress(.escape) {
+            closeSearch()
+            return .handled
+        }
         .onAppear {
             SearchStorageMigration.clearLegacyHistory()
-            focused = true
+            focused = focusOnAppear
         }
-        .task { await model.loadHotSearchesIfNeeded() }
+        .onDisappear {
+            focused = false
+            model.cancelLiveSearch()
+        }
+        .onChange(of: model.query) { _, _ in model.liveSearch() }
         .confirmationDialog(
             selectedTrackForActions.map { "\($0.title)" } ?? "歌曲操作",
             isPresented: Binding(
@@ -396,12 +425,13 @@ private struct NCMSearchView: View {
     }
 
     private var searchBar: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 4) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 16, weight: .medium))
-                TextField("搜索歌曲、歌手、专辑或歌单", text: $model.query)
+                TextField("搜索歌曲、歌手或歌单", text: $model.query)
                     .font(.system(size: 15))
+                    .foregroundStyle(scheme.onSurface)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .focused($focused)
@@ -416,98 +446,109 @@ private struct NCMSearchView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("清空")
+                    .accessibilityIdentifier("search-clear-button")
                 }
             }
             .foregroundStyle(scheme.onSurfaceVariant)
-            .padding(.horizontal, 12)
-            .frame(minHeight: 44)
-            .background(scheme.appInputFill, in: Capsule())
+            .padding(.leading, 16)
+            .padding(.trailing, model.query.isEmpty ? 12 : 0)
+            .frame(minHeight: 52)
 
-            Button("取消") {
-                if model.query.isEmpty {
-                    dismiss()
-                } else {
-                    clearSearch()
-                    focused = true
-                }
+            Button(action: closeSearch) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .semibold))
+                    .frame(width: 44, height: 44)
             }
-            .font(.system(size: 15))
-            .foregroundStyle(scheme.onSurface)
+            .foregroundStyle(scheme.onSurfaceVariant)
             .buttonStyle(.plain)
-            .frame(minWidth: 44, minHeight: 44)
+            .accessibilityLabel("取消搜索")
             .accessibilityIdentifier("search-cancel-button")
         }
-        .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
-        .padding(.top, 6)
-        .padding(.bottom, 8)
-        .onChange(of: model.query) { _, _ in
-            model.liveSearch()
-        }
+        .padding(.trailing, 4)
+        .background(scheme.appSurface, in: Capsule())
+        .overlay(Capsule().strokeBorder(scheme.outlineVariant, lineWidth: 0.5))
+        .shadow(color: .black.opacity(0.16), radius: 16, y: 4)
     }
 
     @ViewBuilder
     private var searchContent: some View {
-        if trimmedQuery.isEmpty {
-            hotSearchContent
-        } else if model.hasSearched {
+        if model.hasSearched {
             searchResultsContent
         } else {
             ProgressView("正在搜索…").frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
-    private var hotSearchContent: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    Text("热门搜索")
-                        .font(.system(size: 17, weight: .bold))
-                    Spacer()
-                    if model.isLoadingHotSearches {
-                        ProgressView()
-                            .controlSize(.small)
-                            .accessibilityLabel("正在更新热门搜索")
-                    } else if let errorMessage = model.hotSearchErrorMessage {
-                        Button {
-                            Task { await model.refreshHotSearches() }
-                        } label: {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 15, weight: .semibold))
-                                .frame(width: 44, height: 44)
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(scheme.onSurfaceVariant)
-                        .accessibilityLabel("重新加载热门搜索")
-                        .accessibilityHint(errorMessage)
-                        .accessibilityIdentifier("search-hot-retry")
-                    }
-                }
-                .frame(minHeight: 44)
-
-                rankedHotSearchRows(model.hotSearches, identifierPrefix: "search-hot")
+    private var searchFilters: some View {
+        HStack(spacing: 12) {
+            searchScopePicker
+            if model.selectedScope == .songs {
+                searchSourcePicker
+            } else {
+                Text("QQ 音乐")
+                    .font(.caption)
+                    .foregroundStyle(scheme.onSurfaceVariant)
             }
-            .foregroundStyle(scheme.onSurface)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 16)
         }
-        .scrollDismissesKeyboard(.interactively)
-        .refreshable { await model.refreshHotSearches() }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
     }
 
     private var searchScopePicker: some View {
-        Picker("搜索分类", selection: $model.selectedScope) {
+        HStack(spacing: 0) {
             ForEach(SearchScope.allCases) { scope in
-                Text(scope.rawValue).tag(scope)
+                Button {
+                    focused = false
+                    model.selectedScope = scope
+                    Task { await model.loadScopeIfNeeded(scope) }
+                } label: {
+                    Text(scope.rawValue)
+                        .font(.system(size: 14, weight: model.selectedScope == scope ? .semibold : .regular))
+                        .foregroundStyle(scheme.onSurface)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background {
+                            if model.selectedScope == scope {
+                                Capsule().fill(scheme.appSurface)
+                                    .padding(.vertical, 5)
+                                    .padding(.horizontal, 3)
+                            }
+                        }
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(model.selectedScope == scope ? .isSelected : [])
+                .accessibilityIdentifier("search-scope-\(scope.id)")
             }
         }
-        .pickerStyle(.segmented)
-        .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
-        .padding(.top, 2)
-        .padding(.bottom, 6)
-        .accessibilityIdentifier("search-scope-picker")
-        .onChange(of: model.selectedScope) { _, newScope in
-            Task { await model.loadScopeIfNeeded(newScope) }
+        .background(scheme.appInputFill, in: Capsule())
+    }
+
+    private var searchSourcePicker: some View {
+        Menu {
+            Picker("歌曲音源", selection: Binding(
+                get: { model.selectedSongSource },
+                set: { source in
+                    focused = false
+                    Task { await model.selectSongSource(source) }
+                }
+            )) {
+                ForEach(MusicSource.allCases, id: \.self) { source in
+                    Text(source.displayName).tag(source)
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Text(model.selectedSongSource.displayName)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .semibold))
+            }
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(scheme.onSurfaceVariant)
+            .frame(minHeight: 44)
         }
+        .accessibilityLabel("歌曲音源：\(model.selectedSongSource.displayName)")
+        .accessibilityHint("切换 QQ 音乐或网易云")
+        .accessibilityIdentifier("search-source-picker")
     }
 
     private var searchResultsContent: some View {
@@ -533,26 +574,19 @@ private struct NCMSearchView: View {
                     .frame(maxWidth: .infinity, minHeight: 120)
                     .accessibilityIdentifier("search-song-loading")
             } else if let errorMessage = model.songSearchErrorMessage ?? model.errorMessage {
-                ContentUnavailableView("搜索不可用", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
-                    .frame(maxWidth: .infinity, minHeight: 200)
+                VStack {
+                    ContentUnavailableView("搜索不可用", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
+                    Button(model.isRetryingFailedSource ? "正在重试…" : "重试\(model.selectedSongSource.displayName)搜索") {
+                        Task { await model.retryFailedSource() }
+                    }
+                    .disabled(model.isRetryingFailedSource)
+                    .accessibilityIdentifier("search-song-retry")
+                }
+                .frame(maxWidth: .infinity, minHeight: 200)
             } else if model.results.isEmpty {
                 ContentUnavailableView("未找到歌曲", systemImage: "music.note.list")
                     .frame(maxWidth: .infinity, minHeight: 200)
             } else {
-                if let warning = model.partialSourceWarning {
-                    HStack {
-                        Text(warning)
-                            .font(.footnote)
-                            .foregroundStyle(scheme.onSurfaceVariant)
-                        Spacer()
-                        Button("重试") { Task { await model.retryFailedSource() } }
-                            .disabled(model.isRetryingFailedSource)
-                            .frame(minWidth: 44, minHeight: 44)
-                    }
-                    .padding(.horizontal, 16)
-                    .accessibilityIdentifier("search-song-source-warning")
-                }
-
                 ForEach(Array(model.results.enumerated()), id: \.element.musicID) { index, track in
                     SongRow(
                         track: track,
@@ -560,8 +594,14 @@ private struct NCMSearchView: View {
                         showDivider: index < model.results.count - 1,
                         isCurrent: playbackService.queue.current?.musicID == track.musicID,
                         isPlaying: playbackService.state == .playing,
-                        onPlay: { Task { await playbackService.replaceQueue([track]) } },
-                        onAction: { selectedTrackForActions = track }
+                        onPlay: {
+                            focused = false
+                            Task { await playbackService.replaceQueue([track]) }
+                        },
+                        onAction: {
+                            focused = false
+                            selectedTrackForActions = track
+                        }
                     )
                 }
             }
@@ -586,8 +626,9 @@ private struct NCMSearchView: View {
                     .frame(maxWidth: .infinity, minHeight: 200)
             } else {
                 ForEach(model.visibleArtistResults, id: \.stableID) { artist in
-                    NavigationLink {
-                        ArtistDetailView(artist: artist, runtime: runtime)
+                    Button {
+                        focused = false
+                        onOpenArtist(artist)
                     } label: {
                         HStack(spacing: 14) {
                             RemotePlaylistArtwork(urlString: artist.imageURL)
@@ -667,7 +708,7 @@ private struct NCMSearchView: View {
                     }
                     .buttonStyle(.bordered)
                     .tint(scheme.primary)
-                    .accessibilityLabel("重试网易云歌单搜索")
+                    .accessibilityLabel("重试QQ 音乐歌单搜索")
                 }
                 .frame(maxWidth: .infinity, minHeight: 200)
             } else if model.playlistResults.isEmpty {
@@ -675,8 +716,9 @@ private struct NCMSearchView: View {
                     .frame(maxWidth: .infinity, minHeight: 200)
             } else {
                 ForEach(model.playlistResults, id: \.key) { playlist in
-                    NavigationLink {
-                        RemotePlaylistDetailView(playlist: playlist, runtime: runtime)
+                    Button {
+                        focused = false
+                        onOpenPlaylist(playlist)
                     } label: {
                         HStack(spacing: 14) {
                             RemotePlaylistArtwork(urlString: playlist.img)
@@ -688,7 +730,7 @@ private struct NCMSearchView: View {
                                     .font(.system(size: 16, weight: .bold))
                                     .foregroundStyle(scheme.onSurface)
                                     .lineLimit(2)
-                                Text(playlist.author.isEmpty ? "网易云歌单" : playlist.author)
+                                Text(playlist.author.isEmpty ? "QQ 音乐歌单" : playlist.author)
                                     .font(.caption)
                                     .foregroundStyle(scheme.onSurfaceVariant)
                                     .lineLimit(1)
@@ -832,41 +874,6 @@ private struct NCMSearchView: View {
         return values.joined(separator: " · ")
     }
 
-    private var searchDivider: some View {
-        Rectangle()
-            .fill(scheme.outlineVariant)
-            .frame(height: 0.5)
-            .padding(.leading, 42)
-    }
-
-    private func rankedHotSearchRows(_ values: [String], identifierPrefix: String) -> some View {
-        LazyVStack(spacing: 0) {
-            ForEach(Array(values.enumerated()), id: \.offset) { index, value in
-                Button {
-                    model.selectedScope = .songs
-                    model.query = value
-                    submitSearch()
-                } label: {
-                    HStack(spacing: 12) {
-                        Text("\(index + 1)")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(index < 3 ? scheme.primary : scheme.onSurfaceVariant)
-                            .frame(width: 20, alignment: .trailing)
-                        Text(value)
-                            .font(.system(size: 15))
-                            .foregroundStyle(scheme.onSurface)
-                            .lineLimit(1)
-                        Spacer(minLength: 0)
-                    }
-                    .frame(height: 44)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("\(identifierPrefix)-\(index + 1)")
-            }
-        }
-    }
-
     private var trimmedQuery: String {
         model.query.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -876,6 +883,12 @@ private struct NCMSearchView: View {
         model.query = ""
         model.selectedScope = .songs
         model.queryChanged()
+        focused = true
+    }
+
+    private func closeSearch() {
+        focused = false
+        onClose()
     }
 
     private func submitSearch() {
@@ -947,7 +960,7 @@ struct RemotePlaylistDetailView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("返回")
                 Spacer()
-                Text("网易云歌单")
+                Text("QQ 音乐歌单")
                     .font(.system(size: 17, weight: .bold))
                 Spacer()
                 Color.clear.frame(width: 44, height: 44)
@@ -965,7 +978,7 @@ struct RemotePlaylistDetailView: View {
                                 .font(.system(size: 20, weight: .bold))
                                 .foregroundStyle(scheme.onSurface)
                                 .lineLimit(3)
-                            Text(playlist.author.isEmpty ? "网易云" : playlist.author)
+                            Text(playlist.author.isEmpty ? "QQ 音乐" : playlist.author)
                                 .font(.subheadline)
                                 .foregroundStyle(scheme.onSurfaceVariant)
                                 .lineLimit(1)

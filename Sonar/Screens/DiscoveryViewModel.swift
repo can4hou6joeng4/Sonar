@@ -7,7 +7,7 @@ enum DiscoveryContent {
     static let homeFreshTrackLimit = homeFreshTrackPageSize * homeFreshTrackMaximumBatches
 
     static func merged(_ pages: [MusicSource: [PlaylistSummary]]) -> [PlaylistSummary] {
-        let sourceLists = MusicSource.allCases.map { pages[$0] ?? [] }
+        let sourceLists = MusicSource.catalogSources.map { pages[$0] ?? [] }
         let maximumCount = sourceLists.map(\.count).max() ?? 0
         var seen = Set<String>()
         var result: [PlaylistSummary] = []
@@ -25,7 +25,7 @@ enum DiscoveryContent {
 
     static func deduplicatedTracks(_ tracks: [Track]) -> [Track] {
         var seen = Set<String>()
-        return tracks.filter { seen.insert($0.musicID).inserted }
+        return tracks.filter { $0.source.isEnabled && seen.insert($0.musicID).inserted }
     }
 
     static func boundedHomeFreshTracks(_ tracks: [Track]) -> [Track] {
@@ -212,7 +212,7 @@ final class HomeFreshFeedViewModel {
             return
         }
 
-        guard playlist.source == .wy, serverHasMore else {
+        guard serverHasMore else {
             isAtEnd = true
             return
         }
@@ -306,7 +306,7 @@ final class DiscoveryViewModel {
     init(runtime: SourceRuntime) {
         self.runtime = runtime
         freshFeed = HomeFreshFeedViewModel(runtime: runtime)
-        for source in MusicSource.allCases {
+        for source in MusicSource.catalogSources {
             pages[source] = DiscoveryPageState()
             selectedCategories[source] = source.playlistCategories[0]
             generations[source] = 0
@@ -318,18 +318,18 @@ final class DiscoveryViewModel {
     }
 
     func selectedCategory(for source: MusicSource) -> PlaylistCategory {
-        selectedCategories[source] ?? source.playlistCategories[0]
+        selectedCategories[source] ?? source.playlistCategories.first ?? PlaylistCategory(id: "", name: "")
     }
 
     func loadHomeInitial() async {
-        for source in MusicSource.allCases {
+        for source in MusicSource.catalogSources {
             await loadInitial(for: source)
         }
         await freshFeed.loadInitialIfNeeded(from: mergedPlaylists.first)
     }
 
     func refreshHomeCatalogs() async {
-        for source in MusicSource.allCases {
+        for source in MusicSource.catalogSources {
             await refresh(source)
         }
     }
@@ -347,6 +347,7 @@ final class DiscoveryViewModel {
     }
 
     func loadInitial(for source: MusicSource) async {
+        guard source.supportsCatalog else { return }
         let state = state(for: source)
         guard state.items.isEmpty, !state.isLoading else { return }
         let generation = generations[source, default: 0]
@@ -354,18 +355,21 @@ final class DiscoveryViewModel {
     }
 
     func refresh(_ source: MusicSource) async {
+        guard source.supportsCatalog else { return }
         generations[source, default: 0] += 1
         let generation = generations[source, default: 0]
         await loadFirstPage(for: source, generation: generation, preserving: state(for: source))
     }
 
     func selectCategory(_ category: PlaylistCategory, for source: MusicSource) async {
+        guard source.supportsCatalog else { return }
         guard selectedCategory(for: source) != category else { return }
         selectedCategories[source] = category
         await refresh(source)
     }
 
     func loadMore(for source: MusicSource) async {
+        guard source.supportsCatalog else { return }
         var state = state(for: source)
         guard !state.items.isEmpty,
               state.hasMore,
@@ -443,7 +447,7 @@ final class DiscoveryViewModel {
     }
 
     var mergedPlaylists: [PlaylistSummary] {
-        DiscoveryContent.merged(Dictionary(uniqueKeysWithValues: MusicSource.allCases.map {
+        DiscoveryContent.merged(Dictionary(uniqueKeysWithValues: MusicSource.catalogSources.map {
             ($0, state(for: $0).items)
         }))
     }

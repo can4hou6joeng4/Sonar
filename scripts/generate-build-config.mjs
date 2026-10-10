@@ -9,7 +9,7 @@ if (!output) {
 
 // Optional values are supplied by the build environment, never by source control.
 const config = {}
-for (const [key, variable] of [['wyToken', 'SONAR_WY_TOKEN'], ['chkszKey', 'SONAR_CHKSZ_KEY']]) {
+for (const [key, variable] of [['chkszKey', 'SONAR_CHKSZ_KEY']]) {
   const value = process.env[variable]?.trim()
   if (value) config[key] = value
 }

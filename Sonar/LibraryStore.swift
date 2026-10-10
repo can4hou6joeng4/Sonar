@@ -496,6 +496,7 @@ public final class TrackDetailRefreshCoordinator {
         force: Bool = false,
         now: Date = Date()
     ) async throws -> TrackDetailRefreshOutcome {
+        guard track.source.isEnabled else { return .cached(track) }
         switch try store.detailRefreshDecision(for: track, now: now, policy: policy, force: force) {
         case .cached:
             return .cached(track)

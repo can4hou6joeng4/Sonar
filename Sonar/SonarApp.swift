@@ -39,6 +39,7 @@ private final class SonarServices {
     let artworkService: ArtworkService?
     let trackDetailRefreshCoordinator: TrackDetailRefreshCoordinator
     let lyricsService: LyricsService
+    let onlinePlaylistImporter: OnlinePlaylistImportService
     let themeState: SonarThemeState
     let uiPreferences: UIPlaybackPreferences
     let toastCenter: ToastCenter
@@ -48,20 +49,17 @@ private final class SonarServices {
         let credentials = BuildCredentialStore()
         let breaker = ChkszCircuitBreaker()
         let chkszAPI = ChkszAPIClient(credentials: credentials, breaker: breaker)
-        let chkszNetEase = ChkszNetEaseClient(api: chkszAPI)
-        let runtime = FallbackSourceRuntime(
-            primary: JavaScriptSourceRuntime(),
-            neteaseFallback: chkszNetEase
-        )
+        let netease = ChkszNetEaseClient(api: chkszAPI)
+        let runtime = ChkszSourceRuntime(qq: JavaScriptSourceRuntime(), netease: netease)
         sourceRuntime = runtime
+        onlinePlaylistImporter = OnlinePlaylistImportService(qq: runtime, chkszAPI: chkszAPI)
         let resolver = PlaybackResolverPipeline.make(
             primary: PlaybackURLResolver(
                 credentials: credentials,
                 breaker: breaker,
                 chkszAPI: chkszAPI,
-                wyFallback: chkszNetEase
-            ),
-            sourceRuntime: runtime
+                netease: netease
+            )
         )
         playbackService = PlaybackService(
             resolver: resolver
@@ -91,6 +89,7 @@ private struct ReadySonarView: View {
             .environment(\.sourceRuntime, services.sourceRuntime)
             .environment(\.trackDetailRefreshCoordinator, services.trackDetailRefreshCoordinator)
             .environment(\.lyricsService, services.lyricsService)
+            .environment(\.onlinePlaylistImporter, services.onlinePlaylistImporter)
     }
 }
 

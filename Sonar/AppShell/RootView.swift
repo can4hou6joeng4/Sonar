@@ -7,6 +7,22 @@ private enum ShellLayer: Hashable {
     case player
 }
 
+private enum HomeSearchDestination: Hashable {
+    case artist(ArtistSummary)
+    case playlist(PlaylistSummary)
+
+    func hash(into hasher: inout Hasher) {
+        switch self {
+        case let .artist(artist):
+            hasher.combine("artist")
+            hasher.combine(artist.stableID)
+        case let .playlist(playlist):
+            hasher.combine("playlist")
+            hasher.combine(playlist.key)
+        }
+    }
+}
+
 enum SettingsDrawerMetrics {
     static let activationWidth: CGFloat = 26
     static let widthRatio: CGFloat = 0.84
@@ -150,6 +166,20 @@ struct RootView: View {
     @State private var drawerDragTranslation: CGFloat = 0
     @State private var edgeDrawerDragIsActive = false
     @State private var artworkRequests = ArtworkRequestGate()
+    @State private var searchModel: SearchViewModel
+    @State private var searchIsPresented = false
+    @State private var searchDestination: HomeSearchDestination?
+    @State private var focusSearchOnAppear = false
+
+    init(sourceRuntime: SourceRuntime) {
+        self.sourceRuntime = sourceRuntime
+        _searchModel = State(initialValue: SearchViewModel(runtime: sourceRuntime))
+    }
+
+    private var searchOverlayIsVisible: Bool {
+        searchIsPresented && searchDestination == nil
+    }
+
     private var hasCurrentTrack: Bool {
         playbackService.queue.current != nil
     }
@@ -174,9 +204,9 @@ struct RootView: View {
                     safeAreaBottom: proxy.safeAreaInsets.bottom
                 )
                     .id(ShellLayer.route)
-                    .accessibilityHidden(pullController.pull > 0 || drawerProgress > 0)
+                    .accessibilityHidden(pullController.pull > 0 || drawerProgress > 0 || searchOverlayIsVisible)
                     .environment(\.shellSafeAreaInsets, proxy.safeAreaInsets)
-                    .allowsHitTesting(drawerProgress == 0 && pullController.pull == 0)
+                    .allowsHitTesting(drawerProgress == 0 && pullController.pull == 0 && !searchOverlayIsVisible)
 
                 if pullController.playerMounted {
                     FlowingLightBackground(track: playbackService.queue.current)
@@ -213,11 +243,13 @@ struct RootView: View {
                     NCMMiniPlayer(
                         safeAreaBottom: proxy.safeAreaInsets.bottom,
                         onOpenPlayer: {
+                            closeSearch()
                             closeSettingsDrawer()
                             playerSurface = .artwork
                             pullController.open(reduceMotion: reduceMotion)
                         },
                         onOpenQueue: {
+                            closeSearch()
                             closeSettingsDrawer()
                             playerSurface = .queue
                             pullController.open(reduceMotion: reduceMotion)
@@ -227,8 +259,8 @@ struct RootView: View {
                         safeAreaBottom: proxy.safeAreaInsets.bottom
                     ))
                     .opacity(pullController.toolbarReveal)
-                    .allowsHitTesting(pullController.pull == 0 && drawerProgress == 0)
-                    .accessibilityHidden(pullController.pull > 0 || drawerProgress > 0)
+                    .allowsHitTesting(pullController.pull == 0 && drawerProgress == 0 && !searchOverlayIsVisible)
+                    .accessibilityHidden(pullController.pull > 0 || drawerProgress > 0 || searchOverlayIsVisible)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(NCMDesignTokens.Layer.miniPlayer)
                 }
@@ -242,10 +274,31 @@ struct RootView: View {
             scheme.appSurface.ignoresSafeArea()
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
+        .overlay {
+            if searchOverlayIsVisible {
+                HomeSearchOverlay(
+                    model: searchModel,
+                    focusOnAppear: focusSearchOnAppear,
+                    onClose: closeSearch,
+                    onOpenArtist: {
+                        focusSearchOnAppear = false
+                        searchDestination = .artist($0)
+                    },
+                    onOpenPlaylist: {
+                        focusSearchOnAppear = false
+                        searchDestination = .playlist($0)
+                    }
+                )
+                .transition(.opacity)
+            }
+        }
         .task(id: playbackService.queue.current?.musicID, updateArtworkAndTheme)
         .task(id: successfullyLoadedTrackID, recordRecentTrack)
         .onChange(of: pullController.pull) { _, pull in
-            if pull > 0 { closeSettingsDrawer() }
+            if pull > 0 {
+                closeSearch()
+                closeSettingsDrawer()
+            }
         }
         .overlay(alignment: .bottom) {
             ToastOverlay()
@@ -275,18 +328,45 @@ struct RootView: View {
     private func routeContent(drawerWidth: CGFloat, safeAreaBottom: CGFloat) -> some View {
         NavigationStack {
             DiscoverView(
-                runtime: sourceRuntime,
-                isActive: true,
+                isActive: !searchOverlayIsVisible,
+                onOpenSearch: openSearch,
                 onOpenSettings: openSettingsDrawer,
                 onSettingsDragChanged: { handleEdgeDrawerDragChanged($0, width: drawerWidth) },
                 onSettingsDragEnded: { handleEdgeDrawerDragEnded($0, width: drawerWidth) }
             )
+            .navigationDestination(item: $searchDestination) { destination in
+                switch destination {
+                case let .artist(artist):
+                    ArtistDetailView(artist: artist, runtime: sourceRuntime)
+                case let .playlist(playlist):
+                    RemotePlaylistDetailView(playlist: playlist, runtime: sourceRuntime)
+                }
+            }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             Color.clear.frame(height: ShellBottomLayout.contentReservation(
                 hasCurrentTrack: hasCurrentTrack,
                 safeAreaBottom: safeAreaBottom
             ))
+        }
+    }
+
+    private func openSearch() {
+        closeSettingsDrawer()
+        focusSearchOnAppear = true
+        withAnimation(AppMotion.emphasized(duration: AppMotion.short, reduceMotion: reduceMotion)) {
+            searchIsPresented = true
+        }
+    }
+
+    private func closeSearch() {
+        guard searchIsPresented else { return }
+        searchModel.cancelLiveSearch()
+        searchModel.query = ""
+        searchModel.queryChanged()
+        focusSearchOnAppear = false
+        withAnimation(AppMotion.emphasized(duration: AppMotion.short, reduceMotion: reduceMotion)) {
+            searchIsPresented = false
         }
     }
 
@@ -305,7 +385,7 @@ struct RootView: View {
     }
 
     private func openSettingsDrawer() {
-        guard pullController.pull == 0 else { return }
+        guard pullController.pull == 0, !searchOverlayIsVisible else { return }
         edgeDrawerDragIsActive = false
         animateDrawerChange {
             drawerIsOpen = true

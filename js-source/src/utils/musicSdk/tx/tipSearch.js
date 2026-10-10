@@ -1,4 +1,4 @@
-// Sonar adaptation of lx-music-mobile for the JavaScriptCore WY/TX runtime.
+// Sonar adaptation of lx-music-mobile for the JavaScriptCore QQ Music runtime.
 // Modified distribution; see repository-root THIRD_PARTY_NOTICES.md and LICENSES/.
 import { httpFetch } from '../../request'
 
@@ -26,6 +26,6 @@ export default {
     if (this.requestObj && this.requestObj.cancelHttp) this.requestObj.cancelHttp()
   },
   async search(str) {
-    return this.tipSearch(str).then(result => this.handleResult(result.song.itemlist))
+    return this.tipSearch(str).then(result => this.handleResult(result?.song?.itemlist || []))
   },
 }

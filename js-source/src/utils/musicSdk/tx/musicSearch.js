@@ -1,4 +1,4 @@
-// Sonar adaptation of lx-music-mobile for the JavaScriptCore WY/TX runtime.
+// Sonar adaptation of lx-music-mobile for the JavaScriptCore QQ Music runtime.
 // Modified distribution; see repository-root THIRD_PARTY_NOTICES.md and LICENSES/.
 import { httpFetch } from '../../request'
 import { formatPlayTime, sizeFormate } from '../../index'
@@ -69,7 +69,6 @@ export default {
         },
       },
     })
-    // searchRequest = httpFetch(`http://ioscdn.kugou.com/api/v3/search/song?keyword=${encodeURIComponent(str)}&page=${page}&pagesize=${this.limit}&showtype=10&plat=2&version=7910&tag=1&correct=1&privilege=1&sver=5`)
     return searchRequest.promise.then(({ body }) => {
       // console.log(body)
       if (body?.code != this.successCode || body?.req?.code != this.successCode) {
@@ -152,7 +151,6 @@ export default {
   },
   search(str, page = 1, limit) {
     if (limit == null) limit = this.limit
-    // http://newlyric.kuwo.cn/newlyric.lrc?62355680
     return this.musicSearch(str, page, limit).then(({ body, meta }) => {
       let list = this.handleResult(body.item_song)
 

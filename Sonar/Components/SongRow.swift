@@ -9,6 +9,7 @@ struct SongRow: View {
     enum Trailing: Equatable {
         case play
         case more
+        case collectionStatus(Bool)
     }
 
     let track: Track
@@ -19,23 +20,23 @@ struct SongRow: View {
     var isCurrent = false
     var isSelected = false
     var isPlaying = false
-    var onPlay: () -> Void
-    var onAction: (() -> Void)?
+    var onPlay: (() -> Void)? = nil
+    var onAction: (() -> Void)? = nil
 
     @Environment(\.m3Scheme) private var scheme
 
     var body: some View {
         HStack(spacing: 10) {
-            Button(action: onPlay) {
-                HStack(spacing: 10) {
-                    leadingView
-                    labels
+            if let onPlay {
+                Button(action: onPlay) {
+                    leadingContent
                 }
-                .padding(.vertical, 4)
-                .contentShape(Rectangle())
+                .buttonStyle(.cellHighlight)
+                .accessibilityIdentifier("song-row-play-\(track.musicID)")
+            } else {
+                leadingContent
+                    .accessibilityElement(children: .combine)
             }
-            .buttonStyle(.cellHighlight)
-            .accessibilityIdentifier("song-row-play-\(track.musicID)")
 
             trailingButton
         }
@@ -52,6 +53,15 @@ struct SongRow: View {
                     .padding(.leading, dividerInset)
             }
         }
+        .contentShape(Rectangle())
+    }
+
+    private var leadingContent: some View {
+        HStack(spacing: 10) {
+            leadingView
+            labels
+        }
+        .padding(.vertical, 4)
         .contentShape(Rectangle())
     }
 
@@ -100,14 +110,16 @@ struct SongRow: View {
     private var trailingButton: some View {
         switch trailing {
         case .play:
-            Button(action: onPlay) {
-                Image(systemName: "play.fill")
-                    .font(.system(size: 19, weight: .regular))
-                    .foregroundStyle(scheme.onSurface)
-                    .frame(width: 44, height: 44)
+            if let onPlay {
+                Button(action: onPlay) {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 19, weight: .regular))
+                        .foregroundStyle(scheme.onSurface)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("播放 \(track.title)")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("播放 \(track.title)")
         case .more:
             if let onAction {
                 Button(action: onAction) {
@@ -122,6 +134,17 @@ struct SongRow: View {
             } else {
                 Color.clear.frame(width: 44, height: 44)
             }
+        case let .collectionStatus(isCollected):
+            if isCollected {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(scheme.onSurfaceVariant)
+                    .frame(width: 44, height: 44)
+                    .accessibilityLabel("已收藏，导入时跳过")
+            } else {
+                Color.clear.frame(width: 44, height: 44)
+                    .accessibilityHidden(true)
+            }
         }
     }
 
@@ -130,7 +153,8 @@ struct SongRow: View {
         let values = showAlbum && !album.isEmpty && album != track.title
             ? [track.artist, album]
             : [track.artist]
-        return values.filter { !$0.isEmpty }.joined(separator: " · ")
+        let displayedValues = track.source.isEnabled ? values : [track.source.displayName] + values
+        return displayedValues.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 
     private var dividerInset: CGFloat {

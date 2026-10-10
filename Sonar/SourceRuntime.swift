@@ -90,6 +90,7 @@ public final class JavaScriptSourceRuntime: SourceRuntime, @unchecked Sendable {
     }
 
     public func search(_ keyword: String, source: MusicSource, page: Int = 1) async throws -> SearchPage {
+        try source.requireQQClientSupport()
         let data = try await invokeData("search", arguments: [source.rawValue, keyword, page, 25])
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let rawList = object["list"] as? [[String: Any]] else {
@@ -104,10 +105,12 @@ public final class JavaScriptSourceRuntime: SourceRuntime, @unchecked Sendable {
     }
 
     public func lyric(_ track: Track) async throws -> LyricInfo {
-        try JSONDecoder().decode(LyricInfo.self, from: await invokeData("lyric", arguments: [track.source.rawValue, track.rawPayload]))
+        try track.source.requireQQClientSupport()
+        return try JSONDecoder().decode(LyricInfo.self, from: await invokeData("lyric", arguments: [track.source.rawValue, track.rawPayload]))
     }
 
     public func picURL(_ track: Track) async throws -> URL {
+        try track.source.requireQQClientSupport()
         let value = try JSONDecoder().decode(String.self, from: await invokeData("pic", arguments: [track.source.rawValue, track.rawPayload]))
         guard let url = URL(string: value), ["http", "https"].contains(url.scheme?.lowercased()) else {
             throw SourceError.source(message: "音源返回封面地址异常")
@@ -120,11 +123,13 @@ public final class JavaScriptSourceRuntime: SourceRuntime, @unchecked Sendable {
     }
 
     public func hotSearch(source: MusicSource) async throws -> [String] {
-        try JSONDecoder().decode([String].self, from: await invokeData("hotSearch", arguments: [source.rawValue]))
+        try source.requireQQClientSupport()
+        return try JSONDecoder().decode([String].self, from: await invokeData("hotSearch", arguments: [source.rawValue]))
     }
 
     public func playlistSearch(_ keyword: String, source: MusicSource, page: Int = 1) async throws -> PlaylistCatalogPage {
-        try JSONDecoder().decode(
+        try source.requireQQClientSupport()
+        return try JSONDecoder().decode(
             PlaylistCatalogPage.self,
             from: await invokeData("playlistSearch", arguments: [source.rawValue, keyword, page])
         )
@@ -136,13 +141,15 @@ public final class JavaScriptSourceRuntime: SourceRuntime, @unchecked Sendable {
         tagId: String? = nil,
         page: Int = 1
     ) async throws -> PlaylistCatalogPage {
-        try JSONDecoder().decode(
+        try source.requireQQClientSupport()
+        return try JSONDecoder().decode(
             PlaylistCatalogPage.self,
             from: await invokeData("playlistCatalog", arguments: [source.rawValue, sortId, tagId ?? NSNull(), page])
         )
     }
 
     public func playlistDetail(source: MusicSource, id: String, page: Int = 1) async throws -> PlaylistDetail {
+        try source.requireQQClientSupport()
         let data = try await invokeData("playlistDetail", arguments: [source.rawValue, id, page])
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let rawList = object["list"] as? [[String: Any]],
@@ -172,6 +179,7 @@ public final class JavaScriptSourceRuntime: SourceRuntime, @unchecked Sendable {
         page: Int,
         limit: Int
     ) async throws -> ArtistSearchPage {
+        try source.requireQQClientSupport()
         let normalizedPage = max(1, page)
         let normalizedLimit = max(1, limit)
         let data = try await invokeData(
@@ -197,7 +205,8 @@ public final class JavaScriptSourceRuntime: SourceRuntime, @unchecked Sendable {
     }
 
     public func artistPopularTracks(_ artist: ArtistSummary) async throws -> [Track] {
-        try decodeTracks(
+        try artist.source.requireQQClientSupport()
+        return try decodeTracks(
             await invokeData("artistPopular", arguments: [artist.source.rawValue, artist.id]),
             source: artist.source,
             failure: "音源返回热门歌曲异常"
@@ -205,6 +214,7 @@ public final class JavaScriptSourceRuntime: SourceRuntime, @unchecked Sendable {
     }
 
     public func artistAlbums(_ artist: ArtistSummary, page: Int = 1) async throws -> AlbumPage {
+        try artist.source.requireQQClientSupport()
         let data = try await invokeData("artistAlbums", arguments: [artist.source.rawValue, artist.id, page, 30])
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let rawList = object["list"] as? [[String: Any]] else {
@@ -222,6 +232,7 @@ public final class JavaScriptSourceRuntime: SourceRuntime, @unchecked Sendable {
     }
 
     public func albumTracks(_ album: AlbumSummary) async throws -> AlbumDetail {
+        try album.source.requireQQClientSupport()
         let data = try await invokeData("albumTracks", arguments: [album.source.rawValue, album.id])
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let rawList = object["list"] as? [[String: Any]] else {
@@ -252,6 +263,7 @@ public final class JavaScriptSourceRuntime: SourceRuntime, @unchecked Sendable {
     }
 
     public func trackDetail(_ track: Track) async throws -> Track {
+        try track.source.requireQQClientSupport()
         let data = try await invokeData("musicInfo", arguments: [track.source.rawValue, track.songmid])
         guard let raw = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw SourceError.source(message: "音源返回曲目信息异常")

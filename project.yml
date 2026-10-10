@@ -98,6 +98,8 @@ targets:
       - path: Sonar/PlaybackURLCache.swift
       - path: Sonar/PlaybackURLResolver.swift
       - path: Sonar/PlaylistBackup.swift
+      - path: Sonar/OnlinePlaylistImportService.swift
+      - path: Sonar/Components/OnlinePlaylistImportView.swift
       - path: Sonar/SecurityBridge.swift
       - path: Sonar/SonarBootstrap.swift
       - path: Sonar/SourceModels.swift

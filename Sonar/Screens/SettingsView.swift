@@ -5,9 +5,16 @@ import UniformTypeIdentifiers
 struct SettingsView: View {
     let onClose: () -> Void
 
-    private enum PresentedSheet: String, Identifiable {
+    private enum PresentedSheet: Identifiable {
         case quality
-        var id: String { rawValue }
+        case onlinePlaylist(OnlinePlaylistImporting)
+
+        var id: String {
+            switch self {
+            case .quality: "quality"
+            case .onlinePlaylist: "onlinePlaylist"
+            }
+        }
     }
 
     @Environment(SonarThemeState.self) private var themeState
@@ -15,6 +22,7 @@ struct SettingsView: View {
     @Environment(PlaybackService.self) private var playbackService
     @Environment(\.m3Scheme) private var scheme
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.onlinePlaylistImporter) private var onlinePlaylistImporter
 
     @State private var presentedSheet: PresentedSheet?
     @State private var backupDocument: BackupDocument?
@@ -71,9 +79,13 @@ struct SettingsView: View {
                     .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
                     .accessibilityIdentifier("settings-quality-button")
 
-                    sectionTitle("歌单备份")
+                    sectionTitle("歌单")
                     VStack(spacing: 0) {
-                        backupButton(icon: "square.and.arrow.up", title: "导出歌单",
+                        backupButton(icon: "music.note.list", title: "从其他播放器导入",
+                                     subtitle: "粘贴 QQ 音乐或网易云歌单链接", id: "settings-import-online-playlist") {
+                            if let onlinePlaylistImporter { presentedSheet = .onlinePlaylist(onlinePlaylistImporter) }
+                        }.disabled(onlinePlaylistImporter == nil)
+                        backupButton(icon: "square.and.arrow.up", title: "导出备份",
                                      subtitle: "将个人歌单保存到文件", id: "settings-export-playlist") {
                             do {
                                 backupDocument = BackupDocument(data: try LibraryStore(context: modelContext).exportPersonalPlaylist())
@@ -82,7 +94,7 @@ struct SettingsView: View {
                                 backupMessage = "导出未完成，请稍后重试。"
                             }
                         }
-                        backupButton(icon: "square.and.arrow.down", title: "导入歌单",
+                        backupButton(icon: "square.and.arrow.down", title: "导入备份",
                                      subtitle: "合并备份中的歌曲，保留现有歌单", id: "settings-import-playlist") {
                             isImporting = true
                         }
@@ -110,10 +122,16 @@ struct SettingsView: View {
         }
         .background(scheme.appSurface.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
-        .sheet(item: $presentedSheet) { _ in
-            QualitySheet(track: playbackService.queue.current)
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
+        .sheet(item: $presentedSheet) { sheet in
+            switch sheet {
+            case .quality:
+                QualitySheet(track: playbackService.queue.current)
+                    .presentationDetents([.medium])
+                    .presentationDragIndicator(.visible)
+            case let .onlinePlaylist(service):
+                OnlinePlaylistImportView(service: service, library: LibraryStore(context: modelContext))
+                    .presentationDragIndicator(.visible)
+            }
         }
         .fileExporter(isPresented: $isExporting, document: backupDocument,
                       contentType: .json, defaultFilename: "Sonar-歌单备份") { result in

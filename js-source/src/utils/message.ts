@@ -1,4 +1,4 @@
-// Sonar adaptation of lx-music-mobile for the JavaScriptCore WY/TX runtime.
+// Sonar adaptation of lx-music-mobile for the JavaScriptCore QQ Music runtime.
 // Modified distribution; see repository-root THIRD_PARTY_NOTICES.md and LICENSES/.
 export const requestMsg = {
   fail: '请求异常😮，可以多试几次，若还是不行就换一首吧。。。',

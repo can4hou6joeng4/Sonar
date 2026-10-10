@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 @MainActor @Observable
 final class MacAppModel {
     let runtime: SourceRuntime
+    let onlinePlaylistImporter: OnlinePlaylistImportService
     let playback: PlaybackService
     let artworkService: ArtworkService?
     private(set) var library: LibraryStore?
@@ -46,11 +47,11 @@ final class MacAppModel {
         let breaker = ChkszCircuitBreaker()
         let api = ChkszAPIClient(credentials: credentials, breaker: breaker)
         let netease = ChkszNetEaseClient(api: api)
-        let runtime = FallbackSourceRuntime(primary: JavaScriptSourceRuntime(), neteaseFallback: netease)
+        let runtime = ChkszSourceRuntime(qq: JavaScriptSourceRuntime(), netease: netease)
         self.runtime = runtime
+        onlinePlaylistImporter = OnlinePlaylistImportService(qq: runtime, chkszAPI: api)
         playback = PlaybackService(resolver: PlaybackResolverPipeline.make(
-            primary: PlaybackURLResolver(credentials: credentials, breaker: breaker, chkszAPI: api, wyFallback: netease),
-            sourceRuntime: runtime
+            primary: PlaybackURLResolver(credentials: credentials, breaker: breaker, chkszAPI: api, netease: netease)
         ))
         artworkService = try? ArtworkService(sourceRuntime: runtime,
             cacheDirectory: URL.cachesDirectory.appendingPathComponent("cn.bobochang.sonar.mac/Artwork"))

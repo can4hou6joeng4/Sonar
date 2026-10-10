@@ -21,7 +21,6 @@ struct QualitySheet: View {
                 LazyVStack(spacing: 4) {
                     ForEach(Quality.displayOrder, id: \.self) { quality in
                         let option = options[quality]
-                        let isAvailable = track == nil || option != nil
                             Button {
                                 apply(quality)
                             } label: {
@@ -30,7 +29,7 @@ struct QualitySheet: View {
                                         Text(quality.title)
                                             .font(.system(size: 15, weight: .semibold))
                                             .foregroundStyle(scheme.onSurface)
-                                        Text(option.map { $0.sizeText.isEmpty ? "音源支持" : "文件大小 \($0.sizeText)" } ?? unavailableText)
+                                        Text(option.map { $0.sizeText.isEmpty ? "音源标记支持" : "文件大小 \($0.sizeText)" } ?? "从此档位开始，无法获取时逐级降低")
                                             .font(.system(size: 12.5))
                                             .foregroundStyle(scheme.onSurfaceVariant)
                                     }
@@ -52,8 +51,6 @@ struct QualitySheet: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-                            .disabled(!isAvailable)
-                            .opacity(isAvailable ? 1 : 0.46)
                             .accessibilityIdentifier("player-quality-option-\(quality.rawValue)")
                         }
                 }
@@ -62,10 +59,6 @@ struct QualitySheet: View {
             }
         }
         .background(scheme.surfaceContainerLow.ignoresSafeArea())
-    }
-
-    private var unavailableText: String {
-        track == nil ? "作为下一首播放的质量上限" : "当前曲目未提供这个档位"
     }
 
     /// 先收起弹层再等解析：重新拿播放地址要走一次网络，让用户对着不动的表等没有意义。

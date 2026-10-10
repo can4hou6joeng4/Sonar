@@ -1,18 +1,14 @@
-import CryptoKit
 import Foundation
 import Security
 
 public protocol CredentialStore: Sendable {
-    var wyToken: String? { get }
     var chkszKey: String? { get }
 }
 
 public struct InMemoryCredentialStore: CredentialStore {
-    public let wyToken: String?
     public let chkszKey: String?
 
-    public init(wyToken: String? = nil, chkszKey: String? = nil) {
-        self.wyToken = wyToken
+    public init(chkszKey: String? = nil) {
         self.chkszKey = chkszKey
     }
 }
@@ -24,10 +20,8 @@ public struct KeychainCredentialStore: CredentialStore {
         self.service = service
     }
 
-    public var wyToken: String? { read(key: "wyToken") }
     public var chkszKey: String? { read(key: "chkszKey") }
 
-    public func setWyToken(_ value: String?) throws { try write(value, key: "wyToken") }
     public func setChkszKey(_ value: String?) throws { try write(value, key: "chkszKey") }
 
     private func write(_ value: String?, key: String) throws {
@@ -315,9 +309,8 @@ public actor ChkszCircuitBreaker {
 
 public final class PlaybackURLResolver: PlaybackURLRefreshing, @unchecked Sendable {
     private let client: PlaybackHTTPClient
-    private let credentials: CredentialStore
     private let chkszAPI: ChkszAPIRequesting
-    private let wyFallback: ChkszNetEaseProviding?
+    private let netease: ChkszNetEaseProviding
     private let cache: PlaybackURLCache
 
     public init(
@@ -326,178 +319,56 @@ public final class PlaybackURLResolver: PlaybackURLRefreshing, @unchecked Sendab
         breaker: ChkszCircuitBreaker = ChkszCircuitBreaker(),
         cache: PlaybackURLCache = PlaybackURLCache(),
         chkszAPI: ChkszAPIRequesting? = nil,
-        wyFallback: ChkszNetEaseProviding? = nil
+        netease: ChkszNetEaseProviding? = nil
     ) {
         self.client = client
-        self.credentials = credentials
-        self.chkszAPI = chkszAPI ?? ChkszAPIClient(client: client, credentials: credentials, breaker: breaker)
-        self.wyFallback = wyFallback
+        let api = chkszAPI ?? ChkszAPIClient(client: client, credentials: credentials, breaker: breaker)
+        self.chkszAPI = api
+        self.netease = netease ?? ChkszNetEaseClient(api: api)
         self.cache = cache
     }
 
     public func musicURL(for track: Track, quality: Quality) async throws -> URL {
+        try track.source.requireEnabled()
         let key = PlaybackURLCache.Key(track: track, quality: quality)
         if let cached = await cache.value(for: key) { return cached }
         return try await resolveAndCache(track: track, quality: quality, key: key)
     }
 
     public func refreshMusicURL(for track: Track, quality: Quality) async throws -> URL {
+        try track.source.requireEnabled()
         let key = PlaybackURLCache.Key(track: track, quality: quality)
         await cache.removeValue(for: key)
         return try await resolveAndCache(track: track, quality: quality, key: key)
     }
 
     private func resolveAndCache(track: Track, quality: Quality, key: PlaybackURLCache.Key) async throws -> URL {
-        let result: (URL, Quality)
+        let result: ChkszPlaybackResult
         switch track.source {
-        case .wy:
-            result = try await resolveWYWithFallback(track: track, quality: quality)
         case .tx:
-            result = try await resolveTX(track: track, quality: quality)
+            result = try await resolveTXChksz(track: track, quality: quality)
+        case .wy:
+            result = try await netease.musicURL(for: track, quality: quality)
         }
-        await cache.insert(result.0, actualQuality: result.1, for: key)
-        return result.0
+        guard let mediaURL = Self.mediaURL(from: result.url.absoluteString) else {
+            throw SourceError.source(message: "播放解析未返回可用链接")
+        }
+        try await validateChkszMediaURL(mediaURL)
+        await cache.insert(mediaURL, actualQuality: result.actualQuality, for: key)
+        guard result.actualQuality.rank >= quality.rank else {
+            throw SourceError.source(message: "该音质不可用，实际返回 \(result.actualQuality.rawValue)")
+        }
+        return mediaURL
     }
 
-    private func resolveWYWithFallback(track: Track, quality: Quality) async throws -> (URL, Quality) {
-        do {
-            return try await resolveWY(track: track, quality: quality)
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch let primaryError as SourceError {
-            return try await resolveWYFallback(track: track, quality: quality, primaryError: primaryError)
-        } catch {
-            return try await resolveWYFallback(track: track, quality: quality, primaryError: nil)
-        }
-    }
-
-    private func resolveWYFallback(
-        track: Track,
-        quality: Quality,
-        primaryError: SourceError?
-    ) async throws -> (URL, Quality) {
-        guard let wyFallback else {
-            if let primaryError { throw primaryError }
-            throw SourceError.source(message: "网易云播放解析失败")
-        }
-        do {
-            let result = try await wyFallback.musicURL(for: track, quality: quality)
-            try await validateChkszMediaURL(result.url)
-            return (result.url, result.actualQuality)
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch let fallbackError as SourceError {
-            if case .network = fallbackError,
-               let primaryError,
-               PlaybackFallbackPolicy.allowsQualityFallback(for: primaryError) {
-                throw primaryError
-            }
-            throw fallbackError
-        }
-    }
-
-    private func resolveWY(track: Track, quality: Quality) async throws -> (URL, Quality) {
-        guard quality != .hiRes else {
-            throw SourceError.source(message: "网易云不支持 Hi-Res 音质")
-        }
-        let path = "/api/song/enhance/player/url"
-        let bitrate: Int
-        switch quality {
-        case .standard: bitrate = 128_000
-        case .high: bitrate = 320_000
-        case .lossless: bitrate = 999_000
-        case .hiRes: bitrate = 999_000
-        }
-        let text = "{\"ids\":\"[\(track.songmid)]\",\"br\":\(bitrate)}"
-        let digest = Self.md5("nobody\(path)use\(text)md5forencrypt")
-        let payload = "\(path)-36cd479b6b5-\(text)-36cd479b6b5-\(digest)"
-        let key = Data("e82ckenh8dichen8".utf8).base64EncodedString()
-        let encrypted = try CommonCryptoBridge.crypt(base64: Data(payload.utf8).base64EncodedString(), key: key, iv: "", mode: "AES", encrypt: true)
-        guard let encryptedData = Data(base64Encoded: encrypted) else {
-            throw SourceError.source(message: "网易云: 加密请求失败")
-        }
-        var request = URLRequest(url: URL(string: "https://interface3.music.163.com/eapi\(path)")!)
-        request.httpMethod = "POST"
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        request.setValue("os=pc\(credentials.wyToken.map { "; MUSIC_U=\($0)" } ?? "")", forHTTPHeaderField: "Cookie")
-        request.httpBody = Data("params=\(encryptedData.map { String(format: "%02X", $0) }.joined())".utf8)
-        let response = try await client.send(request)
-        guard (200..<300).contains(response.statusCode) else {
-            throw SourceError.source(message: "网易云: HTTP \(response.statusCode)")
-        }
-        let object = try Self.jsonObject(response.body)
-        guard let item = (object["data"] as? [[String: Any]])?.first else {
-            throw SourceError.source(message: "网易云: 返回数据异常")
-        }
-        if item["freeTrialInfo"] is [String: Any] || item["freeTrialInfo"] is [Any] {
-            throw SourceError.source(message: "仅返回试听片段")
-        }
-        guard let rawURL = item["url"] as? String, let url = URL(string: rawURL), Self.isHTTP(url) else {
-            if credentials.wyToken == nil {
-                throw SourceError.credentialRequired(hint: "需要会员 token")
-            }
-            throw SourceError.source(message: "无版权，或该音质需要更高等级会员")
-        }
-        if quality == .lossless {
-            let type = (item["type"] as? String ?? "").lowercased()
-            if type != "flac" {
-                throw SourceError.source(message: "该歌曲无法获取无损（实际返回 \(type.isEmpty ? "未知" : type)），请改用 320k")
-            }
-        }
-        let actualQuality: Quality = switch (item["type"] as? String ?? "").lowercased() {
-        case "flac": .lossless
-        default:
-            if let actualBitrate = (item["br"] as? NSNumber)?.intValue, actualBitrate >= 320_000 {
-                .high
-            } else {
-                .standard
-            }
-        }
-        return (url, actualQuality)
-    }
-
-    private func resolveTX(track: Track, quality: Quality) async throws -> (URL, Quality) {
-        var errors: [SourceError] = []
-        if credentials.chkszKey != nil {
-            do {
-                return (try await resolveTXChksz(track: track, quality: quality), quality)
-            } catch let error as SourceError {
-                errors.append(error)
-            }
-        }
-        do {
-            return (try await resolveTXGuest(track: track, quality: quality), quality == .hiRes ? .lossless : quality)
-        } catch let error as SourceError {
-            errors.append(error)
-            if credentials.chkszKey == nil {
-                if case let .source(message) = error, Self.isEntitlementFailure(message) {
-                    throw SourceError.credentialRequired(hint: "未配置 ChKSz Key，VIP 或高音质歌曲需要凭证")
-                }
-                if case .credentialRequired = error {
-                    throw error
-                }
-            }
-        }
-        if let credential = errors.first(where: {
-            if case .credentialRequired = $0 { return true }
-            return false
-        }) { throw credential }
-        if errors.allSatisfy({
-            if case .network = $0 { return true }
-            return false
-        }), let network = errors.first {
-            throw network
-        }
-        throw SourceError.source(message: errors.map { $0.localizedDescription }.joined(separator: "；"))
-    }
-
-    private func resolveTXChksz(track: Track, quality: Quality) async throws -> URL {
+    private func resolveTXChksz(track: Track, quality: Quality) async throws -> ChkszPlaybackResult {
         let size: String
         switch quality {
         case .standard: size = "128k"
         case .high: size = "320k"
         case .lossless: size = "flac"
         case .hiRes: size = "hires"
+        case .master: size = "master"
         }
         let data = try await chkszAPI.request(
             path: "/api/qq_music",
@@ -508,11 +379,34 @@ public final class PlaybackURLResolver: PlaybackURLRefreshing, @unchecked Sendab
             ]
         )
         let object = try Self.jsonObject(data)
-        guard let rawURL = object["url"] as? String, let url = URL(string: rawURL), Self.isHTTP(url) else {
+        guard let rawURL = object["url"] as? String, let url = Self.mediaURL(from: rawURL) else {
             throw SourceError.source(message: "未返回可用链接")
         }
-        try await validateChkszMediaURL(url)
-        return url
+        return ChkszPlaybackResult(url: url, actualQuality: Self.qqQuality(from: object))
+    }
+
+    /// The requested size is a preference, not proof of the returned audio quality.
+    private static func qqQuality(from object: [String: Any]) -> Quality {
+        if let value = object["bitrate"] as? String {
+            switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "master": return .master
+            case "hires", "flac24bit", "hi-res": return .hiRes
+            case "flac", "lossless": return .lossless
+            case "320k": return .high
+            case "128k": return .standard
+            default: break
+            }
+        }
+        let bitrate = (object["bitrate"] as? NSNumber)?.intValue
+            ?? (object["bitrate"] as? String).flatMap(Int.init)
+        if let bitrate {
+            if bitrate >= 1_500_000 { return .hiRes }
+            if bitrate >= 700_000 { return .lossless }
+            if bitrate >= 300_000 { return .high }
+            return .standard
+        }
+        if (object["format"] as? String)?.lowercased() == "flac" { return .lossless }
+        return .standard
     }
 
     private func validateChkszMediaURL(_ url: URL) async throws {
@@ -528,47 +422,6 @@ public final class PlaybackURLResolver: PlaybackURLRefreshing, @unchecked Sendab
         }
     }
 
-    private func resolveTXGuest(track: Track, quality: Quality) async throws -> URL {
-        guard let mediaMid = track.rawPayload["strMediaMid"] as? String, !mediaMid.isEmpty else {
-            throw SourceError.source(message: "QQ: 缺少 strMediaMid")
-        }
-        let prefix: String
-        let suffix: String
-        switch quality {
-        case .standard: prefix = "M500"; suffix = ".mp3"
-        case .high: prefix = "M800"; suffix = ".mp3"
-        case .lossless, .hiRes: prefix = "F000"; suffix = ".flac"
-        }
-        let filename = "\(prefix)\(mediaMid)\(suffix)"
-        let payload: [String: Any] = [
-            "req_0": ["module": "vkey.GetVkeyServer", "method": "CgiGetVkey", "param": ["filename": [filename], "guid": "10000", "songmid": [track.songmid], "songtype": [0], "uin": "0", "loginflag": 1, "platform": "20"]],
-            "loginUin": "0",
-            "comm": ["uin": "0", "format": "json", "ct": 24, "cv": 0],
-        ]
-        var request = URLRequest(url: URL(string: "https://u.y.qq.com/cgi-bin/musicu.fcg?format=json&data=\(Self.urlEncodeJSON(payload))")!)
-        request.httpMethod = "GET"
-        request.setValue("0146951", forHTTPHeaderField: "channel")
-        request.setValue("1234", forHTTPHeaderField: "uid")
-        let response = try await client.send(request)
-        guard response.statusCode == 200 else { throw SourceError.source(message: "QQ 游客直连: HTTP \(response.statusCode)") }
-        let object = try Self.jsonObject(response.body)
-        guard let data = object["req_0"] as? [String: Any] ?? object["data"] as? [String: Any] else {
-            throw SourceError.source(message: "QQ: 缺少响应数据")
-        }
-        let nested = (data["data"] as? [String: Any]) ?? data
-        let sip = (nested["sip"] as? [String])?.first ?? (nested["sip"] as? [Any])?.first as? String
-        guard let sip, !sip.isEmpty else { throw SourceError.source(message: "缺少服务器地址") }
-        guard let purl = (nested["midurlinfo"] as? [[String: Any]])?.first?["purl"] as? String, !purl.isEmpty else {
-            throw SourceError.source(message: "无版权或需要会员")
-        }
-        guard let url = URL(string: sip + purl), Self.isHTTP(url) else { throw SourceError.source(message: "QQ: 未返回可用链接") }
-        return url
-    }
-
-    private static func md5(_ value: String) -> String {
-        Insecure.MD5.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined()
-    }
-
     private static func jsonObject(_ data: Data) throws -> [String: Any] {
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw SourceError.source(message: "音源返回 JSON 异常")
@@ -576,8 +429,15 @@ public final class PlaybackURLResolver: PlaybackURLRefreshing, @unchecked Sendab
         return object
     }
 
-    private static func isHTTP(_ url: URL) -> Bool {
-        ["http", "https"].contains(url.scheme?.lowercased())
+    private static func mediaURL(from value: String) -> URL? {
+        guard var components = URLComponents(string: value),
+              components.host?.isEmpty == false,
+              components.user == nil, components.password == nil,
+              let scheme = components.scheme?.lowercased(),
+              ["http", "https"].contains(scheme) else { return nil }
+        // QQ still returns HTTP media URLs; AVPlayer requires HTTPS under ATS.
+        components.scheme = "https"
+        return components.url
     }
 
     private static func looksLikeMedia(_ response: PlaybackHTTPResponse) -> Bool {
@@ -603,14 +463,4 @@ public final class PlaybackURLResolver: PlaybackURLRefreshing, @unchecked Sendab
             && !prefix.hasPrefix("error")
     }
 
-    private static func isEntitlementFailure(_ message: String) -> Bool {
-        message.contains("版权") || message.contains("会员") || message.localizedCaseInsensitiveContains("vip")
-    }
-
-    private static func urlEncodeJSON(_ object: [String: Any]) -> String {
-        guard let data = try? JSONSerialization.data(withJSONObject: object), let text = String(data: data, encoding: .utf8) else { return "{}" }
-        var allowed = CharacterSet.alphanumerics
-        allowed.insert(charactersIn: "-._~")
-        return text.addingPercentEncoding(withAllowedCharacters: allowed) ?? text
-    }
 }

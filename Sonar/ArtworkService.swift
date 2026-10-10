@@ -106,6 +106,7 @@ public actor ArtworkService {
     }
 
     public func image(for track: Track, now: Date = Date()) async throws -> PlatformImage {
+        try track.source.requireEnabled()
         try Task.checkCancellation()
         let key = track.musicID
         trimMemory(now: now)
