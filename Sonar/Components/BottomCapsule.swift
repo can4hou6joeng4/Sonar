@@ -74,85 +74,54 @@ struct NCMMiniPlayer: View {
     @Environment(PlaybackService.self) private var playbackService
     @Environment(ToastCenter.self) private var toastCenter
     @Environment(\.m3Scheme) private var scheme
+    @Environment(\.sonarReduceMotion) private var reduceMotion
 
     let safeAreaBottom: CGFloat
     let onOpenPlayer: () -> Void
     let onOpenQueue: () -> Void
 
     var body: some View {
-        ZStack(alignment: .top) {
-            dockShape
-                .fill(.regularMaterial)
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-
-            dockShape
-                .fill(scheme.surfaceContainerHigh.opacity(0.36))
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-
-            topSeparator
-
-            controls
-
-            progressTrack
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: dockHeight)
-        .clipShape(dockShape)
-        .shadow(color: .black.opacity(0.09), radius: 12, y: -3)
-    }
-
-    private var controls: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 0) {
             Button(action: onOpenPlayer) {
-                HStack(spacing: 9) {
-                    miniArtwork
+                HStack(spacing: 10) {
+                    PlayerArtwork(track: playbackService.queue.current, size: 44, cornerRadius: 8, animatesChanges: true)
                         .accessibilityIdentifier("mini-player-cover")
-
-                    VStack(alignment: .leading, spacing: 1) {
+                    VStack(alignment: .leading, spacing: 4) {
                         Text(playbackService.queue.current?.title ?? "暂无播放")
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(scheme.onSurface)
                             .lineLimit(1)
-
-                        HStack(spacing: 5) {
-                            if playbackService.state == .playing {
-                                PlayingEqualizer(isAnimating: true, color: scheme.primary)
-                            }
-
-                            Text(statusText)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.82)
-
-                            Spacer(minLength: 4)
-
-                            if let timelineText {
-                                Text(timelineText)
-                                    .monospacedDigit()
-                                    .fixedSize(horizontal: true, vertical: false)
-                            }
-                        }
-                        .font(.caption2)
-                        .foregroundStyle(scheme.onSurfaceVariant)
+                        Text(subtitle)
+                            .font(.caption2)
+                            .foregroundStyle(scheme.onSurfaceVariant)
+                            .lineLimit(1)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.cellHighlight)
             .frame(maxWidth: .infinity)
             .accessibilityLabel("打开播放页")
-            .accessibilityValue(accessibilityValue)
+            .accessibilityValue(MiniPlayerPresentation.accessibilityValue(
+                state: playbackService.state,
+                elapsed: playbackService.elapsed,
+                duration: playbackService.duration
+            ))
             .accessibilityIdentifier("mini-player-title")
+            .accessibilityAction(named: Text("播放队列"), onOpenQueue)
+            .contextMenu {
+                Button("播放队列", systemImage: "list.bullet", action: onOpenQueue)
+            }
 
+            skipButton("backward.end.fill", label: "上一首", identifier: "mini-player-previous") {
+                Task { await playbackService.previous() }
+            }
             Button(action: togglePlayback) {
                 Group {
                     switch playbackService.state {
                     case .loading:
-                        ProgressView()
-                            .progressViewStyle(.circular)
-                            .tint(scheme.onSurface)
+                        ProgressView().tint(scheme.onSurface)
                     case .playing:
                         Image(systemName: "pause.circle")
                     case .failed:
@@ -162,33 +131,50 @@ struct NCMMiniPlayer: View {
                     }
                 }
                 .font(.system(size: 28, weight: .regular))
-                .contentTransition(.symbolEffect(.replace))
-                .frame(width: NCMDesignTokens.Layout.miniControlSize, height: NCMDesignTokens.Layout.miniControlSize)
+                .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
             }
-            .buttonStyle(.bounce)
-            .foregroundStyle(playbackService.queue.current != nil ? scheme.onSurface : scheme.onSurface.opacity(0.45))
+            .buttonStyle(.circleIcon(diameter: 38, haptic: false))
+            .foregroundStyle(scheme.onSurface)
+            .disabled(playbackService.queue.current == nil)
             .accessibilityLabel(playbackControlLabel)
             .accessibilityIdentifier("mini-player-play-pause")
-
-            Button(action: onOpenQueue) {
-                Image(systemName: "list.bullet")
-                    .font(.system(size: 23, weight: .regular))
-                    .frame(width: NCMDesignTokens.Layout.miniControlSize, height: NCMDesignTokens.Layout.miniControlSize)
+            skipButton("forward.end.fill", label: "下一首", identifier: "mini-player-next") {
+                Task { await playbackService.next() }
             }
-            .buttonStyle(.bounce)
-            .foregroundStyle(playbackService.queue.current != nil ? scheme.onSurface : scheme.onSurface.opacity(0.45))
-            .accessibilityLabel("播放队列")
-            .accessibilityIdentifier("mini-player-queue")
         }
-        .padding(.leading, 12)
-        .padding(.trailing, 14)
-        .frame(height: NCMDesignTokens.Layout.miniPlayerHeight)
-        .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 8)
+        .padding(.leading, 10)
+        .padding(.trailing, 6)
+        .frame(height: SpotlightLayout.miniPlayerHeight)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(scheme.surfaceContainerHigh.opacity(0.70), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(scheme.onSurface.opacity(0.08), lineWidth: 0.75)
+                .allowsHitTesting(false)
+        }
+        .overlay(alignment: .bottom) {
+            GeometryReader { proxy in
+                Capsule()
+                    .fill(scheme.onSurface.opacity(0.50))
+                    .frame(width: proxy.size.width * MiniPlayerPresentation.progress(
+                        elapsed: playbackService.elapsed,
+                        duration: playbackService.duration
+                    ))
+            }
+            .frame(height: 2)
+            .padding(.horizontal, 14)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .shadow(color: .black.opacity(0.12), radius: 14, y: 6)
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 12)
                 .onEnded { value in
                     let horizontal = value.translation.width
-                    guard abs(horizontal) > 28,
+                    guard abs(horizontal) > 36,
                           abs(horizontal) > abs(value.translation.height) else { return }
                     if horizontal < 0 {
                         Task { await playbackService.next() }
@@ -199,89 +185,30 @@ struct NCMMiniPlayer: View {
         )
     }
 
-    private var dockHeight: CGFloat {
-        MiniPlayerDockPresentation.height(
-            rowHeight: NCMDesignTokens.Layout.miniPlayerHeight,
-            safeAreaBottom: safeAreaBottom
-        )
-    }
-
-    private var dockShape: UnevenRoundedRectangle {
-        UnevenRoundedRectangle(
-            cornerRadii: RectangleCornerRadii(
-                topLeading: MiniPlayerDockPresentation.topCornerRadius,
-                bottomLeading: MiniPlayerDockPresentation.bottomCornerRadius(safeAreaBottom: safeAreaBottom),
-                bottomTrailing: MiniPlayerDockPresentation.bottomCornerRadius(safeAreaBottom: safeAreaBottom),
-                topTrailing: MiniPlayerDockPresentation.topCornerRadius
-            ),
-            style: .continuous
-        )
-    }
-
-    private var topSeparator: some View {
-        Rectangle()
-            .fill(scheme.outlineVariant.opacity(0.42))
-            .frame(height: 0.5)
-            .padding(.horizontal, MiniPlayerDockPresentation.topCornerRadius)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-    }
-
-    private var progressTrack: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 0)
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(scheme.outlineVariant.opacity(0.42))
-                    Capsule()
-                        .fill(scheme.primary.opacity(0.82))
-                        .frame(width: proxy.size.width * playbackProgress)
-                }
-            }
-            .frame(height: 2)
-            .padding(.horizontal, 16)
-        }
-        .frame(height: NCMDesignTokens.Layout.miniPlayerHeight)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-
-    private var playbackProgress: CGFloat {
-        MiniPlayerPresentation.progress(
-            elapsed: playbackService.elapsed,
-            duration: playbackService.duration
-        )
-    }
-
-    private var statusText: String {
-        guard let track = playbackService.queue.current else {
-            return "点按开启随心听"
-        }
-        return MiniPlayerPresentation.statusText(
-            state: playbackService.state,
-            artist: track.artist
-        )
-    }
-
-    private var timelineText: String? {
+    private var subtitle: String {
+        let artist = playbackService.queue.current?.artist ?? "选择歌曲开始播放"
         switch playbackService.state {
-        case .playing, .paused:
-            MiniPlayerPresentation.timeSummary(
-                elapsed: playbackService.elapsed,
-                duration: playbackService.duration
-            )
-        case .idle, .loading, .failed:
-            nil
+        case .loading: return "正在加载 · \(artist)"
+        case .failed: return "播放失败，点按重试"
+        case .idle, .paused, .playing: return artist.isEmpty ? "未知歌手" : artist
         }
     }
 
-    private var accessibilityValue: String {
-        MiniPlayerPresentation.accessibilityValue(
-            state: playbackService.state,
-            elapsed: playbackService.elapsed,
-            duration: playbackService.duration
-        )
+    private func skipButton(_ symbol: String, label: String, identifier: String, action: @escaping () -> Void) -> some View {
+        Button {
+            AppHaptics.light()
+            action()
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 16, weight: .medium))
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.circleIcon(diameter: 38, haptic: false))
+        .foregroundStyle(scheme.onSurface)
+        .disabled(playbackService.queue.current == nil)
+        .accessibilityLabel(label)
+        .accessibilityIdentifier(identifier)
     }
 
     private var playbackControlLabel: String {
@@ -294,11 +221,7 @@ struct NCMMiniPlayer: View {
     }
 
     private func togglePlayback() {
-        guard playbackService.queue.current != nil else {
-            AppHaptics.light()
-            toastCenter.show("点按新歌开始播放")
-            return
-        }
+        guard playbackService.queue.current != nil else { return }
         AppHaptics.medium()
         Task {
             if case .failed = playbackService.state {
@@ -308,24 +231,6 @@ struct NCMMiniPlayer: View {
             }
             if case let .failed(message) = playbackService.state {
                 toastCenter.show("播放失败：\(message)")
-            }
-        }
-    }
-
-    private var miniArtwork: some View {
-        ZStack(alignment: .bottomTrailing) {
-            PlayerArtwork(
-                track: playbackService.queue.current,
-                size: NCMDesignTokens.Layout.miniArtworkSize,
-                cornerRadius: 8
-            )
-            .shadow(color: .black.opacity(0.18), radius: 4, y: 2)
-
-            if playbackService.state == .playing {
-                PlayingEqualizer(isAnimating: true, color: .white)
-                    .padding(2.5)
-                    .background(Color.black.opacity(0.60), in: RoundedRectangle(cornerRadius: 3.5))
-                    .padding(2)
             }
         }
     }

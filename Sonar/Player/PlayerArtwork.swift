@@ -42,20 +42,27 @@ struct PlayerArtwork: View {
     let size: CGFloat
     var circular = false
     var cornerRadius: CGFloat = 10
+    var animatesChanges = false
 
     @Environment(\.artworkService) private var artworkService
     @Environment(\.m3Scheme) private var scheme
+    @Environment(\.sonarReduceMotion) private var reduceMotion
     @State private var image: UIImage?
+    @State private var displayedTrackID: String?
     @State private var artworkRequests = ArtworkRequestGate()
 
     var body: some View {
-        Group {
+        ZStack {
             if let image {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
+                    .frame(width: size, height: size)
+                    .id(displayedTrackID)
+                    .transition(.opacity)
             } else {
                 placeholder
+                    .transition(.opacity)
             }
         }
         .frame(width: size, height: size)
@@ -65,11 +72,15 @@ struct PlayerArtwork: View {
             let request = artworkRequests.begin(trackID: track?.musicID)
             guard let track, let artworkService else {
                 image = nil
+                displayedTrackID = nil
                 return
             }
             let loadedImage = try? await artworkService.image(for: track)
             artworkRequests.commit(request, currentTrackID: track.musicID) {
-                image = loadedImage
+                withAnimation(animatesChanges ? AppMotion.emphasized(duration: 0.4, reduceMotion: reduceMotion) : nil) {
+                    image = loadedImage
+                    displayedTrackID = track.musicID
+                }
             }
         }
         .accessibilityHidden(true)

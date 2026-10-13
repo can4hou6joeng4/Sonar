@@ -43,7 +43,10 @@ struct MacRootView: View {
         _discovery = State(initialValue: DiscoveryViewModel(runtime: model.runtime))
     }
 
-    private var destination: MacSidebarDestination { MacSidebarDestination(rawValue: selectedRaw) ?? .home }
+    private var destination: MacSidebarDestination {
+        let value = MacSidebarDestination(rawValue: selectedRaw) ?? .home
+        return value == .discover && MusicSource.catalogSources.isEmpty ? .home : value
+    }
 
     var body: some View {
         NavigationSplitView {
@@ -102,7 +105,7 @@ struct MacRootView: View {
     private var sidebar: some View {
         List(selection: Binding<String?>(get: { selectedRaw }, set: { if let value = $0 { selectedRaw = value } })) {
             Section("Sonar") {
-                ForEach([MacSidebarDestination.home, .discover, .search]) { item in
+                ForEach([MacSidebarDestination.home, .search]) { item in
                     Label(item.title, systemImage: item.symbol).tag(item.rawValue)
                 }
             }

@@ -29,13 +29,19 @@
 ### iOS
 
 <p align="center">
-  <a href="assets/previews/ios-main.png"><img src="assets/previews/ios-main.png" width="900" alt="iOS 歌单、原页搜索遮罩与搜索结果实图" /></a>
+  <a href="assets/previews/ios-home.jpg"><img src="assets/previews/ios-home.jpg" width="260" alt="iOS 封面大图主页与悬浮播放条" /></a>
+  <a href="assets/previews/ios-player.jpg"><img src="assets/previews/ios-player.jpg" width="260" alt="iOS 封面取色播放页与玻璃控制卡片" /></a>
+  <a href="assets/previews/ios-library.jpg"><img src="assets/previews/ios-library.jpg" width="260" alt="iOS 收藏、最近播放与资料库" /></a>
 </p>
 
-搜索在原页面展开，保留歌单背景；输入关键词后在遮罩中显示结果。
+当前 iOS 源码使用封面大图主页、四个图标导航与悬浮播放条。播放、收起和收藏等控件恢复圆形玻璃按钮及原有按压反馈，主页保留两枚填充操作按钮。启动动画按封面显现、黑胶滑出、品牌出现与黑胶回收分段推进；播放页自底部整体展开，换歌时封面淡入并过渡背景颜色。播放页保留歌词、队列和音质选择；搜索仍在原页遮罩中展开，不显示音源筛选控件。
+
+截图来自当前源码的 iPhone 17 Pro 模拟器。当前仅启用网易云音源，其他音源隐藏并停止调用；旧收藏保留并标记为「不可用」。这轮界面与音源调整尚未包含在已发布的 IPA 中。
 
 <p align="center">
-  <a href="assets/previews/ios-details.png"><img src="assets/previews/ios-details.png" width="900" alt="iOS 同步歌词、设置与歌单备份实图" /></a>
+  <a href="assets/previews/ios-welcome.jpg"><img src="assets/previews/ios-welcome.jpg" width="260" alt="iOS 黑胶启动动画实图" /></a>
+  <a href="assets/previews/ios-lyrics.jpg"><img src="assets/previews/ios-lyrics.jpg" width="260" alt="iOS 歌词视图与圆形播放控件" /></a>
+  <a href="assets/previews/ios-light.jpg"><img src="assets/previews/ios-light.jpg" width="260" alt="iOS 浅色主页" /></a>
 </p>
 
 ### macOS
@@ -50,23 +56,26 @@
 
 ## 功能
 
-- **音乐搜索**：歌曲可手动选择 QQ 音乐或网易云；歌手、歌单、联想、热搜与发现歌单使用 QQ 音乐。
+- **iOS 聆听界面**：分段黑胶启动动画、封面大图主页、圆形玻璃播控与原有按压反馈；播放页整体展开，换歌时封面与背景平滑过渡。
+- **音乐搜索**：一个搜索框查询网易云结果，保留原页面遮罩交互；QQ、酷狗等其他音源暂时隐藏并停用，已有收藏仍保留。
 - **封面与歌词**：播放页随封面取色，支持明暗外观、同步歌词与逐字高亮；缺少逐字时间时会明确标注合成效果。
 - **本地歌单**：用 SwiftData 保存收藏和歌曲信息，支持 JSON 导入、导出与重复歌曲去重。
 - **播放队列**：支持下一首播放、加入待播，以及随机、单曲循环、顺序播放和列表循环。
 - **Mac 随手播控**：状态栏选歌面板与顶部播放器共享播放、收藏状态，支持悬停展开、封面、歌词、进度和音量控制；取消收藏提供确认高亮与收起动画。
-- **最高音质优先**：默认先请求母带，再按 Hi-Res、无损、320K、128K 逐级尝试；保持同一音源和歌曲 ID。
-- **歌单迁移**：粘贴 QQ 音乐或网易云音乐的公开歌单链接或 ID，预览后按原顺序合并，自动跳过已收藏歌曲。
+- **最高音质优先**：网易云通过 ChKSz 从母带音质开始，缺少可用结果时逐级尝试 Hi-Res、无损、320K、128K，保持同一歌曲 ID。
+- **歌单迁移**：粘贴网易云音乐的公开歌单链接或 ID，预览后按原顺序合并，自动跳过已收藏歌曲。
 
 Sonar 没有开屏广告或内置社交页面。歌曲、封面和歌词来自第三方服务，可用性与实际播放音质取决于歌曲和音源；歌单备份保存歌曲信息，不包含音频文件。
 
 ## English overview
 
-Sonar is a native SwiftUI music player for **iOS 17+ and macOS 14+**. Song search supports QQ Music through QQ client endpoints and NetEase through ChKSz; artist and playlist browsing use QQ Music. It provides local playlists, JSON backup, synchronized lyrics, and playback queues. The Mac app combines a menu bar library with a notch player; displays without a notch use a top capsule. Both surfaces share playback and library state.
+Sonar is a native SwiftUI music player for **iOS 17+ and macOS 14+**. A single search field queries NetEase through ChKSz. QQ Music, Kugou, and other sources are temporarily hidden and disabled. Existing favorites and backups are preserved; tracks from disabled sources are marked unavailable and excluded from playback. It provides local playlists, JSON backup, synchronized lyrics, and playback queues. The Mac app combines a menu bar library with a notch player; displays without a notch use a top capsule. Both surfaces share playback and library state.
 
-Public QQ Music and NetEase playlists can be imported from a share link or playlist ID, with a preview and deduplication before merging into the personal library.
+The current iOS source features an artwork-led home, icon navigation, a floating mini-player, and a cover-tinted player with a glass control card. Circular glass controls and their original press feedback have been restored. The welcome sequence stages the cover, vinyl, and branding before entering the home; the full player slides up from the bottom, and track changes crossfade artwork and transition the background color. Lyrics, queue management, quality selection, and the in-place search overlay remain accessible. The latest screenshots use the iPhone 17 Pro Simulator. These interface and source changes are not included in the existing public IPA.
 
-Source code is available under **GPL-3.0**, with separate notices for third-party code. Build both apps from `Sonar.xcodeproj`. [GitHub Releases](https://github.com/can4hou6joeng4/Sonar/releases) provides an unsigned iOS preview IPA and an earlier experimental Mac build. The IPA requires your own signing and provisioning; the Mac build is ad-hoc signed and not notarized. Public packages contain no personal API credentials. QQ playback and NetEase search, lyrics, playlist import, and playback require your own ChKSz key configured during a source build. Music availability and playback quality depend on third-party services; playlist backups contain metadata, not audio.
+Public NetEase playlists can be imported from a share link or playlist ID, with a preview and deduplication before merging into the personal library. Search, lyrics, and playback use ChKSz only. Playback starts at master quality and falls back through Hi-Res, lossless, 320K, and 128K for the same song. Local LX scripts are disabled and excluded from both app bundles.
+
+Source code is available under **GPL-3.0**, with separate notices for third-party code. Build both apps from `Sonar.xcodeproj`. [GitHub Releases](https://github.com/can4hou6joeng4/Sonar/releases) provides an unsigned iOS preview IPA and an earlier experimental Mac build. The IPA requires your own signing and provisioning; the Mac build is ad-hoc signed and not notarized. Public packages contain no personal API credentials or private LX scripts. Online search, lyrics, playback, and playlist import require your own ChKSz key configured during a source build. Music availability and playback quality depend on third-party services; playlist backups contain metadata, not audio.
 
 ## 运行与安装
 
@@ -87,7 +96,7 @@ Mac 预览包使用本地 ad-hoc 签名，没有 Developer ID 签名或 Apple �
 2. 在下载目录运行 `shasum -a 256 -c Sonar-1.0-build22-unsigned.ipa.sha256`，确认校验通过。
 3. 使用适用的个人签名工具签名 App 与内嵌 Widget，并按工具要求配置 Bundle ID、App Group 和描述文件，再安装到 iPhone。该 IPA 未签名，不能直接当作 App Store 安装包使用。
 
-公开 IPA 不包含个人 API 凭据，可使用 QQ 搜索、歌词、公开 QQ 歌单预览及本地资料库。QQ 播放以及网易云搜索、歌词、歌单导入和播放需要有效 ChKSz 凭据；当前通过[构建环境变量](#播放解析凭据)配置，需使用自己的 Key 从源码重新构建。预览包尚未完成本轮真机验收，第三方服务的 503 错误仍可能影响播放。
+v1.0.0-preview.2 的公开 IPA 不包含个人 API 凭据，可使用当时的 QQ 搜索、歌词、公开 QQ 歌单预览及本地资料库；它尚未包含当前源码的界面更新与仅启用网易云的调整。当前源码的在线功能需要有效 ChKSz 凭据，通过[构建环境变量](#播放解析凭据)配置自己的 Key 后重新构建。预览包尚未完成本轮真机验收，第三方服务的 502/503 错误仍可能影响播放。
 
 ## 从源码构建
 
@@ -112,7 +121,7 @@ npm ci
 npm run build:source
 ```
 
-音源运行时使用 JavaScriptCore。修改 `js-source/` 或音源入口后，应重新执行 `npm run build:source`。
+当前网易云在线功能使用原生 ChKSz 客户端。`npm run build:source` 更新共享工程保留的 JavaScript 适配资源，当前音源不会启动 JavaScriptCore 或 LX 脚本运行器。
 
 ### 运行 iOS App
 
@@ -177,32 +186,34 @@ rm -rf "$SONAR_IPA_STAGE"
 
 歌单与歌曲元数据保存在本机。iOS 设置中的「歌单备份」和 Mac 面板设置支持 JSON 导入、导出；导入会追加新歌曲并跳过重复项。两端资料库独立，可用备份手动迁移。
 
-当前启用 QQ 音乐和通过 ChKSz 提供的网易云歌曲及歌单导入接口。歌曲搜索页可手动选择音源；搜索结果与收藏保留原来的来源和歌曲 ID，播放失败时不会自动换平台或换成同名歌曲。旧网易云收藏及备份可继续使用其原 ID 请求歌词和播放地址。
+当前仅启用网易云音乐，不显示音源筛选控件。搜索、歌词、播放与公开歌单导入均通过 ChKSz 获取，播放与收藏保留所选歌曲 ID。QQ、酷狗及其他音源的入口和网络调用暂时停用；已有收藏和备份完整保留，相关歌曲标记为「不可用」，无法播放或加入待播队列，仍可管理与备份。播放全部及随机播放会跳过停用音源，不会跨平台替换歌曲。
 
 Mac 资料库位于 `~/Library/Application Support/cn.bobochang.sonar.mac/Sonar.store`；启用 App Sandbox 签名时位于应用容器对应目录。资料库打开失败时保留原文件，并提供重试与原始资料导出。
 
 ### 播放解析凭据
 
-公开源码不包含个人音源凭据，未配置凭据也可以构建，并使用 QQ 搜索、歌词和公开歌单导入。QQ 播放地址，以及网易云歌曲搜索、歌词、歌单读取和播放地址，均通过 ChKSz 获取，需要配置有效凭据；实际播放与音质仍取决于第三方服务的可用性。可通过构建环境变量配置：
+公开源码不包含个人音源凭据，未配置凭据也可以构建并管理本地资料库。网易云的在线搜索、歌词、播放解析及公开歌单导入均通过 ChKSz 获取，需要配置有效凭据；实际可用性与音质仍取决于第三方服务。可通过构建环境变量配置：
 
 | 变量 | 用途 |
 | --- | --- |
-| `SONAR_CHKSZ_KEY` | ChKSz 的 QQ 播放解析及网易云歌曲、歌单接口凭据 |
+| `SONAR_CHKSZ_KEY` | ChKSz 的网易云歌曲与歌单接口凭据 |
 
 构建脚本生成 `BuildCredentials.json` 并打包到 App。该文件已被 Git 忽略；使用凭据应遵循相应服务的授权范围和使用条款。
+
+本地 LX 主脚本、备用脚本及其运行器已停用，不再初始化、执行或打包到 iOS / Mac App；当前构建无需配置 LX 脚本路径。
 
 <details>
 <summary>播放解析与切歌</summary>
 
-两种音源的播放地址均使用 ChKSz，不再回退 QQ 游客接口或网易客户端直连接口。网易云使用 `/api/163_search`、`/api/163_lyric`、`/api/163_music`，并通过 `/api/163_playlist` 导入公开歌单；在线歌手与歌单浏览继续使用 QQ 音乐。
+网易云使用 `/api/163_search`、`/api/163_lyric`、`/api/163_music`，并通过 `/api/163_playlist` 导入公开歌单。其他音源的请求在发出前被阻断，搜索失败时显示错误并支持重试。
 
-默认从接口支持的最高母带音质开始：QQ 按 `master → hires → flac → 320k → 128k`，网易云按 `jymaster → hires → lossless → exhigh → standard` 请求。更新到此策略时，原来的首选音质会迁移为母带优先；之后手动选择其他音质仍可调整起点。搜索结果中的音质标记不限制播放解析的尝试档位。
+ChKSz 默认从母带音质开始，网易云按 `jymaster → hires → lossless → exhigh → standard` 请求。更新到此策略时，原来的首选音质会迁移为最高优先；之后手动选择其他音质仍可调整起点。搜索结果中的音质标记不限制播放解析的尝试档位。
 
-在 iOS 设置或 Mac 状态栏面板的设置中选择「从其他播放器导入」，粘贴公开歌单分享链接或输入歌单 ID。链接会自动识别音源，纯 ID 使用所选音源。QQ 复用公开歌单详情并读取后续分页；网易云使用 ChKSz 的 [`/api/163_playlist`](https://api.chksz.com/docs/163_playlist.html)，沿用现有构建凭据。普通长链接及通过 HTTP 跳转的官方短链接可用；无法识别的短链接可改用完整链接或 ID。
+在 iOS 设置或 Mac 状态栏面板的设置中选择「从其他播放器导入」，粘贴网易云公开歌单分享链接或输入歌单 ID，使用 ChKSz 的 [`/api/163_playlist`](https://api.chksz.com/docs/163_playlist.html)。QQ 歌单导入随音源暂时停用，酷狗歌单导入尚未提供。网易云普通长链接及通过 HTTP 跳转的官方短链接可用；无法识别的短链接可改用完整链接或 ID。
 
 导入前显示歌单名称、来源和歌曲数量，预览不会写入资料库。确认后按「音源＋歌曲 ID」去重并保留顺序，合并到个人歌单；不按歌名跨来源替换。一次最多读取 5,000 首；缺失或无效歌曲明确显示，部分结果需点击「导入已读取的歌曲」。服务失败或保存失败保留已有数据，未提供私密歌单登录或自动同步。
 
-未返回可用链接、已知音质或歌曲权限错误、返回了低于请求档位的音质时，尝试下一档；媒体链接经 HTTPS 和有界探测验证后，按返回音质缓存。网络错误、凭据缺失和 HTTP 503 等服务错误会直接停止并提示失败。两种音源依赖同一第三方服务，恢复网易云并不保证能避开服务整体故障。参数以 [QQ 文档](https://api.chksz.com/docs/qq_music.html)和[网易云文档](https://api.chksz.com/docs/163_music.html)为准。
+未返回可用链接、已知音质或歌曲权限错误、返回了低于请求档位的音质时，尝试下一档；媒体链接经 HTTPS 和有界探测验证后，按返回音质缓存。歌曲行的音质标记表示目录信息，与本次播放的实际音质可能不同。网络错误、凭据缺失和 HTTP 502/503 等服务错误会停止本次音质重试并显示明确提示，取消播放会中止请求。播放失败时不会自动改用其他音源或翻唱；仅启用网易云也不能保证第三方服务或所有曲目持续可用。参数以[网易云文档](https://api.chksz.com/docs/163_music.html)为准。
 
 Mac 会按当前播放模式提前解析并缓冲下一首。插歌、删歌、排序和模式切换会更新准备目标；音源尚未就绪时仍需等待网络。`--telemetry` 记录解析、媒体就绪和开始播放的阶段耗时，不包含歌曲信息、播放地址或凭据，也不等同于音频输出设备的实测静音间隔。
 
@@ -228,6 +239,7 @@ Mac 会按当前播放模式提前解析并缓冲下一首。插歌、删歌、�
 
 - [lx-music-mobile](https://github.com/lyswhut/lx-music-mobile)：Sonar 的音源与辅助代码基于其开源实践适配，来源说明保留在源码与许可材料中。
 - [Atoll](https://github.com/Ebullioscopic/Atoll)：Mac 顶部播放器的交互参考；Sonar 使用自己的窗口、界面与播放实现，未引入其源代码或素材。
+- [Spun 演示视频](https://xhslink.cn/o/9wrbFwvMx18)：iOS 大图主页、悬浮播放条与播放控制卡片的视觉参考，由 Sonar 使用 SwiftUI 实现。
 
 第三方代码、依赖与许可说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 和 [LICENSES/](LICENSES/)。
 

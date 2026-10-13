@@ -253,6 +253,10 @@ struct MacStatusPanel: View {
             }
         } else if tab == .search, let error = search.errorMessage {
             compactMessage(error, action: submitSearch)
+        } else if tab == .search, let source = search.songSourceWarnings.first {
+            compactMessage("\(source.displayName)暂不可用，已显示其他音源结果") {
+                Task { await search.retryFailedSource(source) }
+            }
         } else if let notice = model.notice {
             HStack {
                 Text(notice).font(.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -292,12 +296,12 @@ struct MacStatusPanel: View {
                                 MacArtworkView(track: track, service: model.artworkService, size: 32, radius: 6)
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(track.title).lineLimit(1).fontWeight(playback.queue.current?.musicID == track.musicID ? .semibold : .regular)
-                                    Text("\(track.artist) · \(track.source.displayName)").font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                                    Text("\(track.artist) · \(track.source.displayName)\(track.source.isEnabled ? "" : " · 不可用")").font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                                 }
                                 Spacer(minLength: 0)
                             }.contentShape(Rectangle())
                         }.buttonStyle(.plain).accessibilityLabel("播放 \(track.title)，\(track.artist)")
-                            .disabled(wasRemoved)
+                            .disabled(wasRemoved || !track.source.isEnabled)
                         if wasRemoved {
                             Label("已移除", systemImage: "checkmark.circle.fill")
                                 .font(.caption).foregroundStyle(.green)
@@ -392,7 +396,7 @@ struct MacStatusPanel: View {
                             .frame(width: 18).foregroundStyle(.secondary)
                         VStack(alignment: .leading, spacing: 3) {
                             Text("从其他播放器导入").fontWeight(.medium)
-                            Text("QQ 音乐或网易云公开歌单")
+                            Text("网易云公开歌单")
                                 .font(.caption2).foregroundStyle(.secondary)
                         }
                         Spacer(minLength: 8)

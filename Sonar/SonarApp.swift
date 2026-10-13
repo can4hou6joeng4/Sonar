@@ -50,9 +50,9 @@ private final class SonarServices {
         let breaker = ChkszCircuitBreaker()
         let chkszAPI = ChkszAPIClient(credentials: credentials, breaker: breaker)
         let netease = ChkszNetEaseClient(api: chkszAPI)
-        let runtime = ChkszSourceRuntime(qq: JavaScriptSourceRuntime(), netease: netease)
+        let runtime = ChkszSourceRuntime(netease: netease)
         sourceRuntime = runtime
-        onlinePlaylistImporter = OnlinePlaylistImportService(qq: runtime, chkszAPI: chkszAPI)
+        onlinePlaylistImporter = OnlinePlaylistImportService(chkszAPI: chkszAPI)
         let resolver = PlaybackResolverPipeline.make(
             primary: PlaybackURLResolver(
                 credentials: credentials,
@@ -102,14 +102,13 @@ private struct ThemedRootView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let scheme = themeState.scheme(for: systemColorScheme)
+        let scheme = M3Scheme.spotlight(dark: themeState.appearanceMode.resolved(using: systemColorScheme) == .dark)
         let shouldReduceMotion = reduceMotion || !uiPreferences.motionEnabled
 
         RootView(sourceRuntime: sourceRuntime)
             .environment(\.m3Scheme, scheme)
             .environment(\.playerPalette, PlayerPalette(scheme: scheme))
             .environment(\.sonarReduceMotion, shouldReduceMotion)
-            .preferredColorScheme(themeState.appearanceMode.colorScheme)
             .tint(scheme.primary)
             .animation(
                 AppMotion.emphasized(duration: AppMotion.long, reduceMotion: shouldReduceMotion),

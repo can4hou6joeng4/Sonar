@@ -254,6 +254,9 @@ public final class PlaybackService {
         activePlaylistID: UUID? = nil,
         preservingPlayedMusicIDs: Set<String> = []
     ) async {
+        guard let selection = PlaybackQueue.playableSelection(tracks, startingAt: index) else { return }
+        let tracks = selection.tracks
+        let index = selection.index
         self.activePlaylistID = activePlaylistID
         consecutiveAutoplayFailures = 0
         discardUpcoming()
@@ -282,7 +285,9 @@ public final class PlaybackService {
         startingAt index: Int? = nil,
         activePlaylistID: UUID? = nil
     ) async -> Bool {
-        guard !tracks.isEmpty else { return false }
+        guard let selection = PlaybackQueue.playableSelection(tracks, startingAt: index) else { return false }
+        let tracks = selection.tracks
+        let index = selection.index
         consecutiveAutoplayFailures = 0
         let sameQueue = queue.hasSameTracks(as: tracks)
         setPlaybackMode(.shuffle)
@@ -328,6 +333,7 @@ public final class PlaybackService {
     }
 
     public func onTrackAddedToPlaylist(_ track: Track, playlistID: UUID) {
+        guard track.source.isEnabled else { return }
         guard activePlaylistID == playlistID else { return }
         guard !queue.tracks.contains(where: { $0.musicID == track.musicID }) else { return }
         defer { prefetchUpcomingTrackIfNeeded() }
@@ -354,6 +360,7 @@ public final class PlaybackService {
 
     @discardableResult
     public func enqueue(_ track: Track) async -> Bool {
+        guard track.source.isEnabled else { return false }
         guard !queue.tracks.contains(where: { $0.musicID == track.musicID }) else {
             return false
         }
@@ -368,6 +375,7 @@ public final class PlaybackService {
     }
 
     public func playNext(_ track: Track) async {
+        guard track.source.isEnabled else { return }
         guard let currentIndex = queue.currentIndex else {
             _ = await enqueue(track)
             return
@@ -480,6 +488,7 @@ public final class PlaybackService {
     }
 
     public func insertQueueItem(_ track: Track, at index: Int) {
+        guard track.source.isEnabled else { return }
         queue.insert(track, at: index)
         prefetchUpcomingTrackIfNeeded()
     }
@@ -568,7 +577,7 @@ public final class PlaybackService {
         let revision = intentRevision
         state = .loading
         do {
-            try track.source.requireEnabled()
+            try resolver.requirePlaybackSupport(for: track.source)
             let url = try await resolver.musicURL(for: track, quality: quality)
             try Task.checkCancellation()
             guard recoveryGate.isCurrent(generation), queue.current?.musicID == track.musicID else {
@@ -659,7 +668,7 @@ public final class PlaybackService {
         hasPrefetchedUpcomingForCurrentTrack = false
         updateNowPlaying()
         do {
-            try track.source.requireEnabled()
+            try resolver.requirePlaybackSupport(for: track.source)
             if let preparedItem, let asset = preparedItem.asset as? AVURLAsset {
                 // No suspension between adopting the queued item and advancing:
                 // a mode or queue edit cannot insert a different item ahead of it.

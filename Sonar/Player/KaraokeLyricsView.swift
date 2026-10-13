@@ -6,6 +6,7 @@ struct KaraokeLyricsView: View {
     let lyrics: KaraokeLyrics
     let errorMessage: String?
     let edgeFadeEnabled: Bool
+    var isVisible = true
 
     @Environment(PlaybackService.self) private var playbackService
     @Environment(\.sonarReduceMotion) private var reduceMotion
@@ -27,6 +28,12 @@ struct KaraokeLyricsView: View {
         .onChange(of: playbackService.elapsed) { _, _ in synchronizePlayback() }
         .onChange(of: playbackService.state) { _, _ in synchronizePlayback() }
         .onChange(of: reduceMotion) { _, _ in synchronizePlayback() }
+        .onChange(of: isVisible) { _, visible in
+            if visible {
+                synchronizePlayback()
+                state.resumeFollowing(at: .now)
+            }
+        }
     }
 
     private var lyricsContent: some View {
@@ -64,7 +71,7 @@ struct KaraokeLyricsView: View {
                     KaraokeEdgeFadeMask(enabled: edgeFadeEnabled, height: geometry.size.height)
                 }
                 .overlay {
-                    KaraokeFrameTicker(state: state)
+                    KaraokeFrameTicker(state: state, isVisible: isVisible)
                 }
                 .accessibilityIdentifier("karaoke-lyrics-list")
 
@@ -242,6 +249,7 @@ private final class KaraokeLyricsViewState {
     }
 
     func updateScrollMetrics(offset: CGFloat, viewportHeight: CGFloat, contentHeight: CGFloat) {
+        let needsInitialPosition = self.viewportHeight <= 0 || self.contentHeight <= 0
         self.viewportHeight = viewportHeight
         self.contentHeight = contentHeight
         if abs(scrollOffset - offset) > 0.1 {
@@ -250,7 +258,17 @@ private final class KaraokeLyricsViewState {
         if spring.isRunning {
             spring.position = scrollOffset
         }
-        refreshRoughTargetIfPossible()
+        if needsInitialPosition, viewportHeight > 0, contentHeight > 0,
+           let activeIndex, !userScrollLocked {
+            let target = targetOffset(for: activeIndex)
+            if reduceMotion {
+                spring.stop(at: target.offset)
+                scrollOffset = target.offset
+            } else {
+                startSpring(to: target.offset, isRough: target.isRough)
+            }
+        }
+        refreshTargetAfterLayout()
     }
 
     func updateLineFrames(_ frames: [Int: CGRect], at date: Date) {
@@ -264,7 +282,7 @@ private final class KaraokeLyricsViewState {
             spring.target = target
             spring.velocity = 0
         }
-        refreshRoughTargetIfPossible()
+        refreshTargetAfterLayout()
     }
 
     func userScrollBegan(at date: Date) {
@@ -486,12 +504,20 @@ private final class KaraokeLyricsViewState {
         min(max(0, value), max(0, contentHeight - viewportHeight))
     }
 
-    private func refreshRoughTargetIfPossible() {
-        guard spring.isRunning, spring.isRough, let activeIndex,
-              lineFrames[activeIndex] != nil else { return }
+    private func refreshTargetAfterLayout() {
+        guard !userScrollLocked, waves.isEmpty, let activeIndex,
+              lineFrames[activeIndex] != nil, viewportHeight > 0 else { return }
         let target = targetOffset(for: activeIndex)
-        spring.target = target.offset
-        spring.isRough = false
+        if reduceMotion {
+            spring.stop(at: target.offset)
+            scrollOffset = target.offset
+        } else if spring.isRunning {
+            // Lazy rows can refine their frames after an initially estimated scroll.
+            spring.target = target.offset
+            spring.isRough = false
+        } else if abs(target.offset - scrollOffset) > 1 {
+            startSpring(to: target.offset, isRough: false)
+        }
     }
 
     private func updateDeadlines(at date: Date) {
@@ -549,9 +575,10 @@ private extension KaraokeLyricsViewState {
 
 private struct KaraokeFrameTicker: View {
     let state: KaraokeLyricsViewState
+    let isVisible: Bool
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 60, paused: !state.shouldTick)) { context in
+        TimelineView(.animation(minimumInterval: 1 / 60, paused: !isVisible || !state.shouldTick)) { context in
             Color.clear
                 .onChange(of: context.date, initial: true) { _, date in
                     state.tick(at: date)

@@ -3,6 +3,8 @@ import SwiftUI
 
 struct DiscoverView: View {
     let isActive: Bool
+    let showsSpotlight: Bool
+    let onShowCollection: () -> Void
     let onOpenSearch: () -> Void
     let onOpenSettings: () -> Void
     let onSettingsDragChanged: (DragGesture.Value) -> Void
@@ -12,6 +14,7 @@ struct DiscoverView: View {
     @Environment(ToastCenter.self) private var toastCenter
     @Environment(\.modelContext) private var modelContext
     @Environment(\.m3Scheme) private var scheme
+    @Environment(\.shellSafeAreaInsets) private var safeAreaInsets
     @Environment(\.trackDetailRefreshCoordinator) private var trackDetailRefreshCoordinator
     @Query(sort: \Playlist.sortIndex) private var libraryPlaylists: [Playlist]
     @State private var actionError: String?
@@ -19,12 +22,16 @@ struct DiscoverView: View {
 
     init(
         isActive: Bool,
+        showsSpotlight: Bool = true,
         onOpenSearch: @escaping () -> Void = {},
         onOpenSettings: @escaping () -> Void = {},
+        onShowCollection: @escaping () -> Void = {},
         onSettingsDragChanged: @escaping (DragGesture.Value) -> Void = { _ in },
         onSettingsDragEnded: @escaping (DragGesture.Value) -> Void = { _ in }
     ) {
         self.isActive = isActive
+        self.showsSpotlight = showsSpotlight
+        self.onShowCollection = onShowCollection
         self.onOpenSearch = onOpenSearch
         self.onOpenSettings = onOpenSettings
         self.onSettingsDragChanged = onSettingsDragChanged
@@ -41,10 +48,7 @@ struct DiscoverView: View {
         let playlist = personalPlaylist
         let tracks = playlist?.orderedItems.compactMap { $0.track.track } ?? []
 
-        VStack(spacing: 0) {
-            header
-            homeContent(playlist: playlist, tracks: tracks)
-        }
+        homeContent(playlist: playlist, tracks: tracks)
         .background(scheme.appSurface.ignoresSafeArea())
         .rootSettingsDrawerGesture(
             isEnabled: isActive,
@@ -66,6 +70,7 @@ struct DiscoverView: View {
                     selectedTrackForActions = nil
                     Task { await playbackService.replaceQueue([track]) }
                 }
+                .disabled(!(selectedTrackForActions?.source.isEnabled ?? false))
                 Button("下一首播放", systemImage: "text.line.first.and.arrowtriangle.forward") {
                     selectedTrackForActions = nil
                     Task {
@@ -73,6 +78,7 @@ struct DiscoverView: View {
                         toastCenter.show("已设为下一首播放")
                     }
                 }
+                .disabled(!(selectedTrackForActions?.source.isEnabled ?? false))
                 Button("加入待播放", systemImage: "text.badge.plus") {
                     selectedTrackForActions = nil
                     Task {
@@ -80,6 +86,7 @@ struct DiscoverView: View {
                         toastCenter.show(added ? "已加入待播放" : "歌曲已在待播放中")
                     }
                 }
+                .disabled(!(selectedTrackForActions?.source.isEnabled ?? false))
                 Button("移出歌单", systemImage: "trash", role: .destructive) {
                     selectedTrackForActions = nil
                     removeTrack(track)
@@ -106,142 +113,156 @@ struct DiscoverView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            Text("Sonar")
-                .font(.system(size: 24, weight: .bold))
-                .foregroundStyle(scheme.onSurface)
+            Text(showsSpotlight ? "sonar" : "我的收藏")
+                .font(.system(size: showsSpotlight ? 23 : 30, weight: .bold, design: .rounded))
             Spacer()
             Button(action: onOpenSearch) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(scheme.onSurface)
-                    .frame(width: 44, height: 44)
+                Image(systemName: "magnifyingglass").font(.system(size: 20)).frame(width: 44, height: 44)
             }
             .buttonStyle(.circleIcon(diameter: 38))
             .accessibilityLabel("搜索")
             .accessibilityIdentifier("home-search-button")
+            Button(action: onOpenSettings) {
+                Image(systemName: "gearshape").font(.system(size: 20)).frame(width: 44, height: 44)
+            }
+            .buttonStyle(.circleIcon(diameter: 38))
+            .accessibilityLabel("设置")
+            .accessibilityIdentifier("home-settings-button")
         }
-        .frame(minHeight: NCMDesignTokens.Layout.navigationHeight)
-        .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
-        .padding(.top, 6)
+        .foregroundStyle(showsSpotlight ? .white : scheme.onSurface)
+        .padding(.horizontal, 22)
+        .padding(.top, showsSpotlight ? safeAreaInsets.top + 4 : 14)
     }
 
     private func homeContent(playlist: Playlist?, tracks: [Track]) -> some View {
-        ScrollView {
+        let featured = playbackService.queue.current ?? tracks.first(where: { $0.source.isEnabled })
+        let displayed = showsSpotlight ? Array(tracks.prefix(6)) : tracks
+        return ScrollView {
             LazyVStack(spacing: 0) {
+                if showsSpotlight {
+                    spotlightHero(track: featured, caption: tracks.contains { $0.musicID == featured?.musicID } ? "来自你的收藏" : "正在聆听")
+                } else {
+                    header.padding(.bottom, 20)
+                }
                 playlistHeader(playlist: playlist, tracks: tracks)
-
-                if !tracks.isEmpty {
-                    ForEach(Array(tracks.enumerated()), id: \.element.musicID) { index, track in
+                if !displayed.isEmpty {
+                    ForEach(Array(displayed.enumerated()), id: \.element.musicID) { index, track in
                         SongRow(
-                            track: track,
-                            leading: .cover,
-                            trailing: .more,
-                            showDivider: index < tracks.count - 1,
+                            track: track, leading: .cover, trailing: .more,
+                            showAlbum: false, showDivider: false,
                             isCurrent: playbackService.queue.current?.musicID == track.musicID,
                             isPlaying: playbackService.state == .playing,
                             onPlay: { Task { await playbackService.replaceQueue(tracks, startingAt: index, activePlaylistID: playlist?.id) } },
                             onAction: { selectedTrackForActions = track }
                         )
                         .contextMenu {
-                            Button {
-                                Task { await playbackService.replaceQueue(tracks, startingAt: index, activePlaylistID: playlist?.id) }
-                            } label: {
-                                Label("立即播放", systemImage: "play.fill")
+                            Button("立即播放", systemImage: "play.fill") { Task { await playbackService.replaceQueue(tracks, startingAt: index, activePlaylistID: playlist?.id) } }
+                            .disabled(!track.source.isEnabled)
+                            Button("下一首播放", systemImage: "text.line.first.and.arrowtriangle.forward") {
+                                Task { await playbackService.playNext(track); toastCenter.show("已设为下一首播放") }
                             }
-                            Button {
-                                Task {
-                                    await playbackService.playNext(track)
-                                    toastCenter.show("已设为下一首播放")
-                                }
-                            } label: {
-                                Label("下一首播放", systemImage: "text.line.first.and.arrowtriangle.forward")
+                            .disabled(!track.source.isEnabled)
+                            Button("加入待播放", systemImage: "text.badge.plus") {
+                                Task { let added = await playbackService.enqueue(track); toastCenter.show(added ? "已加入待播放" : "歌曲已在待播放中") }
                             }
-                            Button {
-                                Task {
-                                    let added = await playbackService.enqueue(track)
-                                    toastCenter.show(added ? "已加入待播放" : "歌曲已在待播放中")
-                                }
-                            } label: {
-                                Label("加入待播放", systemImage: "text.badge.plus")
-                            }
-                            Divider()
-                            Button(role: .destructive) {
-                                removeTrack(track, from: playlist)
-                            } label: {
-                                Label("移出歌单", systemImage: "trash")
-                            }
+                            .disabled(!track.source.isEnabled)
+                            Button("移出歌单", systemImage: "trash", role: .destructive) { removeTrack(track, from: playlist) }
                         }
                     }
-                } else {
-                    VStack(spacing: 14) {
-                        Image(systemName: "heart.slash")
-                            .font(.system(size: 40))
-                            .foregroundStyle(scheme.onSurfaceVariant.opacity(0.4))
-                            .padding(.top, 48)
-                            .accessibilityHidden(true)
-
-                        Text("还没有收藏的音乐")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(scheme.onSurface)
-
-                        Text("点击右上角搜索，发现并收藏你喜爱的歌曲")
-                            .font(.system(size: 13))
+                    if showsSpotlight, tracks.count > displayed.count {
+                        Button(action: onShowCollection) {
+                            HStack {
+                                Text("查看全部 \(tracks.count) 首收藏")
+                                Spacer()
+                                Image(systemName: "arrow.right")
+                            }
+                            .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(scheme.onSurfaceVariant)
+                            .padding(.horizontal, 24)
+                            .frame(minHeight: 52)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("home-all-favorites")
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 32)
+                } else {
+                    VStack(spacing: 12) {
+                        Text("从一首喜欢的歌开始").font(.system(size: 19, weight: .semibold))
+                        Text("搜索歌曲，将它们留在你的收藏里")
+                            .font(.system(size: 13)).foregroundStyle(scheme.onSurfaceVariant)
+                        Button("搜索音乐", action: onOpenSearch)
+                            .buttonStyle(.borderedProminent).padding(.top, 8)
+                    }
+                    .frame(maxWidth: .infinity).padding(.vertical, 48)
                 }
-
-                Color.clear.frame(height: 32)
+                Color.clear.frame(height: 20)
             }
         }
+        .ignoresSafeArea(.container, edges: showsSpotlight ? .top : [])
         .scrollIndicators(.hidden)
-        .refreshable {
-            await refreshTrackDetails(tracks, limit: 50, force: true)
+        .refreshable { await refreshTrackDetails(tracks, limit: 50, force: true) }
+    }
+
+    private func spotlightHero(track: Track?, caption: String) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            SpotlightArtwork(track: track)
+            LinearGradient(stops: [
+                .init(color: .black.opacity(0.28), location: 0),
+                .init(color: .black.opacity(0.04), location: 0.32),
+                .init(color: scheme.appSurface.opacity(0.6), location: 0.72),
+                .init(color: scheme.appSurface, location: 1)
+            ], startPoint: .top, endPoint: .bottom)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(track == nil ? "你的音乐，从这里开始" : caption).font(.system(size: 10, weight: .semibold)).tracking(2)
+                    .foregroundStyle(scheme.onSurfaceVariant)
+                Text(track.flatMap { $0.artist.isEmpty ? nil : $0.artist } ?? "听见你的音乐")
+                    .font(.system(size: 39, weight: .bold)).tracking(-1.4)
+                    .foregroundStyle(scheme.onSurface)
+                    .lineLimit(2).minimumScaleFactor(0.8)
+                Text(track.map { $0.album.isEmpty ? $0.title : $0.album } ?? "让每一首歌都有自己的位置")
+                    .font(.system(size: 12)).foregroundStyle(scheme.onSurfaceVariant)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 24).padding(.bottom, 20)
         }
+        .frame(height: 380 + safeAreaInsets.top)
+        .overlay(alignment: .top) { header }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("home-spotlight-hero")
     }
 
     private func playlistHeader(playlist: Playlist?, tracks: [Track]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("\(tracks.count) 首歌曲")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(scheme.onSurfaceVariant)
-                .accessibilityIdentifier("home-playlist-count")
-
+            HStack {
+                Text(showsSpotlight ? "收藏歌曲" : "全部歌曲")
+                    .font(.system(size: 20, weight: .bold)).foregroundStyle(scheme.onSurface)
+                Spacer()
+                Text("\(tracks.count) 首歌曲")
+                    .font(.system(size: 11)).foregroundStyle(scheme.onSurfaceVariant)
+                    .accessibilityIdentifier("home-playlist-count")
+            }
             HStack(spacing: 10) {
                 playlistActionButton(
-                    title: "播放全部",
-                    systemImage: "play.fill",
-                    foreground: scheme.onPrimary,
-                    background: scheme.primary,
-                    identifier: "home-play-all-button",
-                    isDisabled: tracks.isEmpty,
-                    action: { playAll(playlist: playlist, tracks: tracks) }
-                )
+                    title: "播放全部", systemImage: "play.fill",
+                    foreground: scheme.onPrimary, background: scheme.primary,
+                    identifier: "home-play-all-button", isDisabled: !tracks.contains(where: { $0.source.isEnabled })
+                ) {
+                    playAll(playlist: playlist, tracks: tracks)
+                }
                 playlistActionButton(
-                    title: "随机播放",
-                    systemImage: "shuffle",
-                    foreground: scheme.onSurface,
-                    background: scheme.surfaceContainerHigh,
-                    identifier: "home-shuffle-button",
-                    isDisabled: tracks.isEmpty,
-                    action: { shuffleAll(playlist: playlist, tracks: tracks) }
-                )
+                    title: "随机播放", systemImage: "shuffle",
+                    foreground: scheme.onSurface, background: scheme.surfaceContainerHigh,
+                    identifier: "home-shuffle-button", isDisabled: !tracks.contains(where: { $0.source.isEnabled })
+                ) {
+                    shuffleAll(playlist: playlist, tracks: tracks)
+                }
             }
         }
-        .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
-        .padding(.top, 12)
-        .padding(.bottom, 8)
+        .padding(.horizontal, 24).padding(.bottom, 10)
     }
 
     private func playlistActionButton(
-        title: String,
-        systemImage: String,
-        foreground: Color,
-        background: Color,
-        identifier: String,
-        isDisabled: Bool,
-        action: @escaping () -> Void
+        title: String, systemImage: String, foreground: Color, background: Color,
+        identifier: String, isDisabled: Bool, action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             Label(title, systemImage: systemImage)
@@ -250,6 +271,7 @@ struct DiscoverView: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 40)
                 .background(background, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .frame(minHeight: 44)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.bounce)
@@ -290,7 +312,7 @@ struct DiscoverView: View {
 
     private func refreshTrackDetails(_ candidates: [Track], limit: Int = 20, force: Bool = false) async {
         guard let trackDetailRefreshCoordinator else { return }
-        let selected = force ? candidates : candidates.filter { $0.highestKnownQuality == .standard }
+        let selected = candidates.filter { $0.source.isEnabled && (force || $0.highestKnownQuality == .standard) }
         guard !selected.isEmpty else { return }
         let store = LibraryStore(context: modelContext)
 
@@ -347,8 +369,10 @@ struct HomeSearchOverlay: View {
                     searchBar
                     if !trimmedQuery.isEmpty {
                         VStack(spacing: 0) {
-                            searchFilters
-                            Divider().overlay(scheme.outlineVariant)
+                            if SearchScope.availableCases.count > 1 {
+                                searchScopePicker.padding(.horizontal, 12).padding(.vertical, 6)
+                                Divider().overlay(scheme.outlineVariant)
+                            }
                             searchContent
                         }
                         .frame(maxHeight: min(max(proxy.size.height - 84, 0), 600))
@@ -394,6 +418,7 @@ struct HomeSearchOverlay: View {
                 selectedTrackForActions = nil
                 Task { await playbackService.replaceQueue([track]) }
             }
+            .disabled(!(selectedTrackForActions?.source.isEnabled ?? false))
             Button("下一首播放", systemImage: "text.line.first.and.arrowtriangle.forward") {
                 guard let track = selectedTrackForActions else { return }
                 selectedTrackForActions = nil
@@ -402,6 +427,7 @@ struct HomeSearchOverlay: View {
                     toastCenter.show("已设为下一首播放")
                 }
             }
+            .disabled(!(selectedTrackForActions?.source.isEnabled ?? false))
             Button("加入待播放", systemImage: "text.badge.plus") {
                 guard let track = selectedTrackForActions else { return }
                 selectedTrackForActions = nil
@@ -410,6 +436,7 @@ struct HomeSearchOverlay: View {
                     toastCenter.show(added ? "已加入待播放" : "歌曲已在待播放中")
                 }
             }
+            .disabled(!(selectedTrackForActions?.source.isEnabled ?? false))
             Button("收藏到歌单", systemImage: "music.note.list") {
                 guard let track = selectedTrackForActions else { return }
                 selectedTrackForActions = nil
@@ -429,7 +456,7 @@ struct HomeSearchOverlay: View {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 16, weight: .medium))
-                TextField("搜索歌曲、歌手或歌单", text: $model.query)
+                TextField("搜索歌曲或歌手", text: $model.query)
                     .font(.system(size: 15))
                     .foregroundStyle(scheme.onSurface)
                     .textInputAutocapitalization(.never)
@@ -479,24 +506,9 @@ struct HomeSearchOverlay: View {
         }
     }
 
-    private var searchFilters: some View {
-        HStack(spacing: 12) {
-            searchScopePicker
-            if model.selectedScope == .songs {
-                searchSourcePicker
-            } else {
-                Text("QQ 音乐")
-                    .font(.caption)
-                    .foregroundStyle(scheme.onSurfaceVariant)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-    }
-
     private var searchScopePicker: some View {
         HStack(spacing: 0) {
-            ForEach(SearchScope.allCases) { scope in
+            ForEach(SearchScope.availableCases) { scope in
                 Button {
                     focused = false
                     model.selectedScope = scope
@@ -521,34 +533,6 @@ struct HomeSearchOverlay: View {
             }
         }
         .background(scheme.appInputFill, in: Capsule())
-    }
-
-    private var searchSourcePicker: some View {
-        Menu {
-            Picker("歌曲音源", selection: Binding(
-                get: { model.selectedSongSource },
-                set: { source in
-                    focused = false
-                    Task { await model.selectSongSource(source) }
-                }
-            )) {
-                ForEach(MusicSource.allCases, id: \.self) { source in
-                    Text(source.displayName).tag(source)
-                }
-            }
-        } label: {
-            HStack(spacing: 5) {
-                Text(model.selectedSongSource.displayName)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 10, weight: .semibold))
-            }
-            .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(scheme.onSurfaceVariant)
-            .frame(minHeight: 44)
-        }
-        .accessibilityLabel("歌曲音源：\(model.selectedSongSource.displayName)")
-        .accessibilityHint("切换 QQ 音乐或网易云")
-        .accessibilityIdentifier("search-source-picker")
     }
 
     private var searchResultsContent: some View {
@@ -576,7 +560,7 @@ struct HomeSearchOverlay: View {
             } else if let errorMessage = model.songSearchErrorMessage ?? model.errorMessage {
                 VStack {
                     ContentUnavailableView("搜索不可用", systemImage: "exclamationmark.triangle", description: Text(errorMessage))
-                    Button(model.isRetryingFailedSource ? "正在重试…" : "重试\(model.selectedSongSource.displayName)搜索") {
+                    Button(model.isRetryingFailedSource ? "正在重试…" : "重试搜索") {
                         Task { await model.retryFailedSource() }
                     }
                     .disabled(model.isRetryingFailedSource)
@@ -603,6 +587,20 @@ struct HomeSearchOverlay: View {
                             selectedTrackForActions = track
                         }
                     )
+                }
+                ForEach(model.songSourceWarnings, id: \.self) { source in
+                    HStack(spacing: 8) {
+                        Text("\(source.displayName)暂不可用，已显示其他音源结果")
+                            .font(.caption)
+                            .foregroundStyle(scheme.onSurfaceVariant)
+                        Spacer(minLength: 0)
+                        Button("重试") { Task { await model.retryFailedSource(source) } }
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(scheme.primary)
+                            .disabled(model.isRetryingFailedSource)
+                            .accessibilityLabel("重试\(source.displayName)搜索")
+                    }
+                    .padding(16)
                 }
             }
         }

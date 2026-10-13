@@ -1,6 +1,19 @@
 import Foundation
 
 public struct PlaybackQueue: Sendable, Equatable {
+    static func playableSelection(_ tracks: [Track], startingAt index: Int?) -> (tracks: [Track], index: Int?)? {
+        let enabled = tracks.enumerated().filter { $0.element.source.isEnabled }
+        guard !enabled.isEmpty else { return nil }
+        let mappedIndex: Int?
+        if let index {
+            guard let value = enabled.firstIndex(where: { $0.offset == index }) else { return nil }
+            mappedIndex = value
+        } else {
+            mappedIndex = nil
+        }
+        return (enabled.map(\.element), mappedIndex)
+    }
+
     private struct Entry: Sendable, Equatable, Identifiable {
         let id: UUID
         var track: Track

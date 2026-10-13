@@ -105,12 +105,12 @@ public final class JavaScriptSourceRuntime: SourceRuntime, @unchecked Sendable {
     }
 
     public func lyric(_ track: Track) async throws -> LyricInfo {
-        try track.source.requireQQClientSupport()
+        try track.source.requireQQMetadataSupport()
         return try JSONDecoder().decode(LyricInfo.self, from: await invokeData("lyric", arguments: [track.source.rawValue, track.rawPayload]))
     }
 
     public func picURL(_ track: Track) async throws -> URL {
-        try track.source.requireQQClientSupport()
+        try track.source.requireQQMetadataSupport()
         let value = try JSONDecoder().decode(String.self, from: await invokeData("pic", arguments: [track.source.rawValue, track.rawPayload]))
         guard let url = URL(string: value), ["http", "https"].contains(url.scheme?.lowercased()) else {
             throw SourceError.source(message: "音源返回封面地址异常")
@@ -263,7 +263,7 @@ public final class JavaScriptSourceRuntime: SourceRuntime, @unchecked Sendable {
     }
 
     public func trackDetail(_ track: Track) async throws -> Track {
-        try track.source.requireQQClientSupport()
+        try track.source.requireQQMetadataSupport()
         let data = try await invokeData("musicInfo", arguments: [track.source.rawValue, track.songmid])
         guard let raw = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw SourceError.source(message: "音源返回曲目信息异常")

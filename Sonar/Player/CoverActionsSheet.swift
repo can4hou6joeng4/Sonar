@@ -41,6 +41,7 @@ struct CoverActionsSheet: View {
                     ) {
                         onAddToQueue()
                     }
+                    .disabled(!track.source.isEnabled)
                     actionRow(
                         icon: playlistAction.icon,
                         title: playlistAction.title,
@@ -57,6 +58,7 @@ struct CoverActionsSheet: View {
                     ) {
                         onSelectQuality()
                     }
+                    .disabled(!track.source.isEnabled)
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 20)

@@ -124,6 +124,7 @@ struct PlaylistDetailView: View {
                 let startIndex = selected.playlistIndex ?? tracks.firstIndex(where: { $0.musicID == selected.track.musicID }) ?? 0
                 Task { await playbackService.replaceQueue(tracks, startingAt: startIndex, activePlaylistID: playlist?.id) }
             }
+            .disabled(!(selectedEntry?.track.source.isEnabled ?? false))
             Button("下一首播放", systemImage: "text.line.first.and.arrowtriangle.forward") {
                 guard let track = selectedEntry?.track else { return }
                 selectedEntry = nil
@@ -132,6 +133,7 @@ struct PlaylistDetailView: View {
                     toastCenter.show("已设为下一首播放")
                 }
             }
+            .disabled(!(selectedEntry?.track.source.isEnabled ?? false))
             Button("加入待播放", systemImage: "text.badge.plus") {
                 guard let track = selectedEntry?.track else { return }
                 selectedEntry = nil
@@ -140,6 +142,7 @@ struct PlaylistDetailView: View {
                     toastCenter.show(added ? "已加入待播放" : "歌曲已在待播放中")
                 }
             }
+            .disabled(!(selectedEntry?.track.source.isEnabled ?? false))
             Button("收藏到歌单", systemImage: "music.note.list") {
                 guard let track = selectedEntry?.track else { return }
                 selectedEntry = nil
@@ -239,18 +242,21 @@ struct PlaylistDetailView: View {
                         Button("立即播放", systemImage: "play.fill") {
                             Task { await playbackService.replaceQueue(tracks, startingAt: index, activePlaylistID: playlist?.id) }
                         }
+                        .disabled(!entry.track.source.isEnabled)
                         Button("下一首播放", systemImage: "text.line.first.and.arrowtriangle.forward") {
                             Task {
                                 await playbackService.playNext(entry.track)
                                 toastCenter.show("已设为下一首播放")
                             }
                         }
+                        .disabled(!entry.track.source.isEnabled)
                         Button("加入待播放", systemImage: "text.badge.plus") {
                             Task {
                                 let added = await playbackService.enqueue(entry.track)
                                 toastCenter.show(added ? "已加入待播放" : "歌曲已在待播放中")
                             }
                         }
+                        .disabled(!entry.track.source.isEnabled)
                         Button("收藏到歌单", systemImage: "music.note.list") {
                             PersonalPlaylistCollectionFeedback.collect(
                                 entry.track,
@@ -310,8 +316,8 @@ struct PlaylistDetailView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.bounce)
-        .disabled(tracks.isEmpty)
-        .opacity(tracks.isEmpty ? 0.45 : 1)
+        .disabled(!tracks.contains(where: { $0.source.isEnabled }))
+        .opacity(tracks.contains(where: { $0.source.isEnabled }) ? 1 : 0.45)
         .accessibilityLabel("播放全部")
         .accessibilityHint(tracks.isEmpty ? "歌单中还没有歌曲" : "按添加顺序播放歌单中的全部歌曲")
         .accessibilityIdentifier(isPersonalPlaylist ? "personal-playlist-play-all-button" : "playlist-play-all-button")
@@ -335,8 +341,8 @@ struct PlaylistDetailView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.bounce)
-        .disabled(tracks.isEmpty)
-        .opacity(tracks.isEmpty ? 0.45 : 1)
+        .disabled(!tracks.contains(where: { $0.source.isEnabled }))
+        .opacity(tracks.contains(where: { $0.source.isEnabled }) ? 1 : 0.45)
         .accessibilityLabel("随机播放")
         .accessibilityHint(tracks.isEmpty ? "歌单中还没有歌曲" : "随机排列歌单并开始播放")
         .accessibilityIdentifier(isPersonalPlaylist ? "personal-playlist-shuffle-button" : "playlist-shuffle-button")
@@ -421,7 +427,7 @@ struct PlaylistDetailView: View {
 
     private func refreshTrackDetails(limit: Int = 20, force: Bool = false) async {
         guard let trackDetailRefreshCoordinator else { return }
-        let candidates = force ? tracks : tracks.filter { $0.highestKnownQuality == .standard }
+        let candidates = tracks.filter { $0.source.isEnabled && (force || $0.highestKnownQuality == .standard) }
         guard !candidates.isEmpty else { return }
         let store = LibraryStore(context: modelContext)
 

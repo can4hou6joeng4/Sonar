@@ -75,7 +75,6 @@ public actor LyricsService {
     }
 
     public func lyrics(for track: Track, now: Date = Date()) async throws -> LyricInfo {
-        try track.source.requireEnabled()
         try Task.checkCancellation()
         let key = track.musicID
         let cached = readEntry(for: key)
@@ -370,7 +369,11 @@ struct PlayerPage: View {
                 PlayerTopBar(
                     selectedSurface: selectedSurface,
                     onClose: closePlayer,
-                    onMore: showMore
+                    isCollected: isCurrentTrackCollected,
+                    onToggleCollection: {
+                        guard let track = playbackService.queue.current else { return }
+                        toggleCollection(of: track)
+                    }
                 )
 
                 PlayerSurfaceContent(
@@ -382,13 +385,15 @@ struct PlayerPage: View {
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                TransportBar(onOpenQueue: {
-                    selectedSurface = (selectedSurface == .queue ? .artwork : .queue)
-                })
-                .padding(.bottom, 16)
+                TransportBar()
+
+                playerFooter
+                    .padding(.top, 8)
+                    .padding(.bottom, 8)
             }
         }
         .foregroundStyle(NCMDesignTokens.Player.primaryInk)
+        .environment(\.colorScheme, .dark)
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .task(id: playbackService.queue.current?.musicID) {
             await lyricsModel.load(track: playbackService.queue.current, service: lyricsService)
@@ -433,6 +438,42 @@ struct PlayerPage: View {
     private func closePlayer() {
         selectedSurface = .artwork
         onClose()
+    }
+
+    private var isCurrentTrackCollected: Bool {
+        guard let track = playbackService.queue.current else { return false }
+        return personalPlaylist?.items.contains { $0.track.musicId == track.musicID } == true
+    }
+
+    private var playerFooter: some View {
+        HStack(spacing: 0) {
+            footerButton("quote.bubble", title: "歌词", identifier: "player-lyrics-button", selected: selectedSurface == .lyrics) {
+                selectedSurface = selectedSurface == .lyrics ? .artwork : .lyrics
+            }
+            footerButton("list.bullet", title: "待播放", identifier: "player-queue-button", selected: selectedSurface == .queue) {
+                selectedSurface = selectedSurface == .queue ? .artwork : .queue
+            }
+            footerButton("ellipsis", title: "更多", identifier: "player-cover-menu-button", selected: false, action: showMore)
+        }
+        .padding(.horizontal, 36)
+    }
+
+    private func footerButton(_ symbol: String, title: String, identifier: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            AppHaptics.light()
+            action()
+        } label: {
+            Label(title, systemImage: symbol)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.white.opacity(selected ? 1 : 0.64))
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.bounce(haptic: false))
+        .disabled(playbackService.queue.current == nil)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityIdentifier(identifier)
     }
 
     private func showMore() {
@@ -482,54 +523,39 @@ private struct PlayerSurfaceContent: View {
     @Environment(\.sonarReduceMotion) private var reduceMotion
 
     var body: some View {
-        GeometryReader { proxy in
+        GeometryReader { _ in
             ZStack {
-                VStack(spacing: 0) {
-                    AlbumFace(
-                        expansionProgress: pullController.pull,
-                        onCoverAction: onShowLyrics
-                    )
-                    .playerDismissGesture(controller: pullController)
-                    PlayerMetadata(compact: false)
-                }
-                .playerSurfaceState(
-                    surface: .artwork,
-                    selection: selectedSurface,
-                    width: proxy.size.width,
-                    reduceMotion: reduceMotion
-                )
-                .accessibilityIdentifier("player-artwork-surface")
-
-                VStack(spacing: 0) {
-                    PlayerMetadata(compact: true)
-                    KaraokeLyricsView(
-                        lyrics: lyricsModel.karaoke,
-                        errorMessage: lyricsModel.errorMessage,
-                        edgeFadeEnabled: true
-                    )
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        onShowArtwork()
+                if selectedSurface == .artwork {
+                    VStack(spacing: 0) {
+                        AlbumFace(
+                            expansionProgress: pullController.pull,
+                            onCoverAction: onShowLyrics
+                        )
+                        .playerDismissGesture(controller: pullController)
+                        PlayerMetadata(compact: false)
                     }
+                    .transition(.opacity)
                 }
-                .playerSurfaceState(
-                    surface: .lyrics,
-                    selection: selectedSurface,
-                    width: proxy.size.width,
-                    reduceMotion: reduceMotion
-                )
-                .accessibilityIdentifier("player-lyrics-surface")
 
-                VStack(spacing: 0) {
-                    QueueFace(presentation: .player)
+                if selectedSurface == .lyrics {
+                    VStack(spacing: 0) {
+                        PlayerMetadata(compact: true)
+                        KaraokeLyricsView(
+                            lyrics: lyricsModel.karaoke,
+                            errorMessage: lyricsModel.errorMessage,
+                            edgeFadeEnabled: true,
+                            isVisible: pullController.pull > 0
+                        )
+                        .contentShape(Rectangle())
+                        .onTapGesture { onShowArtwork() }
+                    }
+                    .transition(.opacity)
                 }
-                .playerSurfaceState(
-                    surface: .queue,
-                    selection: selectedSurface,
-                    width: proxy.size.width,
-                    reduceMotion: reduceMotion
-                )
-                .accessibilityIdentifier("player-queue-surface")
+
+                if selectedSurface == .queue {
+                    QueueFace(presentation: .player)
+                        .transition(.opacity)
+                }
             }
             .animation(
                 reduceMotion ? .easeOut(duration: AppMotion.short) : AppMotion.emphasized(duration: AppMotion.medium, reduceMotion: false),
@@ -539,61 +565,47 @@ private struct PlayerSurfaceContent: View {
     }
 }
 
-private extension View {
-    func playerSurfaceState(
-        surface: PlayerSurface,
-        selection: PlayerSurface,
-        width: CGFloat,
-        reduceMotion: Bool
-    ) -> some View {
-        let direction = selection.direction(to: surface)
-        let travel = min(width * 0.12, 44)
-        return opacity(surface == selection ? 1 : 0)
-            .offset(x: reduceMotion ? 0 : CGFloat(direction.rawValue) * travel)
-            .allowsHitTesting(surface == selection)
-            .accessibilityHidden(surface != selection)
-    }
-}
-
 private struct PlayerTopBar: View {
     let selectedSurface: PlayerSurface
     let onClose: () -> Void
-    let onMore: () -> Void
+    let isCollected: Bool
+    let onToggleCollection: () -> Void
 
     @Environment(PlaybackService.self) private var playbackService
+    @Environment(\.sonarReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 0) {
             Button(action: onClose) {
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 20, weight: .medium))
                     .frame(width: 44, height: 44)
             }
             .buttonStyle(.circleIcon(diameter: 38))
             .accessibilityLabel("收起播放页")
             .accessibilityHint("返回当前页面")
+            .accessibilityIdentifier("player-close-button")
 
             VStack(spacing: 1) {
-                Text("正在播放")
-                    .font(.subheadline.weight(.semibold))
-                Text(selectedSurface.title)
-                    .font(.caption2)
-                    .foregroundStyle(NCMDesignTokens.Player.secondaryInk)
+                Text(selectedSurface == .artwork ? "正在播放" : selectedSurface.title)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.white.opacity(0.74))
             }
             .frame(maxWidth: .infinity)
             .accessibilityElement(children: .combine)
 
-            Button(action: onMore) {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 18, weight: .medium))
+            Button(action: onToggleCollection) {
+                Image(systemName: isCollected ? "heart.fill" : "heart")
+                    .font(.system(size: 20, weight: .regular))
+                    .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                     .frame(width: 44, height: 44)
             }
             .buttonStyle(.circleIcon(diameter: 38))
             .disabled(playbackService.queue.current == nil)
-            .accessibilityLabel("更多")
-            .accessibilityIdentifier("player-cover-menu-button")
+            .accessibilityLabel(isCollected ? "取消收藏" : "收藏歌曲")
+            .accessibilityIdentifier("player-favorite-button")
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 16)
         .frame(height: 48)
     }
 }
@@ -614,19 +626,21 @@ private struct PlayerMetadata: View {
                 .accessibilityHidden(true)
             }
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: compact ? .leading : .center, spacing: compact ? 4 : 7) {
                 Text(playbackService.queue.current?.title ?? "暂无播放")
-                    .font(compact ? .headline : .title3.weight(.semibold))
+                    .font(compact ? .headline : .title2.weight(.bold))
+                    .multilineTextAlignment(compact ? .leading : .center)
                     .lineLimit(compact ? 1 : 2)
                 Text(playbackService.queue.current?.artist ?? "选择歌曲开始播放")
                     .font(.subheadline)
                     .foregroundStyle(NCMDesignTokens.Player.secondaryInk)
                     .lineLimit(1)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: compact ? .leading : .center)
         }
         .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
-        .padding(.vertical, 6)
-        .frame(minHeight: compact ? 60 : 66)
+        .padding(.top, 8)
+        .padding(.bottom, compact ? 8 : 26)
+        .frame(minHeight: compact ? 60 : 88)
     }
 }

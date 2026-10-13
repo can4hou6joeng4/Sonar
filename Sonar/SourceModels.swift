@@ -3,22 +3,32 @@ import Foundation
 public enum MusicSource: String, Codable, Sendable, CaseIterable {
     case wy
     case tx
+    case kg
 
-    public static let allCases: [MusicSource] = [.tx, .wy]
-    public static let catalogSources: [MusicSource] = [.tx]
-    public var isEnabled: Bool { Self.allCases.contains(self) }
+    // Keep retired sources decodable for existing libraries and backups.
+    public static let allCases: [MusicSource] = [.kg, .wy, .tx]
+    public static let searchSources: [MusicSource] = [.wy]
+    public static let catalogSources: [MusicSource] = []
+    public static let playlistImportSources: [MusicSource] = [.wy]
+    public var isEnabled: Bool { Self.searchSources.contains(self) }
     public var supportsCatalog: Bool { Self.catalogSources.contains(self) }
 
     public func requireEnabled() throws {
         guard isEnabled else {
-            throw SourceError.source(message: "该音源暂未启用，歌曲资料已保留。")
+            throw SourceError.source(message: "\(displayName)音源暂不可用，已收藏的歌曲会保留。")
         }
     }
 
     func requireQQClientSupport() throws {
-        guard self == .tx else {
-            throw SourceError.source(message: "网易云当前支持歌曲搜索、封面、歌词和播放；歌手与歌单使用 QQ 音乐。")
+        try requireEnabled()
+        guard self == .tx, supportsCatalog else {
+            throw SourceError.source(message: "当前音源暂不支持歌手与歌单浏览。")
         }
+    }
+
+    func requireQQMetadataSupport() throws {
+        try requireEnabled()
+        guard self == .tx else { throw SourceError.source(message: "当前音源不支持此 QQ 元数据接口") }
     }
 }
 
@@ -280,7 +290,7 @@ public struct PlaylistCategory: Equatable, Identifiable, Sendable {
 public extension MusicSource {
     var playlistCategories: [PlaylistCategory] {
         switch self {
-        case .wy:
+        case .wy, .kg:
             return []
         case .tx:
             return [
@@ -294,6 +304,7 @@ public extension MusicSource {
         switch self {
         case .wy: "网易云"
         case .tx: "QQ"
+        case .kg: "酷狗"
         }
     }
 }

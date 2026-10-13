@@ -50,12 +50,12 @@ public final class ChkszAPIClient: ChkszAPIRequesting, @unchecked Sendable {
             }
         }
 
-        try await validateHTTP(response, path: path)
+        try await validateHTTP(response, path: path, parameters: parameters)
         try await validateEnvelope(response.body)
         return response.body
     }
 
-    private func validateHTTP(_ response: PlaybackHTTPResponse, path: String) async throws {
+    private func validateHTTP(_ response: PlaybackHTTPResponse, path: String, parameters: [String: String]) async throws {
         switch response.statusCode {
         case 200:
             return
@@ -69,7 +69,9 @@ public final class ChkszAPIClient: ChkszAPIRequesting, @unchecked Sendable {
             await breaker.deferAfterRateLimit(seconds: Self.retryDelay(from: response))
             throw SourceError.source(message: "ChKSz 请求过于频繁（HTTP 429）")
         default:
-            let operation = path.hasSuffix("music") ? "播放解析" : path.hasSuffix("lyric") ? "歌词请求"
+            let isSongSearch = path.hasSuffix("music") && parameters["msg"] != nil
+                && ["id", "mid", "n"].allSatisfy { parameters[$0] == nil }
+            let operation = isSongSearch ? "搜索" : path.hasSuffix("music") ? "播放解析" : path.hasSuffix("lyric") ? "歌词请求"
                 : path.hasSuffix("playlist") ? "歌单读取" : "搜索"
             throw SourceError.source(message: "第三方\(operation)失败（HTTP " + String(response.statusCode) + "）")
         }
@@ -120,33 +122,28 @@ public final class ChkszAPIClient: ChkszAPIRequesting, @unchecked Sendable {
     }
 }
 
-/// QQ catalog requests retain their JavaScript adapter. NetEase song requests
-/// go directly to ChKSz, without restoring the retired NetEase client APIs.
+/// Active song sources use ChKSz. The QQ adapter remains for persisted data and
+/// a future restoration, but hidden sources never receive new requests.
 public final class ChkszSourceRuntime: SourceRuntime, @unchecked Sendable {
-    private let qq: SourceRuntime
     private let netease: ChkszNetEaseProviding
 
-    public init(qq: SourceRuntime, netease: ChkszNetEaseProviding) {
-        self.qq = qq
+    // Retain the injection signature for existing local clients without activating retired providers.
+    public init(qq: SourceRuntime? = nil, netease: ChkszNetEaseProviding, kugou: ChkszKugouProviding? = nil) {
         self.netease = netease
     }
 
     public func search(_ keyword: String, source: MusicSource, page: Int) async throws -> SearchPage {
-        switch source {
-        case .tx: try await qq.search(keyword, source: source, page: page)
-        case .wy: try await netease.search(keyword, page: page, limit: 25)
-        }
+        try source.requireEnabled()
+        return try await netease.search(keyword, page: page, limit: 25)
     }
 
     public func lyric(_ track: Track) async throws -> LyricInfo {
-        switch track.source {
-        case .tx: try await qq.lyric(track)
-        case .wy: try await netease.lyric(track)
-        }
+        try track.source.requireEnabled()
+        return try await netease.lyric(track)
     }
 
     public func picURL(_ track: Track) async throws -> URL {
-        guard track.source == .wy else { return try await qq.picURL(track) }
+        try track.source.requireEnabled()
         let payload = track.rawPayload
         let candidate = (payload["picUrl"] as? String)
             ?? (payload["img"] as? String)
@@ -164,56 +161,11 @@ public final class ChkszSourceRuntime: SourceRuntime, @unchecked Sendable {
     }
 
     public func trackDetail(_ track: Track) async throws -> Track {
-        track.source == .wy ? track : try await qq.trackDetail(track)
+        try track.source.requireEnabled()
+        return track
     }
 
-    public func tipSearch(_ keyword: String) async throws -> [String] {
-        try await qq.tipSearch(keyword)
-    }
-
-    public func hotSearch(source: MusicSource) async throws -> [String] {
-        try source.requireQQClientSupport()
-        return try await qq.hotSearch(source: source)
-    }
-
-    public func playlistSearch(_ keyword: String, source: MusicSource, page: Int) async throws -> PlaylistCatalogPage {
-        try source.requireQQClientSupport()
-        return try await qq.playlistSearch(keyword, source: source, page: page)
-    }
-
-    public func playlistCatalog(source: MusicSource, sortId: String, tagId: String?, page: Int) async throws -> PlaylistCatalogPage {
-        try source.requireQQClientSupport()
-        return try await qq.playlistCatalog(source: source, sortId: sortId, tagId: tagId, page: page)
-    }
-
-    public func playlistDetail(source: MusicSource, id: String, page: Int) async throws -> PlaylistDetail {
-        try source.requireQQClientSupport()
-        return try await qq.playlistDetail(source: source, id: id, page: page)
-    }
-
-    public func searchArtists(_ keyword: String, source: MusicSource, page: Int) async throws -> ArtistSearchPage {
-        try await searchArtists(keyword, source: source, page: page, limit: 25)
-    }
-
-    public func searchArtists(_ keyword: String, source: MusicSource, page: Int, limit: Int) async throws -> ArtistSearchPage {
-        try source.requireQQClientSupport()
-        return try await qq.searchArtists(keyword, source: source, page: page, limit: limit)
-    }
-
-    public func artistPopularTracks(_ artist: ArtistSummary) async throws -> [Track] {
-        try artist.source.requireQQClientSupport()
-        return try await qq.artistPopularTracks(artist)
-    }
-
-    public func artistAlbums(_ artist: ArtistSummary, page: Int) async throws -> AlbumPage {
-        try artist.source.requireQQClientSupport()
-        return try await qq.artistAlbums(artist, page: page)
-    }
-
-    public func albumTracks(_ album: AlbumSummary) async throws -> AlbumDetail {
-        try album.source.requireQQClientSupport()
-        return try await qq.albumTracks(album)
-    }
+    public func tipSearch(_ keyword: String) async throws -> [String] { [] }
 }
 
 public struct ChkszPlaybackResult: Sendable, Equatable {
@@ -223,6 +175,154 @@ public struct ChkszPlaybackResult: Sendable, Equatable {
     public init(url: URL, actualQuality: Quality) {
         self.url = url
         self.actualQuality = actualQuality
+    }
+}
+
+public protocol ChkszKugouProviding: Sendable {
+    func search(_ keyword: String, page: Int) async throws -> SearchPage
+    func lyric(_ track: Track) async throws -> LyricInfo
+    func picURL(_ track: Track) async throws -> URL
+    func trackDetail(_ track: Track) async throws -> Track
+    func musicURL(for track: Track, quality: Quality) async throws -> ChkszPlaybackResult
+}
+
+public final class ChkszKugouClient: ChkszKugouProviding, @unchecked Sendable {
+    private let api: ChkszAPIRequesting
+    private let metadata = KugouMetadataCache()
+
+    public init(api: ChkszAPIRequesting) { self.api = api }
+
+    public func search(_ keyword: String, page: Int = 1) async throws -> SearchPage {
+        try MusicSource.kg.requireEnabled()
+        // The documented endpoint returns one bounded list and has no page parameter.
+        guard page <= 1 else { return SearchPage(list: [], total: 0, allPage: 1) }
+        let data = try await api.request(path: "/api/kugou_music", parameters: ["msg": keyword, "type": "json"])
+        let object = try Self.object(data)
+        guard let songs = object["list"] as? [[String: Any]] else {
+            throw SourceError.source(message: "酷狗搜索返回数据异常")
+        }
+        let tracks = songs.compactMap { song -> Track? in
+            guard let id = Self.string(song["id"]),
+                  let name = Self.string(song["name"]),
+                  let singer = Self.string(song["singer"]) else { return nil }
+            var raw: [String: Any] = ["songmid": id, "name": name, "singer": singer, "albumName": Self.string(song["album"]) ?? ""]
+            if let seconds = song["duration"] as? NSNumber, seconds.intValue > 0 {
+                raw["interval"] = String(format: "%d:%02d", seconds.intValue / 60, seconds.intValue % 60)
+            }
+            if let cover = Self.string(song["cover"]), let url = Self.mediaURL(cover) { raw["img"] = url.absoluteString }
+            return try? Track(source: .kg, raw: raw)
+        }
+        guard songs.isEmpty || !tracks.isEmpty else {
+            throw SourceError.source(message: "酷狗搜索结果缺少曲目信息")
+        }
+        return SearchPage(list: tracks, total: tracks.count, allPage: 1)
+    }
+
+    public func musicURL(for track: Track, quality: Quality) async throws -> ChkszPlaybackResult {
+        let data = try await detail(track, quality: quality)
+        let object = try Self.object(data)
+        guard let value = Self.string(object["url"]), let url = Self.mediaURL(value) else {
+            throw SourceError.source(message: "酷狗播放未返回可用链接")
+        }
+        return ChkszPlaybackResult(url: url, actualQuality: PlaybackURLResolver.chkszQuality(from: object))
+    }
+
+    public func lyric(_ track: Track) async throws -> LyricInfo {
+        try Self.requireTrack(track)
+        let data: Data
+        if let cached = await metadata.value(for: track.songmid) { data = cached }
+        else { data = try await detail(track, quality: .master) }
+        let object = try Self.object(data)
+        guard let lyric = object["lrc"] as? String else {
+            throw SourceError.source(message: "酷狗暂未提供歌词")
+        }
+        return LyricInfo(lyric: lyric, tlyric: nil, rlyric: nil, lxlyric: nil)
+    }
+
+    public func picURL(_ track: Track) async throws -> URL {
+        try Self.requireTrack(track)
+        let raw = track.rawPayload
+        if let cover = Self.string(raw["img"] ?? raw["picUrl"]), let url = Self.mediaURL(cover) { return url }
+        if let data = await metadata.value(for: track.songmid),
+           let cover = Self.string(try Self.object(data)["cover"]), let url = Self.mediaURL(cover) { return url }
+        // Do not resolve audio for every visible search row just to retrieve an optional cover.
+        throw SourceError.source(message: "酷狗歌曲暂无封面")
+    }
+
+    public func trackDetail(_ track: Track) async throws -> Track {
+        try Self.requireTrack(track)
+        guard let data = await metadata.value(for: track.songmid) else { return track }
+        let object = try Self.object(data)
+        var raw = track.rawPayload
+        if let cover = Self.string(object["cover"]), let url = Self.mediaURL(cover) { raw["img"] = url.absoluteString }
+        if let interval = Self.string(object["interval"]) { raw["interval"] = interval }
+        return try Track(source: .kg, raw: raw)
+    }
+
+    private func detail(_ track: Track, quality: Quality) async throws -> Data {
+        try Self.requireTrack(track)
+        let size: String = switch quality {
+        case .standard: "128k"
+        case .high: "320k"
+        case .lossless: "flac"
+        case .hiRes: "hires"
+        case .master: "master"
+        }
+        let data = try await api.request(path: "/api/kugou_music", parameters: ["id": track.songmid, "size": size, "type": "json"])
+        let object = try Self.object(data)
+        guard let id = Self.string(object["id"]), id.caseInsensitiveCompare(track.songmid) == .orderedSame else {
+            throw SourceError.source(message: "酷狗返回曲目与所选歌曲不一致")
+        }
+        await metadata.insert(data, for: track.songmid)
+        return data
+    }
+
+    private static func requireTrack(_ track: Track) throws {
+        try track.source.requireEnabled()
+        guard track.source == .kg, !track.songmid.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw SourceError.source(message: "酷狗歌曲标识无效")
+        }
+    }
+
+    private static func object(_ data: Data) throws -> [String: Any] {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw SourceError.source(message: "酷狗返回 JSON 异常")
+        }
+        return object
+    }
+
+    private static func string(_ value: Any?) -> String? {
+        let value = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            ?? (value as? NSNumber)?.stringValue
+        return value?.isEmpty == false ? value : nil
+    }
+
+    private static func mediaURL(_ value: String) -> URL? {
+        guard var url = URLComponents(string: value),
+              ["http", "https"].contains(url.scheme?.lowercased()),
+              url.host?.isEmpty == false, url.user == nil, url.password == nil else { return nil }
+        url.scheme = "https"
+        return url.url
+    }
+}
+
+private actor KugouMetadataCache {
+    private var entries: [String: (expires: Date, data: Data)] = [:]
+
+    func value(for id: String) -> Data? {
+        guard let entry = entries[id], entry.expires > Date() else {
+            entries[id] = nil
+            return nil
+        }
+        return entry.data
+    }
+
+    func insert(_ data: Data, for id: String) {
+        guard data.count <= 256 * 1024 else { return }
+        entries[id] = (Date().addingTimeInterval(20 * 60), data)
+        if entries.count > 40, let oldest = entries.min(by: { $0.value.expires < $1.value.expires })?.key {
+            entries[oldest] = nil
+        }
     }
 }
 

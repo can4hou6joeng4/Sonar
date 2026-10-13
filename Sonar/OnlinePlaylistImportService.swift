@@ -10,8 +10,8 @@ public enum OnlinePlaylistImportError: Error, LocalizedError, Equatable {
 
     public var errorDescription: String? {
         switch self {
-        case .invalidInput: "请粘贴歌单分享链接，或选择音源后输入有效的歌单 ID。"
-        case .unsupportedLink: "暂时只支持 QQ 音乐和网易云音乐的歌单分享链接。"
+        case .invalidInput: "请粘贴网易云歌单分享链接，或输入有效的歌单 ID。"
+        case .unsupportedLink: "当前仅支持网易云音乐的公开歌单链接，其他音源暂不可用。"
         case .notPlaylistLink: "未找到歌单 ID。请复制完整的歌单分享链接，歌曲和个人主页链接不能用于导入。"
         case .unavailable: "无法读取这个歌单。请确认歌单公开且仍然存在，或稍后重试。"
         case .invalidResponse: "歌单返回的数据不完整，请稍后重试。现有歌曲会保留。"
@@ -53,6 +53,7 @@ public struct OnlinePlaylistReference: Equatable, Sendable {
 
         let rawID: String?
         switch source {
+        case .kg: throw OnlinePlaylistImportError.unsupportedLink
         case .wy:
             guard paths.contains(where: { $0.split(separator: "/").contains("playlist") }) else {
                 throw OnlinePlaylistImportError.notPlaylistLink
@@ -184,13 +185,11 @@ public protocol OnlinePlaylistImporting: Sendable {
 /// Reads metadata only. Saving is a separate user action through LibraryStore's atomic backup merge.
 public actor OnlinePlaylistImportService: OnlinePlaylistImporting {
     private static let maximumTracks = 5_000
-    private let qq: SourceRuntime
     private let chkszAPI: ChkszAPIRequesting
     private let shareLinks: PlaylistShareLinkResolving
 
-    public init(qq: SourceRuntime, chkszAPI: ChkszAPIRequesting,
+    public init(qq: SourceRuntime? = nil, chkszAPI: ChkszAPIRequesting,
                 shareLinks: PlaylistShareLinkResolving = URLSessionPlaylistShareLinkResolver()) {
-        self.qq = qq
         self.chkszAPI = chkszAPI
         self.shareLinks = shareLinks
     }
@@ -200,39 +199,17 @@ public actor OnlinePlaylistImportService: OnlinePlaylistImporting {
         let reference: OnlinePlaylistReference
         switch try OnlinePlaylistInput.parse(input, source: source) {
         case let .reference(value): reference = value
-        case let .shortLink(url): reference = try OnlinePlaylistReference.from(url: await shareLinks.resolve(url))
+        case let .shortLink(url):
+            guard let linkSource = OnlinePlaylistReference.source(for: url) else { throw OnlinePlaylistImportError.unsupportedLink }
+            try linkSource.requireEnabled()
+            reference = try OnlinePlaylistReference.from(url: await shareLinks.resolve(url))
         }
         try Task.checkCancellation()
+        try reference.source.requireEnabled()
         switch reference.source {
-        case .tx: return try await readQQ(reference)
+        case .tx, .kg: throw OnlinePlaylistImportError.unsupportedLink
         case .wy: return try await readNetEase(reference)
         }
-    }
-
-    private func readQQ(_ reference: OnlinePlaylistReference) async throws -> OnlinePlaylistPreview {
-        var allTracks: [Track] = []
-        var page = 1
-        var name = ""
-        var total = 0
-        var pageIDs = Set<[String]>()
-        while true {
-            try Task.checkCancellation()
-            let detail = try await qq.playlistDetail(source: .tx, id: reference.id, page: page)
-            try Task.checkCancellation()
-            guard detail.source == .tx, detail.page == page, detail.limit > 0, detail.total >= 0,
-                  detail.list.allSatisfy({ $0.source == .tx }) else { throw OnlinePlaylistImportError.invalidResponse }
-            guard detail.total <= Self.maximumTracks, allTracks.count + detail.list.count <= Self.maximumTracks else {
-                throw OnlinePlaylistImportError.tooLarge
-            }
-            if page == 1 { name = detail.info.name }
-            total = max(total, detail.total)
-            guard !detail.list.isEmpty, pageIDs.insert(detail.list.map(\.musicID)).inserted else { break }
-            allTracks.append(contentsOf: detail.list)
-            guard detail.hasMore else { break }
-            page += 1
-            guard page <= 50 else { throw OnlinePlaylistImportError.tooLarge }
-        }
-        return try makePreview(reference, name: name, total: total, received: allTracks.count, tracks: allTracks, invalid: 0)
     }
 
     private func readNetEase(_ reference: OnlinePlaylistReference) async throws -> OnlinePlaylistPreview {

@@ -13,13 +13,13 @@ struct FlowingLightBackground: View {
             colors: [
                 Color(
                     hue: hue / 360,
-                    saturation: NCMDesignTokens.Player.saturation,
-                    brightness: NCMDesignTokens.Player.topLightness
+                    saturation: preferences.coverAccentEnabled ? 0.48 : 0.18,
+                    brightness: 0.46
                 ),
                 Color(
                     hue: hue / 360,
-                    saturation: 0.14,
-                    brightness: NCMDesignTokens.Player.bottomLightness
+                    saturation: preferences.coverAccentEnabled ? 0.40 : 0.14,
+                    brightness: 0.17
                 ),
             ],
             startPoint: .top,
@@ -31,7 +31,9 @@ struct FlowingLightBackground: View {
             value: hue
         )
         .task(id: taskID) {
-            hue = await resolvedHue()
+            let resolved = await resolvedHue()
+            guard !Task.isCancelled else { return }
+            hue = resolved
         }
         .accessibilityHidden(true)
     }

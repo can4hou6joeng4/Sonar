@@ -22,7 +22,7 @@ struct MacSearchView: View {
                 Text("找到你的下一首心动").font(.largeTitle.bold())
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                    TextField("歌曲、歌手或歌单", text: $search.query).textFieldStyle(.plain)
+                    TextField("搜索歌曲或歌手", text: $search.query).textFieldStyle(.plain)
                         .focused($focused).onSubmit { submit() }
                         .onChange(of: search.query) { _, _ in search.queryChanged() }
                     if !search.query.isEmpty {
@@ -32,21 +32,16 @@ struct MacSearchView: View {
                     Button("搜索") { submit() }
                         .disabled(search.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }.padding(12).background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
-                Picker("搜索范围", selection: $search.selectedScope) {
-                    ForEach(SearchScope.allCases) { Text($0.rawValue).tag($0) }
-                }.pickerStyle(.segmented).frame(width: 290)
-                    .onChange(of: search.selectedScope) { _, scope in Task { await search.loadScopeIfNeeded(scope) } }
-                if search.selectedScope == .songs {
-                    Picker("歌曲音源", selection: Binding(
-                        get: { search.selectedSongSource },
-                        set: { source in Task { await search.selectSongSource(source) } }
-                    )) {
-                        ForEach(MusicSource.allCases, id: \.self) { source in
-                            Text(source.displayName).tag(source)
-                        }
-                    }.pickerStyle(.segmented).frame(width: 220)
-                } else {
-                    Text("QQ 音乐\(search.selectedScope.rawValue)").font(.caption).foregroundStyle(.secondary)
+                if SearchScope.availableCases.count > 1 {
+                    Picker("搜索范围", selection: $search.selectedScope) {
+                        ForEach(SearchScope.availableCases) { Text($0.rawValue).tag($0) }
+                    }.pickerStyle(.segmented).frame(width: 290)
+                        .onChange(of: search.selectedScope) { _, scope in Task { await search.loadScopeIfNeeded(scope) } }
+                }
+                ForEach(search.songSourceWarnings, id: \.self) { source in
+                    MacInlineError(message: "\(source.displayName)暂不可用，已显示其他音源结果") {
+                        Task { await search.retryFailedSource(source) }
+                    }
                 }
                 if let error = search.errorMessage { MacInlineError(message: error, retry: submit) }
                 if search.selectedScope == .artists, !search.artistSourceWarnings.isEmpty {
@@ -86,7 +81,7 @@ struct MacSearchView: View {
                         }.buttonStyle(.plain).padding(.vertical, 6)
                     }
                 } else if loadedHotSearches, search.hotSearchErrorMessage == nil {
-                    Text("热门搜索").font(.headline)
+                    Text("试试这些歌曲").font(.headline)
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 155), alignment: .leading)], alignment: .leading, spacing: 12) {
                         ForEach(Array(search.hotSearches.prefix(12).enumerated()), id: \.offset) { index, word in
                             Button { search.query = word; submit() } label: {
@@ -99,7 +94,7 @@ struct MacSearchView: View {
                         }
                     }
                 } else {
-                    MacEmptyState(title: "搜索你喜欢的音乐", description: "按回车搜索歌曲，或切换到歌手与歌单。", symbol: "magnifyingglass")
+                    MacEmptyState(title: "搜索你喜欢的音乐", description: "输入歌名或歌手，按回车搜索。", symbol: "magnifyingglass")
                         .frame(height: 260)
                 }
             }.padding(26)

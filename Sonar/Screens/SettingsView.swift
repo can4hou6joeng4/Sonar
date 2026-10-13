@@ -82,7 +82,7 @@ struct SettingsView: View {
                     sectionTitle("歌单")
                     VStack(spacing: 0) {
                         backupButton(icon: "music.note.list", title: "从其他播放器导入",
-                                     subtitle: "粘贴 QQ 音乐或网易云歌单链接", id: "settings-import-online-playlist") {
+                                     subtitle: "粘贴网易云公开歌单链接", id: "settings-import-online-playlist") {
                             if let onlinePlaylistImporter { presentedSheet = .onlinePlaylist(onlinePlaylistImporter) }
                         }.disabled(onlinePlaylistImporter == nil)
                         backupButton(icon: "square.and.arrow.up", title: "导出备份",

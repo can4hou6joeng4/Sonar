@@ -59,9 +59,16 @@ public struct KeychainCredentialStore: CredentialStore {
 public protocol PlaybackHTTPClient: Sendable {
     func send(_ request: URLRequest) async throws -> PlaybackHTTPResponse
     func probe(_ request: URLRequest, maxBytes: Int, timeout: TimeInterval) async throws -> PlaybackHTTPResponse
+    func probeSameOrigin(_ request: URLRequest, maxBytes: Int, timeout: TimeInterval) async throws -> PlaybackHTTPResponse
 }
 
 public extension PlaybackHTTPClient {
+    // Injected, in-memory clients do not follow redirects. The network client
+    // overrides this for credential-bearing script API requests.
+    func probeSameOrigin(_ request: URLRequest, maxBytes: Int, timeout: TimeInterval) async throws -> PlaybackHTTPResponse {
+        try await probe(request, maxBytes: maxBytes, timeout: timeout)
+    }
+
     /// Compatibility for injected clients that already return an in-memory response.
     /// Network transports must override this to bound consumption before EOF.
     func probe(_ request: URLRequest, maxBytes: Int, timeout: TimeInterval) async throws -> PlaybackHTTPResponse {
@@ -97,7 +104,16 @@ public struct URLSessionPlaybackHTTPClient: PlaybackHTTPClient {
     public func probe(
         _ request: URLRequest, maxBytes: Int = 64, timeout: TimeInterval = 8
     ) async throws -> PlaybackHTTPResponse {
-        let probe = PlaybackMediaPrefixProbe(maxBytes: maxBytes)
+        try await boundedProbe(request, maxBytes: maxBytes, timeout: timeout, redirectOrigin: nil)
+    }
+
+    public func probeSameOrigin(_ request: URLRequest, maxBytes: Int, timeout: TimeInterval) async throws -> PlaybackHTTPResponse {
+        guard let origin = request.url else { throw SourceError.source(message: "脚本请求地址无效") }
+        return try await boundedProbe(request, maxBytes: maxBytes, timeout: timeout, redirectOrigin: origin)
+    }
+
+    private func boundedProbe(_ request: URLRequest, maxBytes: Int, timeout: TimeInterval, redirectOrigin: URL?) async throws -> PlaybackHTTPResponse {
+        let probe = PlaybackMediaPrefixProbe(maxBytes: maxBytes, redirectOrigin: redirectOrigin)
         do {
             let result = try await withTaskCancellationHandler {
                 try Task.checkCancellation()
@@ -144,6 +160,7 @@ public struct URLSessionPlaybackHTTPClient: PlaybackHTTPClient {
 /// success, so the cancellation used to stop a long response must not escape as an error.
 private final class PlaybackMediaPrefixProbe: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     private let maxBytes: Int
+    private let redirectOrigin: URL?
     private let lock = NSLock()
     private var completed = false
     private var continuation: CheckedContinuation<PlaybackHTTPResponse, Error>?
@@ -153,8 +170,9 @@ private final class PlaybackMediaPrefixProbe: NSObject, URLSessionDataDelegate, 
     private var response: HTTPURLResponse?
     private var body = Data()
 
-    init(maxBytes: Int) {
+    init(maxBytes: Int, redirectOrigin: URL?) {
         self.maxBytes = max(1, maxBytes)
+        self.redirectOrigin = redirectOrigin
     }
 
     func start(
@@ -221,6 +239,20 @@ private final class PlaybackMediaPrefixProbe: NSObject, URLSessionDataDelegate, 
     }
 
     func urlSession(
+        _ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        if let redirectOrigin, !PlaybackRedirectPolicy.isSameHTTPSOrigin(request.url, as: redirectOrigin) {
+            completionHandler(nil)
+            finish(.failure(SourceError.source(message: "脚本接口跳转到了未授权的地址")))
+            return
+        }
+        // Media CDN redirects remain available; script credentials cannot leave
+        // the configured HTTPS origin or be redirected to plain HTTP.
+        completionHandler(request)
+    }
+
+    func urlSession(
         _ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
         completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
     ) {
@@ -268,8 +300,30 @@ private final class PlaybackMediaPrefixProbe: NSObject, URLSessionDataDelegate, 
     }
 }
 
+enum PlaybackRedirectPolicy {
+    static func isSameHTTPSOrigin(_ candidate: URL?, as origin: URL) -> Bool {
+        guard let candidate, candidate.scheme?.lowercased() == "https", origin.scheme?.lowercased() == "https",
+              candidate.host?.lowercased() == origin.host?.lowercased(),
+              (candidate.port ?? 443) == (origin.port ?? 443),
+              candidate.user == nil, candidate.password == nil else { return false }
+        return true
+    }
+}
+
 public protocol PlaybackURLResolving: Sendable {
     func musicURL(for track: Track, quality: Quality) async throws -> URL
+    func supportsPlayback(of source: MusicSource) -> Bool
+}
+
+public extension PlaybackURLResolving {
+    func supportsPlayback(of source: MusicSource) -> Bool { source.isEnabled }
+
+    func requirePlaybackSupport(for source: MusicSource) throws {
+        guard supportsPlayback(of: source) else {
+            try source.requireEnabled()
+            throw SourceError.source(message: "当前播放解析器不支持此音源")
+        }
+    }
 }
 
 public protocol PlaybackURLRefreshing: PlaybackURLResolving {
@@ -309,7 +363,6 @@ public actor ChkszCircuitBreaker {
 
 public final class PlaybackURLResolver: PlaybackURLRefreshing, @unchecked Sendable {
     private let client: PlaybackHTTPClient
-    private let chkszAPI: ChkszAPIRequesting
     private let netease: ChkszNetEaseProviding
     private let cache: PlaybackURLCache
 
@@ -319,11 +372,11 @@ public final class PlaybackURLResolver: PlaybackURLRefreshing, @unchecked Sendab
         breaker: ChkszCircuitBreaker = ChkszCircuitBreaker(),
         cache: PlaybackURLCache = PlaybackURLCache(),
         chkszAPI: ChkszAPIRequesting? = nil,
-        netease: ChkszNetEaseProviding? = nil
+        netease: ChkszNetEaseProviding? = nil,
+        kugou: ChkszKugouProviding? = nil
     ) {
         self.client = client
         let api = chkszAPI ?? ChkszAPIClient(client: client, credentials: credentials, breaker: breaker)
-        self.chkszAPI = api
         self.netease = netease ?? ChkszNetEaseClient(api: api)
         self.cache = cache
     }
@@ -345,8 +398,8 @@ public final class PlaybackURLResolver: PlaybackURLRefreshing, @unchecked Sendab
     private func resolveAndCache(track: Track, quality: Quality, key: PlaybackURLCache.Key) async throws -> URL {
         let result: ChkszPlaybackResult
         switch track.source {
-        case .tx:
-            result = try await resolveTXChksz(track: track, quality: quality)
+        case .tx, .kg:
+            throw SourceError.source(message: "\(track.source.displayName)音源暂不可用")
         case .wy:
             result = try await netease.musicURL(for: track, quality: quality)
         }
@@ -361,32 +414,7 @@ public final class PlaybackURLResolver: PlaybackURLRefreshing, @unchecked Sendab
         return mediaURL
     }
 
-    private func resolveTXChksz(track: Track, quality: Quality) async throws -> ChkszPlaybackResult {
-        let size: String
-        switch quality {
-        case .standard: size = "128k"
-        case .high: size = "320k"
-        case .lossless: size = "flac"
-        case .hiRes: size = "hires"
-        case .master: size = "master"
-        }
-        let data = try await chkszAPI.request(
-            path: "/api/qq_music",
-            parameters: [
-                "mid": track.songmid,
-                "size": size,
-                "type": "json",
-            ]
-        )
-        let object = try Self.jsonObject(data)
-        guard let rawURL = object["url"] as? String, let url = Self.mediaURL(from: rawURL) else {
-            throw SourceError.source(message: "未返回可用链接")
-        }
-        return ChkszPlaybackResult(url: url, actualQuality: Self.qqQuality(from: object))
-    }
-
-    /// The requested size is a preference, not proof of the returned audio quality.
-    private static func qqQuality(from object: [String: Any]) -> Quality {
+    static func chkszQuality(from object: [String: Any]) -> Quality {
         if let value = object["bitrate"] as? String {
             switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
             case "master": return .master

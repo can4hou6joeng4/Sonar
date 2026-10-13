@@ -235,6 +235,7 @@ private struct LocalSongActionsSheet: View {
                 dismiss()
                 onAddToQueue()
             }
+            .disabled(!track.source.isEnabled)
             actionButton("收藏到歌单", systemImage: "music.note.list") {
                 dismiss()
                 onCollect()

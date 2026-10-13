@@ -47,9 +47,9 @@ final class MacAppModel {
         let breaker = ChkszCircuitBreaker()
         let api = ChkszAPIClient(credentials: credentials, breaker: breaker)
         let netease = ChkszNetEaseClient(api: api)
-        let runtime = ChkszSourceRuntime(qq: JavaScriptSourceRuntime(), netease: netease)
+        let runtime = ChkszSourceRuntime(netease: netease)
         self.runtime = runtime
-        onlinePlaylistImporter = OnlinePlaylistImportService(qq: runtime, chkszAPI: api)
+        onlinePlaylistImporter = OnlinePlaylistImportService(chkszAPI: api)
         playback = PlaybackService(resolver: PlaybackResolverPipeline.make(
             primary: PlaybackURLResolver(credentials: credentials, breaker: breaker, chkszAPI: api, netease: netease)
         ))

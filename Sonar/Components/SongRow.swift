@@ -26,12 +26,13 @@ struct SongRow: View {
     @Environment(\.m3Scheme) private var scheme
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             if let onPlay {
                 Button(action: onPlay) {
                     leadingContent
                 }
                 .buttonStyle(.cellHighlight)
+                .disabled(!track.source.isEnabled)
                 .accessibilityIdentifier("song-row-play-\(track.musicID)")
             } else {
                 leadingContent
@@ -57,7 +58,7 @@ struct SongRow: View {
     }
 
     private var leadingContent: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             leadingView
             labels
         }
@@ -69,7 +70,7 @@ struct SongRow: View {
     private var leadingView: some View {
         switch leading {
         case .cover:
-            PlayerArtwork(track: track, size: 44, cornerRadius: 8)
+            PlayerArtwork(track: track, size: 44, cornerRadius: 7)
         case let .index(index):
             Group {
                 if isCurrent {
@@ -91,12 +92,18 @@ struct SongRow: View {
                     PlayingEqualizer(isAnimating: isPlaying, color: primaryForeground)
                 }
                 Text(track.title)
-                    .font(.body)
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(primaryForeground)
                     .lineLimit(1)
             }
             HStack(spacing: 5) {
-                QualityBadge(quality: track.highestKnownQuality)
+                if track.source.isEnabled {
+                    QualityBadge(quality: track.highestKnownQuality)
+                } else {
+                    Text("不可用")
+                        .font(.caption2)
+                        .foregroundStyle(scheme.onSurfaceVariant)
+                }
                 Text(subtitle)
                     .font(.caption)
                     .foregroundStyle(secondaryForeground)
@@ -117,8 +124,9 @@ struct SongRow: View {
                         .foregroundStyle(scheme.onSurface)
                         .frame(width: 44, height: 44)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.circleIcon(diameter: 34))
                 .accessibilityLabel("播放 \(track.title)")
+                .disabled(!track.source.isEnabled)
             }
         case .more:
             if let onAction {
@@ -171,6 +179,7 @@ struct SongRow: View {
     }
 
     private var primaryForeground: Color {
+        if !track.source.isEnabled { return scheme.onSurfaceVariant }
         if isSelected { return scheme.onPrimaryContainer }
         if isCurrent { return scheme.primary }
         return scheme.onSurface

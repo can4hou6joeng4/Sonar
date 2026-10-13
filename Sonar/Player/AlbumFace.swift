@@ -45,7 +45,7 @@ struct AlbumFace: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let artworkSize = max(180, min(proxy.size.width - 40, proxy.size.height - 20, 336))
+            let artworkSize = max(0, min(proxy.size.width - 48, proxy.size.height - 24, 336))
 
             artwork(size: artworkSize)
             .frame(width: artworkSize, height: artworkSize)
@@ -70,10 +70,11 @@ struct AlbumFace: View {
         return PlayerArtwork(
             track: playbackService.queue.current,
             size: size,
-            cornerRadius: 18
+            cornerRadius: 12,
+            animatesChanges: true
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(
                     LinearGradient(
                         colors: [Color.white.opacity(0.24), Color.white.opacity(0.06)],
@@ -83,15 +84,11 @@ struct AlbumFace: View {
                     lineWidth: 0.75
                 )
         }
-        .scaleEffect((paused ? 0.95 : 1) * expansionScale)
-        .opacity(PlayerArtworkTransitionMetrics.opacity(
-            progress: expansionProgress,
-            reduceMotion: reduceMotion
-        ))
+        .scaleEffect((paused ? 0.98 : 1) * expansionScale)
         .shadow(
-            color: .black.opacity(paused ? 0.28 : 0.44),
-            radius: paused ? 20 : 34,
-            y: paused ? 12 : 22
+            color: .black.opacity(0.24),
+            radius: 22,
+            y: 12
         )
         .animation(
             AppMotion.standardSpring(reduceMotion: reduceMotion),

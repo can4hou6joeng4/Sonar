@@ -70,15 +70,16 @@ enum AppMotion {
 }
 
 struct BounceButtonStyle: ButtonStyle {
+    @Environment(\.sonarReduceMotion) private var reduceMotion
     var scale: CGFloat = 0.94
     var opacity: CGFloat = 0.88
     var haptic: Bool = true
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? scale : 1.0)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? scale : 1.0)
             .opacity(configuration.isPressed ? opacity : 1.0)
-            .animation(.spring(response: 0.25, dampingFraction: 0.65), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.65), value: configuration.isPressed)
             .onChange(of: configuration.isPressed) { _, isPressed in
                 if isPressed && haptic {
                     AppHaptics.light()
@@ -88,19 +89,20 @@ struct BounceButtonStyle: ButtonStyle {
 }
 
 struct CircleIconButtonStyle: ButtonStyle {
+    @Environment(\.sonarReduceMotion) private var reduceMotion
     var diameter: CGFloat = 36
     var haptic: Bool = true
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.90 : 1.0)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.90 : 1.0)
             .opacity(configuration.isPressed ? 0.80 : 1.0)
             .background(
                 Circle()
                     .fill(configuration.isPressed ? Color.white.opacity(0.14) : Color.clear)
                     .frame(width: diameter, height: diameter)
             )
-            .animation(.spring(response: 0.24, dampingFraction: 0.62), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .spring(response: 0.24, dampingFraction: 0.62), value: configuration.isPressed)
             .onChange(of: configuration.isPressed) { _, isPressed in
                 if isPressed && haptic {
                     AppHaptics.light()
@@ -110,14 +112,15 @@ struct CircleIconButtonStyle: ButtonStyle {
 }
 
 struct CellHighlightButtonStyle: ButtonStyle {
+    @Environment(\.sonarReduceMotion) private var reduceMotion
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(configuration.isPressed ? Color.white.opacity(0.08) : Color.clear)
             )
-            .scaleEffect(configuration.isPressed ? 0.985 : 1.0)
-            .animation(.spring(response: 0.22, dampingFraction: 0.72), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.985 : 1.0)
+            .animation(reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.72), value: configuration.isPressed)
     }
 }
 

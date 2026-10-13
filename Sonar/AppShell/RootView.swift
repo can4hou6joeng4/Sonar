@@ -2,6 +2,10 @@ import SwiftData
 import SwiftUI
 import UIKit
 
+private enum HomeTab {
+    case spotlight, collection, library
+}
+
 private enum ShellLayer: Hashable {
     case route
     case player
@@ -135,10 +139,7 @@ extension EnvironmentValues {
 
 enum ShellBottomLayout {
     static func contentReservation(hasCurrentTrack: Bool = true, safeAreaBottom: CGFloat) -> CGFloat {
-        guard hasCurrentTrack else { return 0 }
-        return NCMDesignTokens.Layout.miniPlayerHeight
-            + NCMDesignTokens.Layout.bottomContentSpacing
-            - MiniPlayerDockPresentation.safeAreaCompaction(safeAreaBottom: safeAreaBottom)
+        SpotlightLayout.bottomReservation(hasTrack: hasCurrentTrack)
     }
 
     static func miniPlayerVerticalOffset(safeAreaBottom: CGFloat) -> CGFloat {
@@ -162,6 +163,9 @@ struct RootView: View {
 
     @State private var pullController = PlayerPullController()
     @State private var playerSurface: PlayerSurface = .artwork
+    @State private var homeTab: HomeTab = .spotlight
+    @State private var routeRevision = 0
+    @State private var introIsVisible = true
     @State private var drawerIsOpen = false
     @State private var drawerDragTranslation: CGFloat = 0
     @State private var edgeDrawerDragIsActive = false
@@ -197,6 +201,7 @@ struct RootView: View {
         GeometryReader { proxy in
             let drawerWidth = SettingsDrawerMetrics.width(for: proxy.size.width)
             let drawerProgress = settingsDrawerProgress(width: drawerWidth)
+            let playerTravel = proxy.size.height + proxy.safeAreaInsets.top + proxy.safeAreaInsets.bottom
 
             ZStack(alignment: .bottom) {
                 routeContent(
@@ -204,14 +209,16 @@ struct RootView: View {
                     safeAreaBottom: proxy.safeAreaInsets.bottom
                 )
                     .id(ShellLayer.route)
-                    .accessibilityHidden(pullController.pull > 0 || drawerProgress > 0 || searchOverlayIsVisible)
+                    .accessibilityHidden(introIsVisible || pullController.pull > 0 || drawerProgress > 0 || searchOverlayIsVisible)
                     .environment(\.shellSafeAreaInsets, proxy.safeAreaInsets)
-                    .allowsHitTesting(drawerProgress == 0 && pullController.pull == 0 && !searchOverlayIsVisible)
+                    .allowsHitTesting(!introIsVisible && drawerProgress == 0 && pullController.pull == 0 && !searchOverlayIsVisible)
 
                 if pullController.playerMounted {
                     FlowingLightBackground(track: playbackService.queue.current)
-                        .opacity(pullController.pull)
+                        .scaleEffect(pullController.scale)
+                        .opacity(pullController.opacity)
                         .ignoresSafeArea()
+                        .offset(y: CGFloat(1 - pullController.pull) * playerTravel + pullController.translationY)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
                         .zIndex(NCMDesignTokens.Layer.player - 1)
@@ -228,7 +235,7 @@ struct RootView: View {
                         .frame(width: proxy.size.width, height: proxy.size.height)
                         .scaleEffect(pullController.scale)
                         .opacity(pullController.opacity)
-                        .offset(y: CGFloat(1 - pullController.pull) * proxy.size.height + pullController.translationY)
+                        .offset(y: CGFloat(1 - pullController.pull) * playerTravel + pullController.translationY)
                         .id(ShellLayer.player)
                     }
                 }
@@ -239,31 +246,40 @@ struct RootView: View {
                 .accessibilityHidden(pullController.pull == 0)
                 .zIndex(NCMDesignTokens.Layer.player)
 
-                if hasCurrentTrack {
-                    NCMMiniPlayer(
-                        safeAreaBottom: proxy.safeAreaInsets.bottom,
-                        onOpenPlayer: {
-                            closeSearch()
-                            closeSettingsDrawer()
-                            playerSurface = .artwork
-                            pullController.open(reduceMotion: reduceMotion)
-                        },
-                        onOpenQueue: {
-                            closeSearch()
-                            closeSettingsDrawer()
-                            playerSurface = .queue
-                            pullController.open(reduceMotion: reduceMotion)
-                        }
-                    )
-                    .offset(y: ShellBottomLayout.miniPlayerVerticalOffset(
-                        safeAreaBottom: proxy.safeAreaInsets.bottom
-                    ))
-                    .opacity(pullController.toolbarReveal)
-                    .allowsHitTesting(pullController.pull == 0 && drawerProgress == 0 && !searchOverlayIsVisible)
-                    .accessibilityHidden(pullController.pull > 0 || drawerProgress > 0 || searchOverlayIsVisible)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .zIndex(NCMDesignTokens.Layer.miniPlayer)
+                VStack(spacing: SpotlightLayout.chromeSpacing) {
+                    if hasCurrentTrack {
+                        NCMMiniPlayer(
+                            safeAreaBottom: 0,
+                            onOpenPlayer: {
+                                closeSearch()
+                                closeSettingsDrawer()
+                                playerSurface = .artwork
+                                pullController.open(reduceMotion: reduceMotion)
+                            },
+                            onOpenQueue: {
+                                closeSearch()
+                                closeSettingsDrawer()
+                                playerSurface = .queue
+                                pullController.open(reduceMotion: reduceMotion)
+                            }
+                        )
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                    bottomNavigation
                 }
+                .padding(.horizontal, 18)
+                .padding(.bottom, SpotlightLayout.bottomPadding)
+                .background(alignment: .bottom) {
+                    LinearGradient(colors: [scheme.appSurface.opacity(0), scheme.appSurface, scheme.appSurface], startPoint: .top, endPoint: .bottom)
+                        .padding(.top, -20)
+                        .ignoresSafeArea(edges: .bottom)
+                        .allowsHitTesting(false)
+                }
+                .opacity(pullController.toolbarReveal)
+                .animation(AppMotion.emphasized(duration: AppMotion.medium, reduceMotion: reduceMotion), value: hasCurrentTrack)
+                .allowsHitTesting(!introIsVisible && pullController.pull == 0 && drawerProgress == 0 && !searchOverlayIsVisible)
+                .accessibilityHidden(introIsVisible || pullController.pull > 0 || drawerProgress > 0 || searchOverlayIsVisible)
+                .zIndex(NCMDesignTokens.Layer.miniPlayer)
 
                 settingsDrawer(width: drawerWidth, progress: drawerProgress)
                     .zIndex(25)
@@ -273,6 +289,7 @@ struct RootView: View {
         .background {
             scheme.appSurface.ignoresSafeArea()
         }
+        .preferredColorScheme(introIsVisible || pullController.pull > 0 ? .dark : themeState.appearanceMode.colorScheme)
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .overlay {
             if searchOverlayIsVisible {
@@ -290,6 +307,13 @@ struct RootView: View {
                     }
                 )
                 .transition(.opacity)
+            }
+        }
+        .overlay {
+            if introIsVisible {
+                SonarWelcomeView { introIsVisible = false }
+                    .contentShape(Rectangle())
+                    .accessibilityHidden(true)
             }
         }
         .task(id: playbackService.queue.current?.musicID, updateArtworkAndTheme)
@@ -327,13 +351,22 @@ struct RootView: View {
 
     private func routeContent(drawerWidth: CGFloat, safeAreaBottom: CGFloat) -> some View {
         NavigationStack {
-            DiscoverView(
-                isActive: !searchOverlayIsVisible,
-                onOpenSearch: openSearch,
-                onOpenSettings: openSettingsDrawer,
-                onSettingsDragChanged: { handleEdgeDrawerDragChanged($0, width: drawerWidth) },
-                onSettingsDragEnded: { handleEdgeDrawerDragEnded($0, width: drawerWidth) }
-            )
+            Group {
+                switch homeTab {
+                case .spotlight, .collection:
+                    DiscoverView(
+                        isActive: !searchOverlayIsVisible,
+                        showsSpotlight: homeTab == .spotlight,
+                        onOpenSearch: openSearch,
+                        onOpenSettings: openSettingsDrawer,
+                        onShowCollection: { selectTab(.collection) },
+                        onSettingsDragChanged: { handleEdgeDrawerDragChanged($0, width: drawerWidth) },
+                        onSettingsDragEnded: { handleEdgeDrawerDragEnded($0, width: drawerWidth) }
+                    )
+                case .library:
+                    LibraryOverviewView(onOpenSettings: openSettingsDrawer, onOpenCollection: { selectTab(.collection) })
+                }
+            }
             .navigationDestination(item: $searchDestination) { destination in
                 switch destination {
                 case let .artist(artist):
@@ -343,12 +376,51 @@ struct RootView: View {
                 }
             }
         }
+        .id(routeRevision)
+        .transition(.opacity)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             Color.clear.frame(height: ShellBottomLayout.contentReservation(
                 hasCurrentTrack: hasCurrentTrack,
                 safeAreaBottom: safeAreaBottom
             ))
         }
+    }
+
+    private var bottomNavigation: some View {
+        HStack(spacing: 0) {
+            navigationButton("music.note", title: "聆听", identifier: "tab-spotlight", selected: homeTab == .spotlight) { selectTab(.spotlight) }
+            navigationButton("magnifyingglass", title: "搜索", identifier: "tab-search", selected: searchIsPresented, action: openSearch)
+            navigationButton(homeTab == .collection ? "heart.fill" : "heart", title: "收藏", identifier: "tab-favorites", selected: homeTab == .collection) { selectTab(.collection) }
+            navigationButton("rectangle.stack", title: "资料库", identifier: "tab-library", selected: homeTab == .library) { selectTab(.library) }
+        }
+        .frame(height: SpotlightLayout.navigationHeight)
+    }
+
+    private func selectTab(_ tab: HomeTab) {
+        closeSearch()
+        searchDestination = nil
+        withAnimation(AppMotion.emphasized(duration: 0.22, reduceMotion: reduceMotion)) {
+            homeTab = tab
+            // Reset pushed pages while leaving the root playback service and player mounted.
+            routeRevision += 1
+        }
+    }
+
+    private func navigationButton(_ symbol: String, title: String, identifier: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            AppHaptics.light()
+            action()
+        } label: {
+            Image(systemName: symbol)
+                .font(.system(size: 22, weight: selected ? .semibold : .regular))
+                .foregroundStyle(selected ? scheme.onSurface : scheme.onSurfaceVariant.opacity(0.75))
+                .frame(maxWidth: .infinity, minHeight: 48)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.circleIcon(diameter: 42, haptic: false))
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityIdentifier(identifier)
     }
 
     private func openSearch() {

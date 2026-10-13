@@ -48,55 +48,34 @@ enum PlaybackStatusPresentation {
 }
 
 struct TransportBar: View {
-    var onOpenQueue: (() -> Void)? = nil
     @Environment(PlaybackService.self) private var playbackService
     @Environment(ToastCenter.self) private var toastCenter
+    @Environment(\.sonarReduceMotion) private var reduceMotion
     @State private var dragValue: TimeInterval?
 
     private var displayedElapsed: TimeInterval { dragValue ?? playbackService.elapsed }
     private var isEnabled: Bool { playbackService.queue.current != nil }
 
     var body: some View {
-        VStack(spacing: 10) {
-            VStack(spacing: 2) {
-                PlayerProgressSlider(
-                    value: displayedElapsed,
-                    duration: playbackService.duration,
-                    onEditing: { dragValue = $0 },
-                    onCommit: commitSeek
-                )
-                .frame(height: 28)
-
-                HStack {
-                    timecode(displayedElapsed)
-                    Spacer()
-                    timecode(playbackService.duration)
-                }
-            }
-            .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
-            .padding(.top, 12)
-
-            PlaybackStatusLine()
-
+        VStack(spacing: 2) {
             HStack(spacing: 0) {
                 Button {
                     AppHaptics.light()
-                    let next = playbackService.playbackMode.next
-                    playbackService.setPlaybackMode(next)
-                    toastCenter.show(next.title)
+                    let mode: PlaybackService.PlaybackMode = playbackService.playbackMode == .shuffle ? .sequence : .shuffle
+                    playbackService.setPlaybackMode(mode)
+                    toastCenter.show(mode.title)
                 } label: {
-                    Image(systemName: playbackService.playbackMode.systemImage)
-                        .font(.system(size: 20, weight: .semibold))
-                        .contentTransition(.symbolEffect(.replace))
+                    Image(systemName: "shuffle")
+                        .font(.system(size: 19, weight: .medium))
+                        .foregroundStyle(.white.opacity(playbackService.playbackMode == .shuffle ? 1 : 0.50))
                         .frame(maxWidth: .infinity, minHeight: 48)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.bounce)
-                .frame(maxWidth: .infinity)
-                .foregroundStyle(isEnabled ? NCMDesignTokens.Player.secondaryInk : NCMDesignTokens.Player.tertiaryInk)
                 .disabled(!isEnabled)
-                .accessibilityLabel("播放模式，\(playbackService.playbackMode.title)")
-                .accessibilityIdentifier("player-playback-mode")
+                .accessibilityLabel(playbackService.playbackMode == .shuffle ? "关闭随机播放" : "随机播放")
+                .accessibilityAddTraits(playbackService.playbackMode == .shuffle ? .isSelected : [])
+                .accessibilityIdentifier("player-shuffle-button")
 
                 transportButton("backward.end.fill", size: 24, label: "上一首") {
                     Task { await playbackService.previous() }
@@ -104,42 +83,32 @@ struct TransportBar: View {
 
                 Button(action: performPrimaryPlaybackAction) {
                     ZStack {
-                        Circle()
-                            .fill(.ultraThinMaterial)
-                            .frame(width: 60, height: 60)
-
-                        Circle()
-                            .fill(Color.white.opacity(0.18))
-                            .frame(width: 60, height: 60)
-
+                        Circle().fill(.ultraThinMaterial)
+                        Circle().fill(Color.white.opacity(0.18))
                         Circle()
                             .strokeBorder(
                                 LinearGradient(
-                                    colors: [Color.white.opacity(0.40), Color.white.opacity(0.10)],
+                                    colors: [.white.opacity(0.40), .white.opacity(0.10)],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 ),
                                 lineWidth: 1
                             )
-                            .frame(width: 60, height: 60)
                             .shadow(color: .black.opacity(0.24), radius: 10, y: 4)
-
                         if playbackService.state == .loading {
-                            ProgressView()
-                                .progressViewStyle(.circular)
-                                .tint(NCMDesignTokens.Player.primaryInk)
-                                .frame(width: 26, height: 26)
+                            ProgressView().tint(NCMDesignTokens.Player.primaryInk)
                         } else {
                             Image(systemName: playbackIcon)
                                 .font(.system(size: 26, weight: .bold))
-                                .offset(x: playbackService.state == .playing ? 0 : 1.5)
-                                .contentTransition(.symbolEffect(.replace))
+                                .offset(x: playbackIcon == "play.fill" ? 1.5 : 0)
+                                .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                         }
                     }
-                    .frame(width: 66, height: 66)
+                    .frame(width: 60, height: 60)
+                    .padding(3)
                     .contentShape(Circle())
                 }
-                .buttonStyle(.bounce(scale: 0.90, opacity: 0.90, haptic: true))
+                .buttonStyle(.bounce(scale: 0.90, opacity: 0.90, haptic: false))
                 .frame(maxWidth: .infinity)
                 .foregroundStyle(isEnabled ? NCMDesignTokens.Player.primaryInk : NCMDesignTokens.Player.tertiaryInk)
                 .disabled(!isEnabled)
@@ -152,22 +121,69 @@ struct TransportBar: View {
 
                 Button {
                     AppHaptics.light()
-                    onOpenQueue?()
+                    let mode: PlaybackService.PlaybackMode
+                    switch playbackService.playbackMode {
+                    case .sequence, .shuffle: mode = .repeatOne
+                    case .repeatOne: mode = .playInOrder
+                    case .playInOrder: mode = .sequence
+                    }
+                    playbackService.setPlaybackMode(mode)
+                    toastCenter.show(mode.title)
                 } label: {
-                    Image(systemName: "list.bullet")
-                        .font(.system(size: 20, weight: .semibold))
+                    Image(systemName: repeatSymbol)
+                        .font(.system(size: 19, weight: .medium))
+                        .foregroundStyle(.white.opacity(playbackService.playbackMode == .shuffle ? 0.50 : 1))
+                        .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                         .frame(maxWidth: .infinity, minHeight: 48)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.bounce)
-                .frame(maxWidth: .infinity)
-                .foregroundStyle(isEnabled ? NCMDesignTokens.Player.secondaryInk : NCMDesignTokens.Player.tertiaryInk)
                 .disabled(!isEnabled)
-                .accessibilityLabel("待播放")
-                .accessibilityIdentifier("player-queue-button")
+                .accessibilityLabel("播放模式，\(playbackService.playbackMode.title)")
+                .accessibilityIdentifier("player-playback-mode")
+                .contextMenu {
+                    ForEach(PlaybackService.PlaybackMode.allCases, id: \.self) { mode in
+                        Button(mode.title, systemImage: mode.systemImage) {
+                            playbackService.setPlaybackMode(mode)
+                        }
+                    }
+                }
             }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
+            VStack(spacing: -8) {
+                PlayerProgressSlider(
+                    value: displayedElapsed,
+                    duration: playbackService.duration,
+                    onEditing: { dragValue = $0 },
+                    onCommit: commitSeek
+                )
+                .frame(height: 44)
+                HStack {
+                    timecode(displayedElapsed)
+                    Spacer()
+                    timecode(playbackService.duration)
+                }
+            }
+            .padding(.horizontal, 6)
+
+            PlaybackStatusLine()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 14)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(.white.opacity(0.14), lineWidth: 0.75)
+                .allowsHitTesting(false)
+        }
+        .padding(.horizontal, 24)
+        .onChange(of: playbackService.queue.current?.musicID) { _, _ in dragValue = nil }
+    }
+
+    private var repeatSymbol: String {
+        switch playbackService.playbackMode {
+        case .repeatOne: "repeat.1"
+        case .playInOrder: "arrow.right"
+        case .shuffle, .sequence: "repeat"
         }
     }
 
@@ -260,7 +276,6 @@ struct TransportBar: View {
 
 private struct PlaybackStatusLine: View {
     @Environment(PlaybackService.self) private var playbackService
-    @Environment(\.sonarReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
@@ -275,8 +290,7 @@ private struct PlaybackStatusLine: View {
                 .accessibilityLabel(PlaybackStatusPresentation.text(for: playbackService.state))
                 .accessibilityIdentifier("player-playback-status")
             case .idle, .playing, .paused:
-                Color.clear.frame(height: 6)
-                    .accessibilityIdentifier("player-playback-status")
+                EmptyView()
             }
         }
         .font(.caption.weight(.medium))
@@ -317,41 +331,6 @@ private struct PlaybackStatusLine: View {
         .minimumScaleFactor(0.82)
     }
 
-    private var playbackModeButton: some View {
-        Button {
-            playbackService.setPlaybackMode(playbackService.playbackMode.next)
-        } label: {
-            ViewThatFits(in: .horizontal) {
-                Label(
-                    playbackService.playbackMode.title,
-                    systemImage: playbackService.playbackMode.systemImage
-                )
-                .fixedSize(horizontal: true, vertical: false)
-
-                VStack(spacing: 1) {
-                    Image(systemName: playbackService.playbackMode.systemImage)
-                    Text(playbackService.playbackMode.title)
-                }
-            }
-            .font(.caption.weight(.semibold))
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
-            .padding(.horizontal, 8)
-            .frame(width: 104)
-            .frame(minHeight: 44)
-            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .contentTransition(.symbolEffect(.replace))
-        .animation(
-            AppMotion.emphasized(duration: AppMotion.short, reduceMotion: reduceMotion),
-            value: playbackService.playbackMode
-        )
-        .accessibilityLabel("播放模式，\(playbackService.playbackMode.title)")
-        .accessibilityHint("双击切换播放模式")
-        .accessibilityIdentifier("player-playback-mode")
-    }
-
     private var stateSystemImage: String {
         switch playbackService.state {
         case .playing: "waveform"
@@ -382,7 +361,7 @@ private struct PlayerProgressSlider: View {
     @State private var isDragging = false
 
     private var progress: CGFloat {
-        guard duration > 0 else { return 0 }
+        guard duration.isFinite, duration > 0, value.isFinite else { return 0 }
         return min(max(value / duration, 0), 1)
     }
 
@@ -417,17 +396,20 @@ private struct PlayerProgressSlider: View {
                     }
             )
         }
+        .allowsHitTesting(duration.isFinite && duration > 0)
         .accessibilityElement()
         .accessibilityLabel("播放进度")
         .accessibilityValue("\(Int(progress * 100))%")
         .accessibilityIdentifier("player-progress-slider")
         .accessibilityAdjustableAction { direction in
+            guard duration.isFinite, duration > 0, value.isFinite else { return }
             let delta: TimeInterval = direction == .increment ? 5 : -5
             onCommit(min(max(value + delta, 0), max(duration, 0)))
         }
     }
 
     private func value(at x: CGFloat, width: CGFloat) -> TimeInterval {
-        min(max(x / width, 0), 1) * max(duration, 0)
+        guard duration.isFinite, duration > 0 else { return 0 }
+        return min(max(x / width, 0), 1) * duration
     }
 }

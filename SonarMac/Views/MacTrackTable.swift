@@ -27,7 +27,7 @@ struct MacTrackTable: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(row.track.title).fontWeight(model.playback.queue.current?.musicID == row.id ? .semibold : .regular)
                             .lineLimit(1)
-                        Text(row.track.source.displayName).font(.caption2).foregroundStyle(.tertiary)
+                        Text(row.track.source.isEnabled ? row.track.source.displayName : "\(row.track.source.displayName) · 不可用").font(.caption2).foregroundStyle(.tertiary)
                     }
                     if model.playback.queue.current?.musicID == row.id {
                         Image(systemName: model.playback.state == .playing ? "waveform" : "pause.fill")
@@ -48,6 +48,7 @@ struct MacTrackTable: View {
             let selected = rows.filter { selectedIDs.contains($0.id) }
             if let first = selected.first {
                 Button("播放", systemImage: "play.fill") { play(first.index) }
+                    .disabled(!first.track.source.isEnabled)
                 Button("下一首播放", systemImage: "text.line.first.and.arrowtriangle.forward") {
                     Task {
                         if model.playback.queue.current == nil {
@@ -66,7 +67,7 @@ struct MacTrackTable: View {
                 }
             }
         } primaryAction: { selectedIDs in
-            if let row = rows.first(where: { selectedIDs.contains($0.id) }) { play(row.index) }
+            if let row = rows.first(where: { selectedIDs.contains($0.id) && $0.track.source.isEnabled }) { play(row.index) }
         }
         .overlay {
             if tracks.isEmpty { MacEmptyState(title: "这里还没有歌曲", description: "搜索音乐，或导入已有的 Sonar 歌单。") }

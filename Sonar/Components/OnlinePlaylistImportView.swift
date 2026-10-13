@@ -35,7 +35,7 @@ struct OnlinePlaylistImportView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.m3Scheme) private var scheme
     @State private var input = ""
-    @State private var source: MusicSource = .tx
+    @State private var source: MusicSource = .wy
     @State private var request: Request?
     @State private var state: State = .idle
     @State private var existingIDs = Set<String>()
@@ -95,12 +95,12 @@ struct OnlinePlaylistImportView: View {
     private var header: some View {
         HStack(alignment: .center, spacing: 0) {
             #if os(iOS)
-            SheetHeader(title: "导入歌单", subtitle: "QQ 音乐 · 网易云音乐")
+            SheetHeader(title: "导入歌单", subtitle: "网易云音乐")
                 .accessibilityIdentifier("online-playlist-import-sheet")
             #else
             VStack(alignment: .leading, spacing: 4) {
                 Text("导入歌单").font(.headline).accessibilityIdentifier("online-playlist-import-sheet")
-                Text("QQ 音乐 · 网易云音乐").font(.caption).foregroundStyle(secondaryInk)
+                Text("网易云音乐").font(.caption).foregroundStyle(secondaryInk)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, contentPadding)
@@ -123,7 +123,7 @@ struct OnlinePlaylistImportView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("粘贴歌单链接，带上喜欢的音乐。")
                 .font(formTitleFont)
-            sourcePicker
+            if MusicSource.playlistImportSources.count > 1 { sourcePicker }
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .center, spacing: 10) {
                     Image(systemName: "link")
@@ -161,7 +161,7 @@ struct OnlinePlaylistImportView: View {
                 .padding(.vertical, 6)
                 .frame(minHeight: 52)
                 .background(inputFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                Text("链接自动识别音源；ID 使用上方所选音源。")
+                Text("支持网易云公开歌单链接或歌单 ID。")
                     .font(.system(size: 12))
                     .foregroundStyle(secondaryInk)
             }
@@ -172,7 +172,7 @@ struct OnlinePlaylistImportView: View {
         Group {
             #if os(iOS)
             HStack(spacing: 0) {
-                ForEach(MusicSource.allCases, id: \.self) { option in
+                ForEach(MusicSource.playlistImportSources, id: \.self) { option in
                     Button { source = option } label: {
                         Text(option.displayName)
                             .font(.system(size: 14, weight: source == option ? .semibold : .regular))
@@ -193,7 +193,7 @@ struct OnlinePlaylistImportView: View {
             .background(scheme.appSurface, in: Capsule())
             #else
             Picker("歌单音源", selection: $source) {
-                ForEach(MusicSource.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                ForEach(MusicSource.playlistImportSources, id: \.self) { Text($0.displayName).tag($0) }
             }
             .pickerStyle(.segmented)
             .accessibilityIdentifier("online-playlist-import-source")

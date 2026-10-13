@@ -51,7 +51,7 @@ struct MacSettingsView: View {
             }.formStyle(.grouped).tabItem { Label("播放", systemImage: "speaker.wave.2") }
             Form {
                 Section("歌单迁移") {
-                    Button("从 QQ 音乐或网易云导入…") {
+                    Button("从网易云导入…") {
                         if let library = model.library { importPresentation = ImportPresentation(library: library) }
                     }.disabled(model.library == nil)
                     Text("粘贴公开歌单分享链接，预览后合并到个人歌单。")

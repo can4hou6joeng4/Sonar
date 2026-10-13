@@ -26,7 +26,7 @@ extension Quality {
 
     var title: String {
         switch self {
-        case .master: "母带（最高优先）"
+        case .master: "最高音质优先"
         case .hiRes: "Hi-Res"
         case .lossless: "无损 FLAC"
         case .high: "高品质 320K"
