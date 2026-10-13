@@ -52,6 +52,7 @@
 
 ## 功能
 
+- **本地音乐播放**：支持导入本地音频文件或文件夹（MP3、FLAC、M4A、WAV 等），自动读取 ID3 元数据、艺术家、专辑与内嵌封面，自动匹配同目录下的同名 .lrc 同步歌词。无需任何第三方凭据与网络即可离线畅享原生播放体验。
 - **iOS 聆听界面**：分段黑胶启动动画、封面大图主页、圆形玻璃播控与原有按压反馈；播放页整体展开，换歌时封面与背景平滑过渡。
 - **音乐搜索**：一个搜索框查询网易云结果，保留原页面遮罩交互；QQ、酷狗等其他音源暂时隐藏并停用，已有收藏仍保留。
 - **封面与歌词**：播放页随封面取色，支持明暗外观、同步歌词与逐字高亮；缺少逐字时间时会明确标注合成效果。
@@ -61,11 +62,11 @@
 - **最高音质优先**：网易云通过 ChKSz 从母带音质开始，缺少可用结果时逐级尝试 Hi-Res、无损、320K、128K，保持同一歌曲 ID。
 - **歌单迁移**：粘贴网易云音乐的公开歌单链接或 ID，预览后按原顺序合并，自动跳过已收藏歌曲。
 
-Sonar 没有开屏广告或内置社交页面。歌曲、封面和歌词来自第三方服务，可用性与实际播放音质取决于歌曲和音源；歌单备份保存歌曲信息，不包含音频文件。
+Sonar 没有开屏广告或内置社交页面。本地音乐完全离线读取；在线歌曲、封面和歌词来自第三方服务，可用性与实际播放音质取决于歌曲和音源；歌单备份保存歌曲信息，不包含音频文件。
 
 ## English overview
 
-Sonar is a native SwiftUI music player for **iOS 17+ and macOS 14+**. A single search field queries NetEase through ChKSz. QQ Music, Kugou, and other sources are temporarily hidden and disabled. Existing favorites and backups are preserved; tracks from disabled sources are marked unavailable and excluded from playback. It provides local playlists, JSON backup, synchronized lyrics, and playback queues. The Mac app combines a menu bar library with a notch player; displays without a notch use a top capsule. Both surfaces share playback and library state.
+Sonar is a native SwiftUI music player for **iOS 17+ and macOS 14+**. It supports offline local music playback (MP3, FLAC, M4A, WAV) with automatic ID3 metadata and synchronized LRC lyrics, as well as online querying through NetEase via ChKSz. QQ Music, Kugou, and other sources are temporarily hidden and disabled. Existing favorites and backups are preserved; tracks from disabled sources are marked unavailable and excluded from playback. It provides local playlists, JSON backup, synchronized lyrics, and playback queues. The Mac app combines a menu bar library with a notch player; displays without a notch use a top capsule. Both surfaces share playback and library state.
 
 The current iOS source features an artwork-led home, icon navigation, a floating mini-player, and a cover-tinted player with a glass control card. Circular glass controls and their original press feedback have been restored. The welcome sequence stages the cover, vinyl, and branding before entering the home; the full player slides up from the bottom, and track changes crossfade artwork and transition the background color. Lyrics, queue management, quality selection, and the in-place search overlay remain accessible. The latest screenshots use the iPhone 17 Pro Simulator. These interface and source changes are not included in the existing public IPA.
 
@@ -77,14 +78,29 @@ Source code is available under **GPL-3.0**, with separate notices for third-part
 
 两端均可从同一个 Xcode 工程构建。[v1.0.0-preview.2](https://github.com/can4hou6joeng4/Sonar/releases/tag/v1.0.0-preview.2) 提供 iOS 未签名 IPA、安装说明与 SHA-256 校验值，App 与 Widget 版本为 **1.0 (22)**。Mac 的既有实验预览包仍见 [v1.0.0-preview.1](https://github.com/can4hou6joeng4/Sonar/releases/tag/v1.0.0-preview.1)；双端最新源码的变化见 [更新记录](CHANGELOG.md)。
 
-Mac 预览包使用本地 ad-hoc 签名，没有 Developer ID 签名或 Apple 公证，首次打开可能被 macOS 拦截。请先核对下载来源与校验值，再按系统「隐私与安全性」中的提示决定是否允许打开；也可以按下方步骤自行构建。
+Mac 预览包使用本地 ad-hoc 签名，没有 Developer ID 签名或 Apple 公证，首次打开可能被 macOS 拦截。请先核对下载来源与校验值，再按系统「隐私与安全性」中的提示决定是否允许打开；也可以按下方步骤直接打包或自行构建。
 
 | 平台 | 系统要求 | 运行方式 |
 | --- | --- | --- |
 | iPhone | iOS 17.0+ | 下载未签名 IPA 后自行签名，或在 Xcode 中选择 `Sonar` 并配置个人签名后安装 |
-| Mac | macOS 14.0+ | 在 Xcode 中选择 `SonarMac`，或使用下方构建脚本 |
+| Mac | macOS 14.0+ | 直接下载 `SonarMac.dmg` 拖入 Applications，或运行 `./scripts/package-mac.sh` 一键打包 |
 
 自行打包的 iOS App 可通过适用的个人签名工具安装。TrollStore 仅适用于其支持的系统与设备，请先核对兼容性。
+
+### Mac 一键打包与运行
+
+项目提供了快速打包脚本 `scripts/package-mac.sh`，可一键生成 DMG 与 ZIP 产物：
+
+```sh
+./scripts/package-mac.sh
+```
+
+产物保存在 `build/SonarMac.dmg` 与 `build/SonarMac.zip`。
+因采用本地 ad-hoc 签名，若双击运行时遇到 macOS Gatekeeper 安全提示，可在终端运行解除限制：
+
+```sh
+xattr -cr /Applications/SonarMac.app
+```
 
 ### 安装公开 IPA
 

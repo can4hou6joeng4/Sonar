@@ -138,11 +138,30 @@ public final class ChkszSourceRuntime: SourceRuntime, @unchecked Sendable {
     }
 
     public func lyric(_ track: Track) async throws -> LyricInfo {
+        if track.source == .local {
+            return Self.resolveLocalLyric(track)
+        }
         try track.source.requireEnabled()
         return try await netease.lyric(track)
     }
 
+    public static func resolveLocalLyric(_ track: Track) -> LyricInfo {
+        let path = (track.rawPayload["filePath"] as? String) ?? track.songmid
+        guard !path.isEmpty else { return LyricInfo(lyric: "", tlyric: nil) }
+        let audioURL = URL(fileURLWithPath: path)
+        let lrcURL = audioURL.deletingPathExtension().appendingPathExtension("lrc")
+        if FileManager.default.fileExists(atPath: lrcURL.path),
+           let content = try? String(contentsOf: lrcURL, encoding: .utf8) {
+            return LyricInfo(lyric: content, tlyric: nil)
+        }
+        return LyricInfo(lyric: "", tlyric: nil)
+    }
+
     public func picURL(_ track: Track) async throws -> URL {
+        if track.source == .local {
+            let path = (track.rawPayload["filePath"] as? String) ?? track.songmid
+            return URL(fileURLWithPath: path)
+        }
         try track.source.requireEnabled()
         let payload = track.rawPayload
         let candidate = (payload["picUrl"] as? String)

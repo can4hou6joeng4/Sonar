@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import CryptoKit
 import ImageIO
@@ -145,9 +146,18 @@ public actor ArtworkService {
                 let requestID = UUID()
                 let task = Task {
                     do {
-                        let url = try await sourceRuntime.picURL(track)
-                        try Task.checkCancellation()
-                        let data = try await client.data(from: url)
+                        let data: Data
+                        if track.source == .local {
+                            if let localData = await Self.loadLocalArtworkData(track: track) {
+                                data = localData
+                            } else {
+                                throw SourceError.source(message: "本地音频暂无封面")
+                            }
+                        } else {
+                            let url = try await sourceRuntime.picURL(track)
+                            try Task.checkCancellation()
+                            data = try await client.data(from: url)
+                        }
                         try Task.checkCancellation()
                         guard let image = Self.downsample(data, maximumPixelDimension: limits.maximumPixelDimension) else {
                             throw SourceError.source(message: "封面数据无法解码")
@@ -350,6 +360,31 @@ public actor ArtworkService {
                 total -= file.size
             } catch { continue }
         }
+    }
+
+    private static func loadLocalArtworkData(track: Track) async -> Data? {
+        let path = (track.rawPayload["filePath"] as? String) ?? track.songmid
+        guard !path.isEmpty else { return nil }
+        let fileURL = URL(fileURLWithPath: path)
+        let dir = fileURL.deletingLastPathComponent()
+
+        for name in ["cover.jpg", "cover.png", "folder.jpg", "front.jpg", "Cover.jpg", "Cover.png"] {
+            let candidate = dir.appendingPathComponent(name)
+            if let data = try? Data(contentsOf: candidate), !data.isEmpty {
+                return data
+            }
+        }
+
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return nil }
+        let asset = AVURLAsset(url: fileURL)
+        if let metadata = try? await asset.load(.commonMetadata) {
+            for item in metadata where item.commonKey == .commonKeyArtwork {
+                if let data = try? await item.load(.dataValue), !data.isEmpty {
+                    return data
+                }
+            }
+        }
+        return nil
     }
 
     private func cacheURL(for key: String) -> URL {

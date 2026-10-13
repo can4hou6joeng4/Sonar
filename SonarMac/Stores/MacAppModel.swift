@@ -136,6 +136,37 @@ final class MacAppModel {
         } catch { errorMessage = "未能从歌单移除，请重试。" }
     }
 
+    func importLocalMusic() {
+        guard let library else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        panel.message = "选择音频文件或音乐文件夹 (支持 MP3, FLAC, M4A, WAV 等)"
+        panel.prompt = "导入"
+        panel.begin { [weak self] response in
+            guard response == .OK else { return }
+            let urls = panel.urls
+            guard !urls.isEmpty else { return }
+            Task { @MainActor in
+                let tracks = await LocalAudioScanner.scan(urls: urls)
+                guard !tracks.isEmpty else {
+                    self?.errorMessage = "未在所选文件或目录中找到受支持的音频文件"
+                    return
+                }
+                var inserted = 0
+                for track in tracks {
+                    do {
+                        let res = try library.collect(track)
+                        if res.inserted { inserted += 1 }
+                    } catch {}
+                }
+                self?.reloadLibrary()
+                self?.notice = "已导入 \(inserted) 首本地歌曲，重复项已跳过"
+            }
+        }
+    }
+
     func importBackup() {
         guard let library else { return }
         let panel = NSOpenPanel()

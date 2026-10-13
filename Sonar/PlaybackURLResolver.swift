@@ -382,6 +382,9 @@ public final class PlaybackURLResolver: PlaybackURLRefreshing, @unchecked Sendab
     }
 
     public func musicURL(for track: Track, quality: Quality) async throws -> URL {
+        if track.source == .local {
+            return try Self.resolveLocalURL(track: track)
+        }
         try track.source.requireEnabled()
         let key = PlaybackURLCache.Key(track: track, quality: quality)
         if let cached = await cache.value(for: key) { return cached }
@@ -389,16 +392,41 @@ public final class PlaybackURLResolver: PlaybackURLRefreshing, @unchecked Sendab
     }
 
     public func refreshMusicURL(for track: Track, quality: Quality) async throws -> URL {
+        if track.source == .local {
+            return try Self.resolveLocalURL(track: track)
+        }
         try track.source.requireEnabled()
         let key = PlaybackURLCache.Key(track: track, quality: quality)
         await cache.removeValue(for: key)
         return try await resolveAndCache(track: track, quality: quality, key: key)
     }
 
+    public static func resolveLocalURL(track: Track) throws -> URL {
+        if let bookmarkBase64 = track.rawPayload["bookmark"] as? String,
+           let bookmarkData = Data(base64Encoded: bookmarkBase64) {
+            var isStale = false
+            if let resolvedURL = try? URL(resolvingBookmarkData: bookmarkData, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &isStale) {
+                _ = resolvedURL.startAccessingSecurityScopedResource()
+                if FileManager.default.fileExists(atPath: resolvedURL.path) {
+                    return resolvedURL
+                }
+            }
+        }
+        let path = (track.rawPayload["filePath"] as? String) ?? track.songmid
+        guard !path.isEmpty else {
+            throw SourceError.source(message: "本地音频路径为空")
+        }
+        let url = URL(fileURLWithPath: path)
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw SourceError.source(message: "本地音频文件不存在或已移动: \(url.lastPathComponent)")
+        }
+        return url
+    }
+
     private func resolveAndCache(track: Track, quality: Quality, key: PlaybackURLCache.Key) async throws -> URL {
         let result: ChkszPlaybackResult
         switch track.source {
-        case .tx, .kg:
+        case .tx, .kg, .local:
             throw SourceError.source(message: "\(track.source.displayName)音源暂不可用")
         case .wy:
             result = try await netease.musicURL(for: track, quality: quality)

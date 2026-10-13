@@ -4,13 +4,14 @@ public enum MusicSource: String, Codable, Sendable, CaseIterable {
     case wy
     case tx
     case kg
+    case local
 
     // Keep retired sources decodable for existing libraries and backups.
-    public static let allCases: [MusicSource] = [.kg, .wy, .tx]
+    public static let allCases: [MusicSource] = [.kg, .wy, .tx, .local]
     public static let searchSources: [MusicSource] = [.wy]
     public static let catalogSources: [MusicSource] = []
     public static let playlistImportSources: [MusicSource] = [.wy]
-    public var isEnabled: Bool { Self.searchSources.contains(self) }
+    public var isEnabled: Bool { self == .local || Self.searchSources.contains(self) }
     public var supportsCatalog: Bool { Self.catalogSources.contains(self) }
 
     public func requireEnabled() throws {
@@ -290,7 +291,7 @@ public struct PlaylistCategory: Equatable, Identifiable, Sendable {
 public extension MusicSource {
     var playlistCategories: [PlaylistCategory] {
         switch self {
-        case .wy, .kg:
+        case .wy, .kg, .local:
             return []
         case .tx:
             return [
@@ -305,6 +306,7 @@ public extension MusicSource {
         case .wy: "网易云"
         case .tx: "QQ"
         case .kg: "酷狗"
+        case .local: "本地"
         }
     }
 }
@@ -436,6 +438,13 @@ public struct LyricInfo: Codable, Sendable, Equatable {
     public let tlyric: String?
     public let rlyric: String?
     public let lxlyric: String?
+
+    public init(lyric: String, tlyric: String? = nil, rlyric: String? = nil, lxlyric: String? = nil) {
+        self.lyric = lyric
+        self.tlyric = tlyric
+        self.rlyric = rlyric
+        self.lxlyric = lxlyric
+    }
 }
 
 public enum SourceError: Error, LocalizedError, Sendable {

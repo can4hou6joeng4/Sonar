@@ -53,7 +53,7 @@ public struct OnlinePlaylistReference: Equatable, Sendable {
 
         let rawID: String?
         switch source {
-        case .kg: throw OnlinePlaylistImportError.unsupportedLink
+        case .kg, .local: throw OnlinePlaylistImportError.unsupportedLink
         case .wy:
             guard paths.contains(where: { $0.split(separator: "/").contains("playlist") }) else {
                 throw OnlinePlaylistImportError.notPlaylistLink
@@ -207,7 +207,7 @@ public actor OnlinePlaylistImportService: OnlinePlaylistImporting {
         try Task.checkCancellation()
         try reference.source.requireEnabled()
         switch reference.source {
-        case .tx, .kg: throw OnlinePlaylistImportError.unsupportedLink
+        case .tx, .kg, .local: throw OnlinePlaylistImportError.unsupportedLink
         case .wy: return try await readNetEase(reference)
         }
     }

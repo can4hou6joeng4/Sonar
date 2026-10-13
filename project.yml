@@ -98,6 +98,7 @@ targets:
       - path: Sonar/FallbackPlaybackURLResolver.swift
       - path: Sonar/LibraryModels.swift
       - path: Sonar/LibraryStore.swift
+      - path: Sonar/LocalAudioScanner.swift
       - path: Sonar/Lyrics.swift
       - path: Sonar/PlatformImage.swift
       - path: Sonar/PlaybackQueue.swift

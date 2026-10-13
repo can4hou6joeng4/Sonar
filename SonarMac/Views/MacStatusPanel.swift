@@ -340,8 +340,21 @@ struct MacStatusPanel: View {
         .overlay {
             if tab == .search, search.isLoading { ProgressView("正在搜索…") }
             else if displayedTracks.isEmpty {
-                Text(tab == .search ? (search.hasSearched ? "没有找到歌曲，试试其他关键词。" : "输入歌名或歌手，按回车搜索。") : "歌单里还没有歌曲。")
-                    .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).padding()
+                if tab == .search {
+                    Text(search.hasSearched ? "没有找到歌曲，试试其他关键词。" : "输入歌名或歌手，按回车搜索。")
+                        .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).padding()
+                } else {
+                    VStack(spacing: 8) {
+                        Text("歌单里还没有歌曲。")
+                            .font(.callout).foregroundStyle(.secondary)
+                        Button(action: model.importLocalMusic) {
+                            Label("导入本地音乐", systemImage: "folder.badge.plus")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                    }
+                    .padding()
+                }
             }
         }
     }
@@ -388,6 +401,28 @@ struct MacStatusPanel: View {
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
 
             VStack(alignment: .leading, spacing: 10) {
+                Button {
+                    model.importLocalMusic()
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "folder.badge.plus")
+                            .frame(width: 18).foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("导入本地音乐").fontWeight(.medium)
+                            Text("音频文件或文件夹 (MP3, FLAC, M4A, WAV 等)")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 8)
+                        Image(systemName: "chevron.right")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(model.library == nil)
+                .accessibilityIdentifier("mac-settings-import-local-music")
+                Divider()
                 Button {
                     if let library = model.library { importPresentation = ImportPresentation(library: library) }
                 } label: {
