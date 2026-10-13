@@ -29,9 +29,7 @@
 ### iOS
 
 <p align="center">
-  <a href="assets/previews/ios-home.jpg"><img src="assets/previews/ios-home.jpg" width="260" alt="iOS 封面大图主页与悬浮播放条" /></a>
-  <a href="assets/previews/ios-player.jpg"><img src="assets/previews/ios-player.jpg" width="260" alt="iOS 封面取色播放页与玻璃控制卡片" /></a>
-  <a href="assets/previews/ios-library.jpg"><img src="assets/previews/ios-library.jpg" width="260" alt="iOS 收藏、最近播放与资料库" /></a>
+  <a href="assets/previews/ios-main.png"><img src="assets/previews/ios-main.png" width="900" alt="iOS 封面大图主页、播放页与资料库实图" /></a>
 </p>
 
 当前 iOS 源码使用封面大图主页、四个图标导航与悬浮播放条。播放、收起和收藏等控件恢复圆形玻璃按钮及原有按压反馈，主页保留两枚填充操作按钮。启动动画按封面显现、黑胶滑出、品牌出现与黑胶回收分段推进；播放页自底部整体展开，换歌时封面淡入并过渡背景颜色。播放页保留歌词、队列和音质选择；搜索仍在原页遮罩中展开，不显示音源筛选控件。
@@ -39,9 +37,7 @@
 截图来自当前源码的 iPhone 17 Pro 模拟器。当前仅启用网易云音源，其他音源隐藏并停止调用；旧收藏保留并标记为「不可用」。这轮界面与音源调整尚未包含在已发布的 IPA 中。
 
 <p align="center">
-  <a href="assets/previews/ios-welcome.jpg"><img src="assets/previews/ios-welcome.jpg" width="260" alt="iOS 黑胶启动动画实图" /></a>
-  <a href="assets/previews/ios-lyrics.jpg"><img src="assets/previews/ios-lyrics.jpg" width="260" alt="iOS 歌词视图与圆形播放控件" /></a>
-  <a href="assets/previews/ios-light.jpg"><img src="assets/previews/ios-light.jpg" width="260" alt="iOS 浅色主页" /></a>
+  <a href="assets/previews/ios-details.png"><img src="assets/previews/ios-details.png" width="900" alt="iOS 黑胶启动动画、同步歌词与浅色主页实图" /></a>
 </p>
 
 ### macOS
