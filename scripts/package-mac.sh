@@ -34,15 +34,63 @@ echo "==> 正在打包 SonarMac.zip..."
 (cd "${DERIVED_DIR}/Build/Products/Release" && zip -qry "${BUILD_DIR}/SonarMac.zip" "SonarMac.app")
 shasum -a 256 "${BUILD_DIR}/SonarMac.zip" > "${BUILD_DIR}/SonarMac.zip.sha256"
 
-echo "==> 正在生成 SonarMac.dmg..."
-DMG_PATH="${BUILD_DIR}/SonarMac.dmg"
-rm -f "${DMG_PATH}" "${DMG_PATH}.sha256"
+echo "==> 正在生成自定义安装界面背景图..."
+BG_DIR="${STAGE_DIR}/.background"
+mkdir -p "${BG_DIR}"
+MODULE_CACHE="${TMPDIR:-/tmp}/swift-modules"
+mkdir -p "${MODULE_CACHE}"
+swift -module-cache-path "${MODULE_CACHE}" "${PROJECT_ROOT}/scripts/generate-dmg-background.swift" "${BG_DIR}/background.png"
 
-# 准备 DMG 内容
+echo "==> 正在准备 DMG 安装包内容..."
 cp -R "${APP_PATH}" "${STAGE_DIR}/"
 ln -s /Applications "${STAGE_DIR}/Applications"
 
-hdiutil create -volname "Sonar" -srcfolder "${STAGE_DIR}" -ov -format UDZO "${DMG_PATH}"
+echo "==> 正在配置 DMG 拖拽安装交互界面..."
+DMG_PATH="${BUILD_DIR}/SonarMac.dmg"
+TEMP_DMG="${DERIVED_DIR}/Sonar_rw.dmg"
+rm -f "${DMG_PATH}" "${DMG_PATH}.sha256" "${TEMP_DMG}"
+
+# 创建可读写临时镜像以写入 Finder 视图配置 (.DS_Store)
+hdiutil create -srcfolder "${STAGE_DIR}" -volname "Sonar" -fs HFS+ -format UDRW -ov "${TEMP_DMG}" >/dev/null
+
+# 确保无残留挂载
+hdiutil detach "/Volumes/Sonar" 2>/dev/null || true
+
+ATTACH_OUT=$(hdiutil attach -readwrite -noverify -noautoopen "${TEMP_DMG}")
+DEV=$(echo "${ATTACH_OUT}" | grep '/Volumes/Sonar' | awk '{print $1}')
+
+if osascript <<'APPLESCRIPT'
+tell application "Finder"
+    tell disk "Sonar"
+        open
+        set current view of container window to icon view
+        set toolbar visible of container window to false
+        set statusbar visible of container window to false
+        set the bounds of container window to {400, 200, 1060, 600}
+        set theViewOptions to the icon view options of container window
+        set arrangement of theViewOptions to not arranged
+        set icon size of theViewOptions to 128
+        set background picture of theViewOptions to file ".background:background.png"
+        set position of item "SonarMac.app" of container window to {175, 195}
+        set position of item "Applications" of container window to {485, 195}
+        update without registering applications
+        delay 2
+        close
+    end tell
+end tell
+APPLESCRIPT
+then
+    echo "==> Finder 拖拽安装界面配置成功"
+else
+    echo "==> 提示: 未能配置 Finder 窗口视图（可能处于无 GUI 环境），保留默认布局"
+fi
+
+sync
+hdiutil detach "${DEV}" 2>/dev/null || hdiutil detach "/Volumes/Sonar" 2>/dev/null || true
+
+echo "==> 正在生成最终压缩版 SonarMac.dmg..."
+hdiutil convert "${TEMP_DMG}" -format UDZO -imagekey zlib-level=9 -ov -o "${DMG_PATH}" >/dev/null
+rm -f "${TEMP_DMG}"
 shasum -a 256 "${DMG_PATH}" > "${DMG_PATH}.sha256"
 
 echo ""

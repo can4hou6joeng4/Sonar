@@ -72,13 +72,13 @@ The current iOS source features an artwork-led home, icon navigation, a floating
 
 Public NetEase playlists can be imported from a share link or playlist ID, with a preview and deduplication before merging into the personal library. Search, lyrics, and playback use ChKSz only. Playback starts at master quality and falls back through Hi-Res, lossless, 320K, and 128K for the same song. Local LX scripts are disabled and excluded from both app bundles.
 
-Source code is available under **GPL-3.0**, with separate notices for third-party code. Build both apps from `Sonar.xcodeproj`. [GitHub Releases](https://github.com/can4hou6joeng4/Sonar/releases) provides an unsigned iOS preview IPA and an earlier experimental Mac build. The IPA requires your own signing and provisioning; the Mac build is ad-hoc signed and not notarized. Public packages contain no personal API credentials or private LX scripts. Online search, lyrics, playback, and playlist import require your own ChKSz key configured during a source build. Music availability and playback quality depend on third-party services; playlist backups contain metadata, not audio.
+Source code is available under **GPL-3.0**, with separate notices for third-party code. Build both apps from `Sonar.xcodeproj`. [GitHub Releases](https://github.com/can4hou6joeng4/Sonar/releases) provides official pre-built macOS packages (`SonarMac.dmg` & `SonarMac.zip`) and an unsigned iOS preview IPA. The IPA requires your own signing and provisioning; the Mac build is ad-hoc signed and not notarized. Public packages contain no personal API credentials or private LX scripts. Online search, lyrics, playback, and playlist import require your own ChKSz key configured during a source build. Music availability and playback quality depend on third-party services; playlist backups contain metadata, not audio.
 
 ## 运行与安装
 
-两端均可从同一个 Xcode 工程构建。[v1.0.0-preview.2](https://github.com/can4hou6joeng4/Sonar/releases/tag/v1.0.0-preview.2) 提供 iOS 未签名 IPA、安装说明与 SHA-256 校验值，App 与 Widget 版本为 **1.0 (22)**。Mac 的既有实验预览包仍见 [v1.0.0-preview.1](https://github.com/can4hou6joeng4/Sonar/releases/tag/v1.0.0-preview.1)；双端最新源码的变化见 [更新记录](CHANGELOG.md)。
+两端均可从同一个 Xcode 工程构建。[v1.0.0](https://github.com/can4hou6joeng4/Sonar/releases/tag/v1.0.0) 正式发布 macOS 安装包（提供精致拖拽安装界面 DMG 与 ZIP）、SHA-256 校验值及本地音乐离线播放支持；iOS 未签名 IPA 见 [v1.0.0-preview.2](https://github.com/can4hou6joeng4/Sonar/releases/tag/v1.0.0-preview.2)，App 与 Widget 版本为 **1.0 (22)**。双端最新源码的变化见 [更新记录](CHANGELOG.md)。
 
-Mac 预览包使用本地 ad-hoc 签名，没有 Developer ID 签名或 Apple 公证，首次打开可能被 macOS 拦截。请先核对下载来源与校验值，再按系统「隐私与安全性」中的提示决定是否允许打开；也可以按下方步骤直接打包或自行构建。
+Mac 安装包采用本地 ad-hoc 签名，没有 Developer ID 签名或 Apple 公证，首次打开可能被 macOS Gatekeeper 拦截。请先核对下载来源与校验值，首次打开若提示受限，按系统「隐私与安全性」提示允许，或在终端执行 `xattr -cr /Applications/SonarMac.app` 即可流畅运行。也可以按下方步骤直接打包或自行构建。
 
 | 平台 | 系统要求 | 运行方式 |
 | --- | --- | --- |
