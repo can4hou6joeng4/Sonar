@@ -30,6 +30,11 @@ struct SettingsView: View {
     @State private var isImporting = false
     @State private var isReadingBackup = false
     @State private var backupMessage: String?
+    @State private var cookieInput = ""
+    @State private var cookieStatus: String?
+    @AppStorage(NetEaseCookieStore.preferBundledKey) private var preferBundledCookie = false
+    @State private var isValidatingCookie = false
+    private let cookieStore = NetEaseCookieStore()
 
     var body: some View {
         @Bindable var themeState = themeState
@@ -57,6 +62,56 @@ struct SettingsView: View {
                             Toggle("播放页封面取色", isOn: $preferences.coverAccentEnabled)
                                 .labelsHidden()
                                 .accessibilityIdentifier("settings-cover-accent-toggle")
+                        }
+                    }
+                    .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
+
+                    sectionTitle("网易云账号")
+                    VStack(spacing: 10) {
+                        SecureField("粘贴 Cookie（MUSIC_U=…）", text: $cookieInput)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .font(.system(size: 13, design: .monospaced))
+                            .padding(.horizontal, 12)
+                            .frame(height: 40)
+                            .background(scheme.appInputFill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .accessibilityIdentifier("settings-netease-cookie-field")
+
+                        HStack(spacing: 10) {
+                            Button(isValidatingCookie ? "验证中…" : "保存并验证") { saveCookie() }
+                                .buttonStyle(.borderedProminent)
+                                .tint(scheme.primary)
+                                .disabled(isValidatingCookie || cookieInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                .accessibilityIdentifier("settings-netease-cookie-save")
+                            Button("清除") { clearCookie() }
+                                .buttonStyle(.bordered)
+                                .tint(scheme.onSurfaceVariant)
+                                .accessibilityIdentifier("settings-netease-cookie-clear")
+                            Spacer(minLength: 0)
+                        }
+
+                        settingRow(
+                            icon: "crown",
+                            title: "优先使用内置 SVIP 凭证",
+                            subtitle: "包内长期凭证优先于手动 Cookie，适合账号只有体验期时使用"
+                        ) {
+                            Toggle("优先使用内置 SVIP 凭证", isOn: $preferBundledCookie)
+                                .labelsHidden()
+                                .accessibilityIdentifier("settings-netease-prefer-bundled")
+                        }
+
+                        if let cookieStatus {
+                            Text(cookieStatus)
+                                .font(.system(size: 12))
+                                .foregroundStyle(scheme.onSurfaceVariant)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } else {
+                            Text("歌手 / 专辑 / 分类搜索与更高音质需要登录态；Cookie 只保存在本机钥匙串。")
+                                .font(.system(size: 12))
+                                .foregroundStyle(scheme.onSurfaceVariant)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                     .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
@@ -207,6 +262,34 @@ struct SettingsView: View {
         }
         .padding(.horizontal, 4)
         .padding(.top, 6)
+    }
+
+    private func saveCookie() {
+        let raw = cookieInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return }
+        isValidatingCookie = true
+        cookieStatus = nil
+        Task {
+            do {
+                try cookieStore.save(raw)
+                let account = try await NetEaseWebClient(cookieStore: cookieStore).account()
+                let tier = account.vipType == 0 ? "普通账号" : "会员档位 \(account.vipType)"
+                cookieStatus = "已保存：\(account.nickname.isEmpty ? "当前账号" : account.nickname) · \(tier)"
+                cookieInput = ""
+            } catch {
+                cookieStatus = "验证失败：\(error.localizedDescription)"
+            }
+            isValidatingCookie = false
+        }
+    }
+
+    private func clearCookie() {
+        do {
+            try cookieStore.save(nil)
+            cookieStatus = "已清除网易云登录态"
+        } catch {
+            cookieStatus = "清除失败：\(error.localizedDescription)"
+        }
     }
 
     private func sectionTitle(_ title: String) -> some View {

@@ -4,12 +4,11 @@ import Observation
 public enum SearchScope: String, CaseIterable, Identifiable, Sendable {
     case songs = "歌曲"
     case artists = "歌手"
+    case albums = "专辑"
     case playlists = "歌单"
 
     public var id: String { rawValue }
-    public static var availableCases: [SearchScope] {
-        MusicSource.catalogSources.isEmpty ? [.songs] : allCases
-    }
+    public static var availableCases: [SearchScope] { allCases }
 }
 
 @MainActor
@@ -56,14 +55,18 @@ final class SearchViewModel {
     var selectedScope: SearchScope = .songs
     var results: [Track] = []
     var artistResults: [ArtistSummary] = []
+    var albumResults: [AlbumSummary] = []
     var playlistResults: [PlaylistSummary] = []
     var suggestions: [String] = []
     private(set) var hasLoadedSongs = false
     private(set) var hasLoadedArtists = false
+    private(set) var hasLoadedAlbums = false
     private(set) var hasLoadedPlaylists = false
     var hotSearches = fallbackHotSearches
+    var history: [String] = SearchHistoryStore.load()
     var isLoading = false
     var isLoadingArtists = false
+    var isLoadingAlbums = false
     var isLoadingPlaylists = false
     var isLoadingSuggestions = false
     var isLoadingHotSearches = false
@@ -72,6 +75,7 @@ final class SearchViewModel {
     var failedSource: MusicSource?
     var isRetryingFailedSource = false
     var failedArtistSources: Set<MusicSource> = []
+    var albumErrorMessage: String?
     var playlistErrorMessage: String?
     var retryingArtistSources: Set<MusicSource> = []
     var isArtistResultsExpanded = false
@@ -138,7 +142,7 @@ final class SearchViewModel {
     }
 
     func refreshHotSearches() async {
-        guard !MusicSource.catalogSources.isEmpty else {
+        guard let source = MusicSource.browseSources.first else {
             hotSearches = Self.fallbackHotSearches
             hasLoadedHotSearches = true
             isLoadingHotSearches = false
@@ -150,31 +154,33 @@ final class SearchViewModel {
         isLoadingHotSearches = true
         hotSearchErrorMessage = nil
 
-        var failures: [String] = []
-        for source in MusicSource.catalogSources {
-            do {
-                let values = normalizeHotSearches(try await runtime.hotSearch(source: source))
-                guard generation == hotSearchGeneration else { return }
-                if !values.isEmpty {
-                    hotSearches = values
-                    isLoadingHotSearches = false
-                    hasLoadedHotSearches = true
-                    return
-                }
-            } catch is CancellationError {
-                guard generation == hotSearchGeneration else { return }
+        do {
+            let values = normalizeHotSearches(try await runtime.hotSearch(source: source))
+            guard generation == hotSearchGeneration else { return }
+            if !values.isEmpty {
+                hotSearches = values
+                hasLoadedHotSearches = true
                 isLoadingHotSearches = false
                 return
-            } catch {
-                guard generation == hotSearchGeneration else { return }
-                failures.append(error.localizedDescription)
             }
+        } catch is CancellationError {
+            guard generation == hotSearchGeneration else { return }
+            isLoadingHotSearches = false
+            return
+        } catch {
+            guard generation == hotSearchGeneration else { return }
+            hotSearchErrorMessage = "热门搜索暂不可用"
         }
 
         guard generation == hotSearchGeneration else { return }
         isLoadingHotSearches = false
         hasLoadedHotSearches = true
-        hotSearchErrorMessage = failures.isEmpty ? "暂时没有热门搜索" : "热门搜索暂不可用"
+        if hotSearches.isEmpty { hotSearches = Self.fallbackHotSearches }
+    }
+
+    func clearHistory() {
+        SearchHistoryStore.clear()
+        history = []
     }
 
     func queryChanged() {
@@ -227,7 +233,7 @@ final class SearchViewModel {
             hasSearched = false
             selectedScope = .songs
         }
-        guard keyword != submittedKeyword, keyword.count >= 2, !MusicSource.catalogSources.isEmpty else {
+        guard keyword != submittedKeyword, keyword.count >= 2, !MusicSource.browseSources.isEmpty else {
             return
         }
         let generation = suggestionGeneration
@@ -285,6 +291,7 @@ final class SearchViewModel {
         guard !keyword.isEmpty else {
             results = []
             resetArtistResults()
+            resetAlbumResults()
             resetPlaylistResults()
             hasLoadedSongs = false
             errorMessage = nil
@@ -294,6 +301,7 @@ final class SearchViewModel {
             retryingArtistSources = []
             isLoading = false
             isLoadingArtists = false
+            isLoadingAlbums = false
             isLoadingPlaylists = false
             hasSearched = false
             activeSearchKeyword = nil
@@ -301,20 +309,24 @@ final class SearchViewModel {
             selectedScope = .songs
             return
         }
+        history = SearchHistoryStore.remember(keyword)
         let requestedScope = scope ?? selectedScope
         let targetScope = SearchScope.availableCases.contains(requestedScope) ? requestedScope : .songs
         submittedKeyword = keyword
         activeSearchKeyword = keyword
         results = []
         resetArtistResults()
+        resetAlbumResults()
         resetPlaylistResults()
         hasLoadedSongs = false
         hasLoadedArtists = false
+        hasLoadedAlbums = false
         hasLoadedPlaylists = false
         hasSearched = true
         selectedScope = targetScope
         isLoading = targetScope == .songs
         isLoadingArtists = targetScope == .artists
+        isLoadingAlbums = targetScope == .albums
         isLoadingPlaylists = targetScope == .playlists
         errorMessage = nil
         failedSource = nil
@@ -328,6 +340,8 @@ final class SearchViewModel {
                 await loadSubmittedSongs(keyword, generation: generation)
             case .artists:
                 await loadSubmittedArtists(keyword, generation: generation)
+            case .albums:
+                await loadSubmittedAlbums(keyword, generation: generation)
             case .playlists:
                 await loadSubmittedPlaylists(keyword, generation: generation)
             }
@@ -351,6 +365,10 @@ final class SearchViewModel {
         case .artists:
             if !hasLoadedArtists && !isLoadingArtists {
                 await loadSubmittedArtists(keyword, generation: generation)
+            }
+        case .albums:
+            if !hasLoadedAlbums && !isLoadingAlbums {
+                await loadSubmittedAlbums(keyword, generation: generation)
             }
         case .playlists:
             if !hasLoadedPlaylists && !isLoadingPlaylists {
@@ -387,7 +405,7 @@ final class SearchViewModel {
         isLoadingArtists = true
         let candidates = Self.candidateArtistKeywords(for: keyword)
         var sourceResults: [ArtistSourceResult] = []
-        for source in MusicSource.catalogSources {
+        for source in MusicSource.browseSources {
             sourceResults.append(await searchArtists(candidates: candidates, source: source, page: 1, limit: Self.artistPreviewLimit))
         }
         guard !Task.isCancelled, isCurrentSearch(generation, keyword: keyword) else { return }
@@ -401,7 +419,7 @@ final class SearchViewModel {
     }
 
     private func loadSubmittedPlaylists(_ keyword: String, generation: Int) async {
-        guard let source = MusicSource.catalogSources.first else {
+        guard let source = MusicSource.browseSources.first else {
             playlistResults = []
             isLoadingPlaylists = false
             hasLoadedPlaylists = true
@@ -414,6 +432,32 @@ final class SearchViewModel {
         playlistErrorMessage = result.errorMessage
         isLoadingPlaylists = false
         hasLoadedPlaylists = true
+        hasSearched = true
+        updateSearchError()
+    }
+
+    private func loadSubmittedAlbums(_ keyword: String, generation: Int) async {
+        guard let source = MusicSource.browseSources.first else {
+            albumResults = []
+            isLoadingAlbums = false
+            hasLoadedAlbums = true
+            return
+        }
+        isLoadingAlbums = true
+        do {
+            let page = try await runtime.searchAlbums(keyword, source: source, page: 1, limit: 20)
+            guard !Task.isCancelled, isCurrentSearch(generation, keyword: keyword) else { return }
+            albumResults = page.list
+            albumErrorMessage = nil
+        } catch is CancellationError {
+            return
+        } catch {
+            guard isCurrentSearch(generation, keyword: keyword) else { return }
+            albumResults = []
+            albumErrorMessage = error.localizedDescription
+        }
+        isLoadingAlbums = false
+        hasLoadedAlbums = true
         hasSearched = true
         updateSearchError()
     }
@@ -436,6 +480,12 @@ final class SearchViewModel {
                 return
             }
             errorMessage = failedArtistSources.isEmpty ? nil : "歌手搜索暂不可用，请重试"
+        case .albums:
+            guard !isLoadingAlbums, albumResults.isEmpty else {
+                errorMessage = nil
+                return
+            }
+            errorMessage = albumErrorMessage
         case .playlists:
             errorMessage = playlistErrorMessage
         }
@@ -461,7 +511,7 @@ final class SearchViewModel {
               let keyword = submittedKeyword,
               query.trimmingCharacters(in: .whitespacesAndNewlines) == keyword else { return }
 
-        let requests = MusicSource.catalogSources.compactMap { source -> (MusicSource, Int)? in
+        let requests = MusicSource.browseSources.compactMap { source -> (MusicSource, Int)? in
             guard let state = artistSourceStates[source],
                   state.hasMore,
                   !artistExpansionFailedSources.contains(source) else { return nil }
@@ -722,6 +772,13 @@ final class SearchViewModel {
         isLoadingArtists = false
     }
 
+    private func resetAlbumResults() {
+        albumResults = []
+        albumErrorMessage = nil
+        isLoadingAlbums = false
+        hasLoadedAlbums = false
+    }
+
     private func resetPlaylistResults() {
         playlistResults = []
         playlistErrorMessage = nil
@@ -779,7 +836,7 @@ final class SearchViewModel {
     }
 
     private func rankedArtists(for keyword: String) -> [ArtistSummary] {
-        let artists = MusicSource.catalogSources.flatMap { artistSourceStates[$0]?.artists ?? [] }
+        let artists = MusicSource.browseSources.flatMap { artistSourceStates[$0]?.artists ?? [] }
         return ArtistResultRanker.rank(deduplicated(artists), for: keyword)
     }
 
@@ -958,5 +1015,31 @@ enum SearchStorageMigration {
 
     static func clearLegacyHistory(defaults: UserDefaults = .standard) {
         defaults.removeObject(forKey: legacyHistoryKey)
+    }
+}
+
+
+/// 搜索历史（最近 10 条，本机保存）。
+enum SearchHistoryStore {
+    private static let key = "sonar.search.history"
+    private static let limit = 10
+
+    static func load() -> [String] {
+        UserDefaults.standard.stringArray(forKey: key) ?? []
+    }
+
+    @discardableResult
+    static func remember(_ keyword: String) -> [String] {
+        let value = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return load() }
+        var values = load().filter { $0 != value }
+        values.insert(value, at: 0)
+        if values.count > limit { values = Array(values.prefix(limit)) }
+        UserDefaults.standard.set(values, forKey: key)
+        return values
+    }
+
+    static func clear() {
+        UserDefaults.standard.removeObject(forKey: key)
     }
 }

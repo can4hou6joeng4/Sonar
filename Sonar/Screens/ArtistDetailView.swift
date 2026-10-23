@@ -8,6 +8,7 @@ struct ArtistDetailView: View {
     @Environment(\.m3Scheme) private var scheme
     @State private var model: ArtistDetailViewModel
     @State private var selectedTrack: Track?
+    @State private var pushedArtist: ArtistSummary?
     private let runtime: SourceRuntime
 
     init(artist: ArtistSummary, runtime: SourceRuntime) {
@@ -32,7 +33,29 @@ struct ArtistDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task(id: model.selectedTab) { await model.loadSelectedIfNeeded() }
         .onDisappear { model.invalidate() }
-        .trackActionsDialog(track: $selectedTrack)
+        .bottomChromeInset()
+        .trackActionsDialog(track: $selectedTrack) { track in
+            guard let idValue = track.rawPayload["artistID"],
+                  let id = (idValue as? NSNumber)?.stringValue ?? (idValue as? String),
+                  id != model.artist.id,
+                  let name = track.rawPayload["artistName"] as? String,
+                  let artist = try? ArtistSummary(
+                      id: id,
+                      source: .wy,
+                      name: name,
+                      imageURL: nil,
+                      songCount: nil,
+                      albumCount: nil
+                  ) else { return [] }
+            return [
+                SongAction(title: "查看歌手 · \(name)", systemImage: "person.crop.circle") {
+                    pushedArtist = artist
+                },
+            ]
+        }
+        .navigationDestination(item: $pushedArtist) { artist in
+            ArtistDetailView(artist: artist, runtime: runtime)
+        }
     }
 
     private var artistHeader: some View {
@@ -76,7 +99,7 @@ struct ArtistDetailView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 if model.latestIsLoading, model.latestAlbums.isEmpty, model.latestTracks.isEmpty {
-                    ProgressView("正在加载最新发行…").frame(maxWidth: .infinity, minHeight: 240)
+                    SkeletonSongList(rows: 5, showsCover: false)
                 } else if let error = model.latestError, model.latestAlbums.isEmpty, model.latestTracks.isEmpty {
                     retryState("最新发行加载失败", error: error) { await model.loadLatest() }
                 } else if model.latestAlbums.isEmpty {
@@ -109,7 +132,7 @@ struct ArtistDetailView: View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 if loading, tracks.isEmpty {
-                    ProgressView("正在加载歌曲…").frame(maxWidth: .infinity, minHeight: 240)
+                    SkeletonSongList(rows: 6, showsCover: false)
                 } else if let error, tracks.isEmpty {
                     retryState("歌曲加载失败", error: error, retry: retry)
                 } else if tracks.isEmpty {
@@ -132,7 +155,7 @@ struct ArtistDetailView: View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 if loading, albums.isEmpty {
-                    ProgressView("正在加载专辑…").frame(maxWidth: .infinity, minHeight: 240)
+                    SkeletonCardRow(cards: 3)
                 } else if let error, albums.isEmpty {
                     retryState("专辑加载失败", error: error, retry: retry)
                 } else if albums.isEmpty {
@@ -211,30 +234,17 @@ struct ArtistDetailView: View {
     }
 }
 
-private struct TrackActionsDialogModifier: ViewModifier {
+private struct TrackActionsSheetModifier: ViewModifier {
     @Environment(PlaybackService.self) private var playbackService
     @Environment(ToastCenter.self) private var toastCenter
     @Environment(\.modelContext) private var modelContext
     @Binding var track: Track?
+    var extraActions: ((Track) -> [SongAction])?
 
     func body(content: Content) -> some View {
-        content.confirmationDialog(
-            track?.title ?? "歌曲操作",
-            isPresented: Binding(get: { track != nil }, set: { if !$0 { track = nil } }),
-            titleVisibility: .visible
-        ) {
-            Button("立即播放", systemImage: "play.fill") { perform { await playbackService.replaceQueue([$0]) } }
-            Button("下一首播放", systemImage: "text.line.first.and.arrowtriangle.forward") {
-                perform { value in await playbackService.playNext(value); toastCenter.show("已设为下一首播放") }
-            }
-            Button("加入待播放", systemImage: "text.badge.plus") {
-                perform { value in
-                    let added = await playbackService.enqueue(value)
-                    toastCenter.show(added ? "已加入待播放" : "歌曲已在待播放中")
-                }
-            }
-            Button("收藏到歌单", systemImage: "music.note.list") {
-                guard let value = track else { return }
+        content.songActionsSheet(
+            track: $track,
+            onCollect: { value in
                 track = nil
                 PersonalPlaylistCollectionFeedback.collect(
                     value,
@@ -243,19 +253,31 @@ private struct TrackActionsDialogModifier: ViewModifier {
                     playbackService: playbackService
                 )
             }
-            Button("取消", role: .cancel) { track = nil }
+        ) { value in
+            var actions = SongActionBuilder.standard(
+                track: value,
+                playback: playbackService,
+                toast: toastCenter
+            ) {
+                track = nil
+                PersonalPlaylistCollectionFeedback.collect(
+                    value,
+                    context: modelContext,
+                    toastCenter: toastCenter,
+                    playbackService: playbackService
+                )
+            }
+            actions.append(contentsOf: extraActions?(value) ?? [])
+            return actions
         }
-    }
-
-    private func perform(_ action: @escaping (Track) async -> Void) {
-        guard let value = track else { return }
-        track = nil
-        Task { await action(value) }
     }
 }
 
 extension View {
-    func trackActionsDialog(track: Binding<Track?>) -> some View {
-        modifier(TrackActionsDialogModifier(track: track))
+    func trackActionsDialog(
+        track: Binding<Track?>,
+        extraActions: ((Track) -> [SongAction])? = nil
+    ) -> some View {
+        modifier(TrackActionsSheetModifier(track: track, extraActions: extraActions))
     }
 }

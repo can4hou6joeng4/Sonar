@@ -49,6 +49,7 @@ struct DiscoverView: View {
         let tracks = playlist?.orderedItems.compactMap { $0.track.track } ?? []
 
         homeContent(playlist: playlist, tracks: tracks)
+        .bottomChromeInset()
         .background(scheme.appSurface.ignoresSafeArea())
         .rootSettingsDrawerGesture(
             isEnabled: isActive,
@@ -349,9 +350,10 @@ struct HomeSearchOverlay: View {
     let focusOnAppear: Bool
     let onClose: () -> Void
     let onOpenArtist: (ArtistSummary) -> Void
+    let onOpenAlbum: (AlbumSummary) -> Void
     let onOpenPlaylist: (PlaylistSummary) -> Void
     @State private var selectedTrackForActions: Track?
-    @FocusState private var focused: Bool
+    @State private var searchFieldFocused = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -381,6 +383,14 @@ struct HomeSearchOverlay: View {
                         .shadow(color: .black.opacity(0.16), radius: 20, y: 8)
                         .foregroundStyle(scheme.onSurface)
                         .transition(.opacity)
+                    } else {
+                        searchLanding
+                            .frame(maxHeight: min(max(proxy.size.height - 84, 0), 520))
+                            .background(scheme.appSurface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                            .shadow(color: .black.opacity(0.16), radius: 20, y: 8)
+                            .foregroundStyle(scheme.onSurface)
+                            .transition(.opacity)
                     }
                 }
                 .frame(maxWidth: 640)
@@ -398,57 +408,118 @@ struct HomeSearchOverlay: View {
         }
         .onAppear {
             SearchStorageMigration.clearLegacyHistory()
-            focused = focusOnAppear
+            searchFieldFocused = focusOnAppear
         }
         .onDisappear {
-            focused = false
+            searchFieldFocused = false
             model.cancelLiveSearch()
         }
-        .onChange(of: model.query) { _, _ in model.liveSearch() }
-        .confirmationDialog(
-            selectedTrackForActions.map { "\($0.title)" } ?? "歌曲操作",
-            isPresented: Binding(
-                get: { selectedTrackForActions != nil },
-                set: { if !$0 { selectedTrackForActions = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("立即播放", systemImage: "play.fill") {
-                guard let track = selectedTrackForActions else { return }
-                selectedTrackForActions = nil
-                Task { await playbackService.replaceQueue([track]) }
-            }
-            .disabled(!(selectedTrackForActions?.source.isEnabled ?? false))
-            Button("下一首播放", systemImage: "text.line.first.and.arrowtriangle.forward") {
-                guard let track = selectedTrackForActions else { return }
-                selectedTrackForActions = nil
-                Task {
-                    await playbackService.playNext(track)
-                    toastCenter.show("已设为下一首播放")
-                }
-            }
-            .disabled(!(selectedTrackForActions?.source.isEnabled ?? false))
-            Button("加入待播放", systemImage: "text.badge.plus") {
-                guard let track = selectedTrackForActions else { return }
-                selectedTrackForActions = nil
-                Task {
-                    let added = await playbackService.enqueue(track)
-                    toastCenter.show(added ? "已加入待播放" : "歌曲已在待播放中")
-                }
-            }
-            .disabled(!(selectedTrackForActions?.source.isEnabled ?? false))
-            Button("收藏到歌单", systemImage: "music.note.list") {
-                guard let track = selectedTrackForActions else { return }
+        .songActionsSheet(
+            track: $selectedTrackForActions,
+            onCollect: { value in
                 selectedTrackForActions = nil
                 PersonalPlaylistCollectionFeedback.collect(
-                    track,
+                    value,
                     context: modelContext,
                     toastCenter: toastCenter,
                     playbackService: playbackService
                 )
             }
-            Button("取消", role: .cancel) { selectedTrackForActions = nil }
+        ) { value in
+            SongActionBuilder.standard(
+                track: value,
+                playback: playbackService,
+                toast: toastCenter
+            ) {
+                selectedTrackForActions = nil
+                PersonalPlaylistCollectionFeedback.collect(
+                    value,
+                    context: modelContext,
+                    toastCenter: toastCenter,
+                    playbackService: playbackService
+                )
+            }
         }
+    }
+
+    private var searchLanding: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                if !model.history.isEmpty {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("搜索历史")
+                                .font(.system(size: 14, weight: .semibold))
+                            Spacer()
+                            Button("清空") {
+                                model.clearHistory()
+                            }
+                            .font(.system(size: 12))
+                            .foregroundStyle(scheme.onSurfaceVariant)
+                            .accessibilityIdentifier("search-history-clear")
+                        }
+                        ScrollView(.horizontal) {
+                            HStack(spacing: 8) {
+                                ForEach(model.history, id: \.self) { keyword in
+                                    Button {
+                                        runSearch(keyword)
+                                    } label: {
+                                        Text(keyword)
+                                            .font(.system(size: 13))
+                                            .foregroundStyle(scheme.onSurface)
+                                            .padding(.horizontal, 12)
+                                            .frame(height: 32)
+                                            .background(scheme.surfaceContainer, in: Capsule())
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                        .scrollIndicators(.hidden)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("热门搜索")
+                        .font(.system(size: 14, weight: .semibold))
+                    if model.isLoadingHotSearches, model.hotSearches.isEmpty {
+                        ProgressView().frame(maxWidth: .infinity, minHeight: 80)
+                    } else {
+                        ForEach(Array(model.hotSearches.prefix(10).enumerated()), id: \.offset) { index, keyword in
+                            Button {
+                                runSearch(keyword)
+                            } label: {
+                                HStack(spacing: 10) {
+                                    Text("\(index + 1)")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(index < 3 ? scheme.primary : scheme.onSurfaceVariant)
+                                        .frame(width: 18, alignment: .leading)
+                                    Text(keyword)
+                                        .font(.system(size: 15))
+                                        .foregroundStyle(scheme.onSurface)
+                                        .lineLimit(1)
+                                    Spacer(minLength: 0)
+                                }
+                                .frame(height: 40)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+            .padding(16)
+        }
+        .scrollIndicators(.hidden)
+        .task { await model.loadHotSearchesIfNeeded() }
+    }
+
+    private func runSearch(_ keyword: String) {
+        let value = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return }
+        model.query = value
+        searchFieldFocused = false
+        Task { await model.search() }
     }
 
     private var searchBar: some View {
@@ -456,15 +527,15 @@ struct HomeSearchOverlay: View {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 16, weight: .medium))
-                TextField("搜索歌曲或歌手", text: $model.query)
-                    .font(.system(size: 15))
-                    .foregroundStyle(scheme.onSurface)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .focused($focused)
-                    .submitLabel(.search)
-                    .onSubmit(submitSearch)
-                    .accessibilityIdentifier("search-field")
+                SearchTextField(
+                    text: $model.query,
+                    isFocused: $searchFieldFocused,
+                    placeholder: "搜索歌曲或歌手",
+                    textColor: UIColor(scheme.onSurface),
+                    onSubmit: submitSearch,
+                    onCommitText: { _ in model.liveSearch() }
+                )
+                .frame(height: 22)
                 if !model.query.isEmpty {
                     Button(action: clearSearch) {
                         Image(systemName: "xmark.circle.fill")
@@ -510,7 +581,7 @@ struct HomeSearchOverlay: View {
         HStack(spacing: 0) {
             ForEach(SearchScope.availableCases) { scope in
                 Button {
-                    focused = false
+                    searchFieldFocused = false
                     model.selectedScope = scope
                     Task { await model.loadScopeIfNeeded(scope) }
                 } label: {
@@ -543,6 +614,8 @@ struct HomeSearchOverlay: View {
                     songsResultSection
                 case .artists:
                     artistsResultSection
+                case .albums:
+                    albumsResultSection
                 case .playlists:
                     playlistsResultSection
                 }
@@ -554,8 +627,7 @@ struct HomeSearchOverlay: View {
     private var songsResultSection: some View {
         VStack(spacing: 0) {
             if model.isLoading || !model.hasLoadedSongs {
-                ProgressView("正在搜索歌曲…")
-                    .frame(maxWidth: .infinity, minHeight: 120)
+                SkeletonSongList(rows: 6)
                     .accessibilityIdentifier("search-song-loading")
             } else if let errorMessage = model.songSearchErrorMessage ?? model.errorMessage {
                 VStack {
@@ -579,11 +651,11 @@ struct HomeSearchOverlay: View {
                         isCurrent: playbackService.queue.current?.musicID == track.musicID,
                         isPlaying: playbackService.state == .playing,
                         onPlay: {
-                            focused = false
+                            searchFieldFocused = false
                             Task { await playbackService.replaceQueue([track]) }
                         },
                         onAction: {
-                            focused = false
+                            searchFieldFocused = false
                             selectedTrackForActions = track
                         }
                     )
@@ -609,8 +681,7 @@ struct HomeSearchOverlay: View {
     private var artistsResultSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             if model.isLoadingArtists || !model.hasLoadedArtists {
-                ProgressView("正在搜索歌手…")
-                    .frame(maxWidth: .infinity, minHeight: 120)
+                SkeletonSongList(rows: 4)
                     .accessibilityIdentifier("search-artist-loading")
             } else if model.artistResults.isEmpty && !model.failedArtistSources.isEmpty {
                 ContentUnavailableView(
@@ -625,7 +696,7 @@ struct HomeSearchOverlay: View {
             } else {
                 ForEach(model.visibleArtistResults, id: \.stableID) { artist in
                     Button {
-                        focused = false
+                        searchFieldFocused = false
                         onOpenArtist(artist)
                     } label: {
                         HStack(spacing: 14) {
@@ -685,6 +756,67 @@ struct HomeSearchOverlay: View {
         }
     }
 
+    private var albumsResultSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if model.isLoadingAlbums || !model.hasLoadedAlbums {
+                SkeletonSongList(rows: 4)
+                    .accessibilityIdentifier("search-album-loading")
+            } else if let errorMessage = model.albumErrorMessage, model.albumResults.isEmpty {
+                ContentUnavailableView(
+                    "专辑搜索暂不可用",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text(errorMessage)
+                )
+                .frame(maxWidth: .infinity, minHeight: 200)
+            } else if model.albumResults.isEmpty {
+                ContentUnavailableView("未找到专辑", systemImage: "rectangle.stack")
+                    .frame(maxWidth: .infinity, minHeight: 200)
+            } else {
+                ForEach(model.albumResults, id: \.stableID) { album in
+                    Button {
+                        searchFieldFocused = false
+                        onOpenAlbum(album)
+                    } label: {
+                        HStack(spacing: 14) {
+                            RemotePlaylistArtwork(urlString: album.imageURL)
+                                .frame(width: 56, height: 56)
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(album.name)
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundStyle(scheme.onSurface)
+                                    .lineLimit(2)
+                                Text(albumMetadata(album))
+                                    .font(.caption)
+                                    .foregroundStyle(scheme.onSurfaceVariant)
+                                    .lineLimit(1)
+                            }
+
+                            Spacer(minLength: 8)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(scheme.outline)
+                        }
+                        .padding(.horizontal, 16)
+                        .frame(minHeight: 76)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.cellHighlight)
+                    .accessibilityIdentifier("search-album-\(album.stableID)")
+                }
+            }
+        }
+    }
+
+    private func albumMetadata(_ album: AlbumSummary) -> String {
+        var parts: [String] = []
+        if !album.artist.isEmpty { parts.append(album.artist) }
+        if let count = album.trackCount, count > 0 { parts.append("\(count) 首") }
+        if let date = album.releaseDate { parts.append(date) }
+        return parts.isEmpty ? "专辑" : parts.joined(separator: " · ")
+    }
+
     private var playlistsResultSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             if model.isLoadingPlaylists || !model.hasLoadedPlaylists {
@@ -715,7 +847,7 @@ struct HomeSearchOverlay: View {
             } else {
                 ForEach(model.playlistResults, id: \.key) { playlist in
                     Button {
-                        focused = false
+                        searchFieldFocused = false
                         onOpenPlaylist(playlist)
                     } label: {
                         HStack(spacing: 14) {
@@ -881,18 +1013,18 @@ struct HomeSearchOverlay: View {
         model.query = ""
         model.selectedScope = .songs
         model.queryChanged()
-        focused = true
+        searchFieldFocused = true
     }
 
     private func closeSearch() {
-        focused = false
+        searchFieldFocused = false
         onClose()
     }
 
     private func submitSearch() {
         model.cancelLiveSearch()
         guard !trimmedQuery.isEmpty else { return }
-        focused = false
+        searchFieldFocused = false
         Task { await model.search() }
     }
 

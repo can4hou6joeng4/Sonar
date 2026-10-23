@@ -12,7 +12,7 @@ enum ArtistDetailTab: String, CaseIterable, Identifiable {
 @MainActor
 @Observable
 final class ArtistDetailViewModel {
-    let artist: ArtistSummary
+    private(set) var artist: ArtistSummary
     var selectedTab: ArtistDetailTab = .popular
     var popularTracks: [Track] = []
     var latestAlbums: [AlbumSummary] = []
@@ -35,7 +35,14 @@ final class ArtistDetailViewModel {
         self.runtime = runtime
     }
 
+    func refreshArtistMetadataIfNeeded() async {
+        guard artist.imageURL == nil else { return }
+        guard let enriched = try? await runtime.artistDetail(artist) else { return }
+        artist = enriched
+    }
+
     func loadSelectedIfNeeded() async {
+        await refreshArtistMetadataIfNeeded()
         switch selectedTab {
         case .popular where popularTracks.isEmpty && popularError == nil:
             await loadPopular()

@@ -5,8 +5,11 @@ struct AlbumDetailView: View {
     @Environment(\.m3Scheme) private var scheme
     @State private var model: AlbumDetailViewModel
     @State private var selectedTrack: Track?
+    @State private var pushedAlbum: AlbumSummary?
+    private let runtime: SourceRuntime
 
     init(album: AlbumSummary, runtime: SourceRuntime) {
+        self.runtime = runtime
         _model = State(initialValue: AlbumDetailViewModel(album: album, runtime: runtime))
     }
 
@@ -15,7 +18,7 @@ struct AlbumDetailView: View {
             LazyVStack(spacing: 0) {
                 header
                 if model.isLoading, model.tracks.isEmpty {
-                    ProgressView("正在加载专辑…").frame(maxWidth: .infinity, minHeight: 240)
+                    SkeletonSongList(rows: 8, showsCover: false)
                 } else if let error = model.errorMessage, model.tracks.isEmpty {
                     ContentUnavailableView {
                         Label("专辑加载失败", systemImage: "wifi.exclamationmark")
@@ -56,11 +59,35 @@ struct AlbumDetailView: View {
             }
         }
         .background(scheme.appSurface.ignoresSafeArea())
+        .bottomChromeInset()
         .navigationTitle(model.album.name)
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.load() }
         .onDisappear { model.invalidate() }
-        .trackActionsDialog(track: $selectedTrack)
+        .trackActionsDialog(track: $selectedTrack) { track in
+            guard let idValue = track.rawPayload["albumID"],
+                  let id = (idValue as? NSNumber)?.stringValue ?? (idValue as? String),
+                  id != model.album.id,
+                  let name = track.rawPayload["albumName"] as? String,
+                  !name.isEmpty,
+                  let album = try? AlbumSummary(
+                      id: id,
+                      source: .wy,
+                      name: name,
+                      artist: track.artist,
+                      imageURL: nil,
+                      releaseDate: nil,
+                      trackCount: nil
+                  ) else { return [] }
+            return [
+                SongAction(title: "查看专辑 · \(name)", systemImage: "square.stack") {
+                    pushedAlbum = album
+                },
+            ]
+        }
+        .navigationDestination(item: $pushedAlbum) { album in
+            AlbumDetailView(album: album, runtime: runtime)
+        }
         .accessibilityIdentifier("album-detail-\(model.album.stableID)")
     }
 
