@@ -27,6 +27,7 @@ Sonar/Resources/BuildCredentials.json
 .codex/
 SonarTests/
 Sonar.local.xcodeproj/
+project.local.yml
 scripts/run-local-tests.sh
 scripts/RuntimeSmoke.swift
 scripts/smoke-runtime.sh
