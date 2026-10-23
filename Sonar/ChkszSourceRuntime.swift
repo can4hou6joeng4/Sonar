@@ -8,15 +8,18 @@ public final class ChkszAPIClient: ChkszAPIRequesting, @unchecked Sendable {
     private let client: PlaybackHTTPClient
     private let credentials: CredentialStore
     private let breaker: ChkszCircuitBreaker
+    private let requestTimeout: TimeInterval
 
     public init(
         client: PlaybackHTTPClient = URLSessionPlaybackHTTPClient(),
         credentials: CredentialStore,
-        breaker: ChkszCircuitBreaker = ChkszCircuitBreaker()
+        breaker: ChkszCircuitBreaker = ChkszCircuitBreaker(),
+        requestTimeout: TimeInterval = 8
     ) {
         self.client = client
         self.credentials = credentials
         self.breaker = breaker
+        self.requestTimeout = requestTimeout.isFinite && requestTimeout > 0 ? min(requestTimeout, 30) : 8
     }
 
     public func request(path: String, parameters: [String: String]) async throws -> Data {
@@ -40,7 +43,7 @@ public final class ChkszAPIClient: ChkszAPIRequesting, @unchecked Sendable {
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-        request.timeoutInterval = 4.0
+        request.timeoutInterval = requestTimeout
         var response = try await client.send(request)
         if response.statusCode == 429 {
             let retry = Self.retryDelay(from: response)
