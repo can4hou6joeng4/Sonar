@@ -28,7 +28,29 @@ enum PlaybackFailureDiagnostics {
     }
 
     static func message(for error: Error, fallback: String) -> String {
-        sanitizedDetail(error.localizedDescription) ?? fallback
+        let underlying: Error
+        if case let SourceError.network(cause) = error { underlying = cause }
+        else { underlying = error }
+        let networkError = underlying as NSError
+        if networkError.domain == NSURLErrorDomain {
+            switch URLError.Code(rawValue: networkError.code) {
+            case .timedOut:
+                return "网络请求超时，请检查网络或 VPN 分流后重试"
+            case .notConnectedToInternet:
+                return "网络未连接，请联网后重试"
+            case .cannotFindHost, .dnsLookupFailed, .cannotConnectToHost, .secureConnectionFailed:
+                return "无法连接音源，请检查网络或 VPN 分流后重试"
+            case .networkConnectionLost, .cancelled:
+                return "网络连接中断，请重试"
+            default: break
+            }
+        }
+        return sanitizedDetail(error.localizedDescription) ?? fallback
+    }
+
+    static func isNetworkFailure(_ error: Error) -> Bool {
+        if case SourceError.network = error { return true }
+        return (error as NSError).domain == NSURLErrorDomain
     }
 }
 
@@ -80,6 +102,9 @@ public final class PlaybackService {
     }
 
     private static let preferredQualityKey = "preferredPlaybackQuality"
+    private static let sessionKey = "sonar.playback.session"
+    private static let playbackRateKey = "sonar.playback.rate"
+    private static let lastPlayedQualityKey = "lastPlayedQuality"
     private static let qualityPolicyVersionKey = "playbackQualityPolicyVersion"
     private static let qualityPolicyVersion = 1
     private static let playbackModeKey = "playbackMode"
@@ -114,6 +139,9 @@ public final class PlaybackService {
     private var intentRevision = 0
     private let autoplaySkipDelay: @Sendable () async throws -> Void
     private let recoveryDelay: @Sendable () async throws -> Void
+    private let bufferingTimeout: Duration
+    private var bufferingTimeoutTask: Task<Void, Never>?
+    private var endingItem: AVPlayerItem?
     private let randomIndex: @Sendable (Range<Int>) -> Int
     private var timeObserver: Any?
     private var timeControlObservation: NSKeyValueObservation?
@@ -126,16 +154,37 @@ public final class PlaybackService {
     private var silenceHintObserver: NSObjectProtocol?
     private var didBecomeActiveObserver: NSObjectProtocol?
     public private(set) var shouldResumeAfterInterruption = false
+
+    /// 最近一次真正拿到的音质（服务端可能降级），用于界面展示与排查。
+    public private(set) var lastActualQuality: Quality?
+
+    /// 播放速度（0.5x–2x），持久化。
+    public private(set) var playbackRate: Float = 1.0
+
+    public func setPlaybackRate(_ value: Float) {
+        let clamped = min(max(value, 0.5), 2.0)
+        playbackRate = clamped
+        defaults.set(Double(clamped), forKey: Self.playbackRateKey)
+        if state == .playing { player.rate = clamped }
+    }
+
+    private struct PersistedSession: Codable {
+        let track: Track
+        let elapsed: Double
+        let savedAt: Date
+    }
+
+    private var lastSessionSaveAt = Date.distantPast
     private var remoteCommandTokens: [(MPRemoteCommand, Any)] = []
     private var nowPlayingArtwork: MPMediaItemArtwork?
     private var currentMediaHost: String?
     private var recoveryGate = PlaybackRecoveryGate()
+    private var backgroundTransitionRevision = 0
     #if os(iOS)
     private var transitionBackgroundTaskID: UIBackgroundTaskIdentifier = .invalid
-    private var isTransitionInProgress: Bool { transitionBackgroundTaskID != .invalid }
-    #else
-    private var isTransitionInProgress = false
     #endif
+    // Transition intent is independent of whether iOS grants background time.
+    private var isTransitionInProgress = false
     private var consecutiveAutoplayFailures = 0
     private let maxConsecutiveAutoplaySkips = 3
     private var hasPrefetchedUpcomingForCurrentTrack = false
@@ -165,11 +214,7 @@ public final class PlaybackService {
     private var measuredItem: AVPlayerItem?
 
     private static func makePlayer() -> AVPlayer {
-        #if os(macOS)
         return AVQueuePlayer()
-        #else
-        return AVPlayer()
-        #endif
     }
 
     public init(
@@ -182,7 +227,8 @@ public final class PlaybackService {
         },
         recoveryDelay: @escaping @Sendable () async throws -> Void = {
             try await Task.sleep(for: .milliseconds(400))
-        }
+        },
+        bufferingTimeout: Duration = .seconds(20)
     ) {
         self.player = player ?? Self.makePlayer()
         let player = self.player
@@ -200,6 +246,7 @@ public final class PlaybackService {
         self.resolver = resolver
         self.defaults = defaults
         self.recoveryDelay = recoveryDelay
+        self.bufferingTimeout = bufferingTimeout
         self.autoplaySkipDelay = autoplaySkipDelay
         self.randomIndex = randomIndex
         let restoredMode = defaults.string(forKey: Self.playbackModeKey)
@@ -214,6 +261,8 @@ public final class PlaybackService {
             defaults.set(preferredQuality.rawValue, forKey: Self.preferredQualityKey)
             defaults.set(Self.qualityPolicyVersion, forKey: Self.qualityPolicyVersionKey)
         }
+        let storedRate = defaults.double(forKey: Self.playbackRateKey)
+        playbackRate = storedRate > 0 ? Float(min(max(storedRate, 0.5), 2.0)) : 1.0
         queue.setShuffled(restoredMode == .shuffle)
         installTimeObserver()
         installTimeControlObserver()
@@ -229,6 +278,7 @@ public final class PlaybackService {
             upcomingResolution?.task.cancel()
             activeURLResolutionTask?.cancel()
             mediaPreparationTask?.cancel()
+            bufferingTimeoutTask?.cancel()
             preparedStatusObservation?.invalidate()
             preparedBufferObservation?.invalidate()
             endTransitionBackgroundTask()
@@ -385,6 +435,7 @@ public final class PlaybackService {
     }
 
     public func play() async {
+        cancelBufferingTimeout()
         intentRevision += 1
         shouldResumeAfterInterruption = false
         consecutiveAutoplayFailures = 0
@@ -409,9 +460,11 @@ public final class PlaybackService {
     }
 
     public func pause() {
+        persistSession(force: true)
         intentRevision += 1
         shouldResumeAfterInterruption = false
         playbackRequested = false
+        cancelBufferingTimeout()
         player.pause()
         state = .paused
         endTransitionBackgroundTask()
@@ -441,6 +494,31 @@ public final class PlaybackService {
         queue.setShuffled(mode == .shuffle)
         logger.info("mode_changed mode=\(mode.rawValue, privacy: .public)")
         prefetchUpcomingTrackIfNeeded()
+    }
+
+    /// 记录当前曲目与进度，冷启动时恢复（不自动播放）。
+    private func persistSession(force: Bool = false) {
+        guard let track = queue.current else { return }
+        let now = Date()
+        guard force || now.timeIntervalSince(lastSessionSaveAt) > 5 else { return }
+        lastSessionSaveAt = now
+        let session = PersistedSession(track: track, elapsed: max(0, elapsed), savedAt: now)
+        guard let data = try? JSONEncoder().encode(session) else { return }
+        defaults.set(data, forKey: Self.sessionKey)
+    }
+
+    /// 冷启动恢复上次播放的曲目与进度，保持暂停态，由用户决定继续播放。
+    public func restoreLastSessionIfNeeded() async {
+        guard queue.current == nil,
+              let data = defaults.data(forKey: Self.sessionKey),
+              let session = try? JSONDecoder().decode(PersistedSession.self, from: data) else { return }
+        guard session.track.source.isEnabled, session.track.isPlayable else { return }
+        guard Date().timeIntervalSince(session.savedAt) < 7 * 24 * 60 * 60 else { return }
+        await replaceQueue([session.track], autoplay: false)
+        if session.elapsed > 1, duration > 0 {
+            await seek(to: min(session.elapsed, max(0, duration - 1)))
+        }
+        state = .paused
     }
 
     public func seek(to seconds: TimeInterval) async {
@@ -508,7 +586,16 @@ public final class PlaybackService {
     func handlePlaybackEnded(of item: AVPlayerItem) async {
         // Notifications cross a Task boundary. A later pause must win even if
         // the finished item is still installed when that task starts running.
-        guard item === player.currentItem, playbackRequested else { return }
+        guard item === player.currentItem, playbackRequested, endingItem !== item else { return }
+        endingItem = item
+        cancelBufferingTimeout()
+        await finishPlaybackEnd(of: item, generation: recoveryGate.generation, revision: intentRevision)
+    }
+
+    private func finishPlaybackEnd(of item: AVPlayerItem, generation: Int, revision: Int) async {
+        defer { if endingItem === item { endingItem = nil } }
+        guard item === player.currentItem, playbackRequested,
+              recoveryGate.isCurrent(generation), intentRevision == revision else { return }
         await handlePlaybackEnded()
     }
 
@@ -563,6 +650,13 @@ public final class PlaybackService {
     /// 记下新的音质上限，并让当前曲目按它重新解析。
     /// 解析成功前不碰 `AVPlayer`，失败时旧的流还在播，只回滚状态并把原因交回界面。
     @discardableResult
+    private func recordActualQuality() {
+        guard let reporting = resolver as? PlaybackQualityReporting,
+              let actual = reporting.consumeLastResolvedQuality() else { return }
+        lastActualQuality = actual
+        defaults.set(actual.rawValue, forKey: Self.lastPlayedQualityKey)
+    }
+
     public func setPreferredQuality(_ quality: Quality) async -> QualityChange {
         guard preferredQuality != quality else { return .unchanged }
         preferredQuality = quality
@@ -571,6 +665,7 @@ public final class PlaybackService {
         activeURLResolutionTask = nil
         guard let track = queue.current else { return .deferred }
         let generation = recoveryGate.beginLoad()
+        cancelBufferingTimeout()
 
         let resumeAt = elapsed
         let previousState = state
@@ -579,12 +674,15 @@ public final class PlaybackService {
         do {
             try resolver.requirePlaybackSupport(for: track.source)
             let url = try await resolver.musicURL(for: track, quality: quality)
+            recordActualQuality()
             try Task.checkCancellation()
             guard recoveryGate.isCurrent(generation), queue.current?.musicID == track.musicID else {
                 return .deferred
             }
             currentMediaHost = url.host
+            PerfLog.mark("url_ready", track.musicID)
             let item = AVPlayerItem(url: url)
+            item.preferredForwardBufferDuration = 10
             replacePlayerItem(with: item)
             observeStatus(of: item, generation: generation)
             if resumeAt > 0 {
@@ -622,6 +720,8 @@ public final class PlaybackService {
     }
 
     private func loadCurrent(autoplay: Bool, refreshing: Bool = false) async {
+        PerfLog.mark("load_start", refreshing ? "refresh" : "normal")
+        cancelBufferingTimeout()
         let generation = recoveryGate.beginLoad()
         lastTransitionTiming = TransitionTiming(id: generation, startedAt: ProcessInfo.processInfo.systemUptime)
         measuredItem = nil
@@ -697,7 +797,9 @@ public final class PlaybackService {
                 if refreshing, let refreshable = resolver as? PlaybackURLRefreshing {
                     return try await refreshable.refreshMusicURL(for: track, quality: quality)
                 }
-                return try await resolver.musicURL(for: track, quality: quality)
+                let url = try await resolver.musicURL(for: track, quality: quality)
+                recordActualQuality()
+                return url
             }
             activeURLResolutionTask = resolutionTask
             defer {
@@ -726,6 +828,7 @@ public final class PlaybackService {
                 return
             }
             let shouldSkip = playbackRequested && track.source.isEnabled
+                && !PlaybackFailureDiagnostics.isNetworkFailure(error)
             let revision = intentRevision
             playbackRequested = false
             state = .failed(
@@ -741,6 +844,7 @@ public final class PlaybackService {
     }
 
     private func completeCurrentLoad(item: AVPlayerItem, url: URL, generation: Int, prepared: Bool) throws {
+        PerfLog.mark("url_ready", queue.current?.musicID ?? "")
         currentMediaHost = url.host
         measuredItem = item
         lastTransitionTiming?.reusedPreparedItem = prepared
@@ -897,26 +1001,44 @@ public final class PlaybackService {
 
     private func beginTransitionBackgroundTask() {
         endTransitionBackgroundTask()
+        isTransitionInProgress = true
         #if os(iOS)
+        let revision = backgroundTransitionRevision
         transitionBackgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "sonar-track-transition") { [weak self] in
             Task { @MainActor [weak self] in
-                self?.endTransitionBackgroundTask()
+                guard let self, self.backgroundTransitionRevision == revision else { return }
+                self.handleTransitionBackgroundExpiration()
             }
         }
-        #else
-        isTransitionInProgress = true
         #endif
     }
 
     private func endTransitionBackgroundTask() {
+        backgroundTransitionRevision += 1
         #if os(iOS)
         if transitionBackgroundTaskID != .invalid {
             UIApplication.shared.endBackgroundTask(transitionBackgroundTaskID)
             transitionBackgroundTaskID = .invalid
         }
-        #else
-        isTransitionInProgress = false
         #endif
+        isTransitionInProgress = false
+    }
+
+    func handleTransitionBackgroundExpiration() {
+        if isTransitionInProgress, playbackRequested, state == .loading {
+            // A pending lookup/recovery must not install an item after iOS
+            // withdraws background time or leave the UI loading on return.
+            _ = recoveryGate.beginLoad()
+            cancelBufferingTimeout()
+            activeURLResolutionTask?.cancel()
+            activeURLResolutionTask = nil
+            discardUpcoming()
+            playbackRequested = false
+            player.pause()
+            state = .failed("后台加载超时，请检查网络或 VPN 分流后重试")
+            updateNowPlaying()
+        }
+        endTransitionBackgroundTask()
     }
 
     private func restartCurrent() async {
@@ -991,6 +1113,7 @@ public final class PlaybackService {
 
         switch type {
         case .began:
+            cancelBufferingTimeout()
             intentRevision += 1
             let wasActive = playbackRequested
                 || state == .playing
@@ -1035,6 +1158,7 @@ public final class PlaybackService {
 
         switch hintType {
         case .begin:
+            cancelBufferingTimeout()
             intentRevision += 1
             let wasActive = playbackRequested
                 || state == .playing
@@ -1101,12 +1225,16 @@ public final class PlaybackService {
     }
 
     private func installTimeObserver() {
-        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.2, preferredTimescale: 600), queue: .main) { [weak self] time in
+        timeObserver = player.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.2, preferredTimescale: 600), queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self else { return }
-                self.elapsed = time.seconds.isFinite ? max(0, time.seconds) : 0
+                guard let self, let item = self.player.currentItem else { return }
+                // A queued tick may belong to the item we just replaced.
+                let seconds = item.currentTime().seconds
+                if seconds.isFinite { self.elapsed = max(0, seconds) }
+                self.persistSession()
                 self.synchronizePlaybackState()
-                if let itemDuration = self.player.currentItem?.duration.seconds, itemDuration.isFinite, itemDuration > 0 {
+                let itemDuration = item.duration.seconds
+                if itemDuration.isFinite, itemDuration > 0 {
                     self.duration = itemDuration
                 }
                 self.updateNowPlaying(includeWidget: false)
@@ -1136,6 +1264,7 @@ public final class PlaybackService {
                       recoveryGate.isCurrent(generation) else { return }
                 if item === measuredItem, item.status == .readyToPlay {
                     recordTransitionStage("ready")
+                    PerfLog.mark("item_ready")
                 }
                 if item.status == .failed {
                     await handlePlaybackFailure(
@@ -1158,15 +1287,23 @@ public final class PlaybackService {
     private func handlePlaybackFailure(
         of item: AVPlayerItem,
         generation: Int,
-        fallback: String
+        fallback: String,
+        allowsAutoplaySkip: Bool = true
     ) async {
         guard item === player.currentItem,
               recoveryGate.isCurrent(generation),
+              endingItem !== item,
               let track = queue.current else { return }
+        if playbackRequested, hasReachedMediaEnd(item) {
+            await handlePlaybackEnded(of: item)
+            return
+        }
+        cancelBufferingTimeout()
         guard recoveryGate.consumeRecovery(for: generation) else {
-            let shouldSkip = playbackRequested && isTransitionInProgress
+            let shouldSkip = playbackRequested && isTransitionInProgress && allowsAutoplaySkip
             let revision = intentRevision
             playbackRequested = false
+            player.pause()
             state = .failed(playbackFailureDescription(for: item, fallback: fallback))
             updateNowPlaying()
             if shouldSkip {
@@ -1179,7 +1316,10 @@ public final class PlaybackService {
 
         let trackID = track.musicID
         let queueIndex = queue.currentIndex
-        let resumeAt = elapsed
+        // The periodic UI progress can lag, especially while backgrounded.
+        // Capture the item's position before removing it so recovery cannot rewind.
+        let position = item.currentTime().seconds
+        let resumeAt = position.isFinite ? max(elapsed, position) : elapsed
         state = .loading
         discardUpcoming()
         player.pause()
@@ -1217,8 +1357,10 @@ public final class PlaybackService {
                   queue.currentIndex == queueIndex,
                   queue.current?.musicID == trackID else { return }
 
+            PerfLog.mark("url_ready", track.musicID)
             currentMediaHost = url.host
             let replacement = AVPlayerItem(url: url)
+            replacement.preferredForwardBufferDuration = 10
             replacePlayerItem(with: replacement)
             observeStatus(of: replacement, generation: generation)
             if resumeAt > 0 {
@@ -1249,7 +1391,8 @@ public final class PlaybackService {
                 endTransitionBackgroundTask()
                 return
             }
-            let shouldSkip = playbackRequested && isTransitionInProgress
+            let shouldSkip = playbackRequested && isTransitionInProgress && allowsAutoplaySkip
+                && !PlaybackFailureDiagnostics.isNetworkFailure(error)
             let revision = intentRevision
             elapsed = resumeAt
             playbackRequested = false
@@ -1273,11 +1416,13 @@ public final class PlaybackService {
         ) { [weak self] notification in
             Task { @MainActor [weak self] in
                 guard let self,
-                      notification.object as? AVPlayerItem === player.currentItem,
+                      let item = notification.object as? AVPlayerItem,
+                      item === player.currentItem, endingItem !== item,
                       playbackRequested else { return }
                 if case .failed = state { return }
                 if shouldResumeAfterInterruption { return }
                 state = .loading
+                startBufferingTimeoutIfNeeded()
                 updateNowPlaying()
             }
         }
@@ -1288,8 +1433,8 @@ public final class PlaybackService {
             queue: .main
         ) { [weak self] notification in
             Task { @MainActor [weak self] in
-                guard let self, notification.object as? AVPlayerItem === player.currentItem else { return }
-                guard let item = player.currentItem else { return }
+                guard let self, let item = notification.object as? AVPlayerItem,
+                      item === player.currentItem, endingItem !== item else { return }
                 let error = notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error
                 if shouldResumeAfterInterruption || isInterruptionError(error) {
                     shouldResumeAfterInterruption = true
@@ -1327,17 +1472,30 @@ public final class PlaybackService {
     }
 
     func synchronizePlaybackState() {
-        guard queue.current != nil, let item = player.currentItem else { return }
-        if case .failed = state { return }
+        guard queue.current != nil, let item = player.currentItem else {
+            cancelBufferingTimeout()
+            return
+        }
+        if endingItem === item { cancelBufferingTimeout(); return }
+        if case .failed = state { cancelBufferingTimeout(); return }
         if item.status == .failed {
             // 失败由 observeStatus / handlePlaybackFailure 负责处理，避免将失败状态覆写为 loading
             return
         }
         guard playbackRequested else {
+            cancelBufferingTimeout()
             state = .paused
             return
         }
+        // Use the real item's duration, never catalog metadata. This also
+        // recovers an end notification missed while the app changed state.
+        if player.timeControlStatus == .paused, item.status == .readyToPlay,
+           hasReachedMediaEnd(item) {
+            schedulePlaybackEnd(of: item)
+            return
+        }
         if player.timeControlStatus == .playing, item.status == .readyToPlay {
+            cancelBufferingTimeout()
             if item === measuredItem {
                 recordTransitionStage("ready")
                 recordTransitionStage("playing")
@@ -1345,6 +1503,7 @@ public final class PlaybackService {
             consecutiveAutoplayFailures = 0
             endTransitionBackgroundTask()
             state = .playing
+            if player.rate != playbackRate { player.rate = playbackRate }
         } else if player.timeControlStatus == .waitingToPlayAtSpecifiedRate {
             state = .loading
         } else if player.timeControlStatus == .paused {
@@ -1362,6 +1521,35 @@ public final class PlaybackService {
             }
         } else {
             state = .loading
+        }
+        if state == .loading { startBufferingTimeoutIfNeeded() }
+        else { cancelBufferingTimeout() }
+    }
+
+    private func cancelBufferingTimeout() {
+        bufferingTimeoutTask?.cancel()
+        bufferingTimeoutTask = nil
+    }
+
+    private func startBufferingTimeoutIfNeeded() {
+        guard bufferingTimeoutTask == nil, playbackRequested, !shouldResumeAfterInterruption,
+              let item = player.currentItem else { return }
+        let generation = recoveryGate.generation
+        let revision = intentRevision
+        let timeout = bufferingTimeout
+        bufferingTimeoutTask = Task { [weak self, weak item] in
+            do { try await Task.sleep(for: timeout) }
+            catch { return }
+            guard let self, let item, !Task.isCancelled,
+                  self.recoveryGate.isCurrent(generation), self.intentRevision == revision,
+                  self.player.currentItem === item, self.playbackRequested,
+                  !self.shouldResumeAfterInterruption, self.state == .loading else { return }
+            self.bufferingTimeoutTask = nil
+            await self.handlePlaybackFailure(
+                of: item, generation: generation,
+                fallback: "音频加载超时，请检查网络或 VPN 分流后重试",
+                allowsAutoplaySkip: false
+            )
         }
     }
 
@@ -1398,10 +1586,33 @@ public final class PlaybackService {
 
     private func installEndObserver() {
         endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: nil, queue: .main) { [weak self] notification in
-            Task { @MainActor [weak self] in
-                guard let self, let item = notification.object as? AVPlayerItem else { return }
-                await handlePlaybackEnded(of: item)
+            MainActor.assumeIsolated {
+                guard let item = notification.object as? AVPlayerItem else { return }
+                self?.schedulePlaybackEnd(of: item)
             }
+        }
+    }
+
+    private func hasReachedMediaEnd(_ item: AVPlayerItem) -> Bool {
+        let mediaDuration = item.duration.seconds
+        let position = item.currentTime().seconds
+        return mediaDuration.isFinite && mediaDuration > 0 && position.isFinite
+            && position >= mediaDuration - 0.02
+    }
+
+    private func schedulePlaybackEnd(of item: AVPlayerItem) {
+        guard item === player.currentItem, playbackRequested, endingItem !== item else { return }
+        // Claim completion synchronously. A queued failure or timeout must not
+        // replace this finished item before the transition task gets to run.
+        endingItem = item
+        cancelBufferingTimeout()
+        // Acquire background time inside the notification callback, before the
+        // async hop can let iOS suspend an app whose audio has just stopped.
+        beginTransitionBackgroundTask()
+        let generation = recoveryGate.generation
+        let revision = intentRevision
+        Task { [weak self] in
+            await self?.finishPlaybackEnd(of: item, generation: generation, revision: revision)
         }
     }
 

@@ -7,6 +7,7 @@ struct QualitySheet: View {
     @Environment(PlaybackService.self) private var playbackService
     @Environment(ToastCenter.self) private var toastCenter
     @Environment(\.m3Scheme) private var scheme
+    @State private var entitledCeiling: Quality?
 
     private var options: [Quality: TrackQualityOption] {
         guard let track else { return [:] }
@@ -19,6 +20,34 @@ struct QualitySheet: View {
                 .accessibilityIdentifier("player-quality-sheet")
             ScrollView {
                 LazyVStack(spacing: 4) {
+                    if let ceiling = entitledCeiling {
+                        HStack(spacing: 6) {
+                            Image(systemName: "person.badge.key")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(scheme.onSurfaceVariant)
+                            Text("账号当前可播上限：\(ceiling.title)")
+                                .font(.system(size: 12))
+                                .foregroundStyle(scheme.onSurfaceVariant)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.bottom, 6)
+                        .accessibilityIdentifier("player-quality-ceiling")
+                    }
+                    if let actual = playbackService.lastActualQuality {
+                        HStack(spacing: 6) {
+                            Image(systemName: "waveform.badge.checkmark")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(scheme.primary)
+                            Text("上次实际播放音质：\(actual.title)")
+                                .font(.system(size: 12))
+                                .foregroundStyle(scheme.onSurfaceVariant)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.bottom, 6)
+                        .accessibilityIdentifier("player-quality-actual")
+                    }
                     ForEach(Quality.displayOrder, id: \.self) { quality in
                         let option = options[quality]
                             Button {
@@ -59,6 +88,25 @@ struct QualitySheet: View {
             }
         }
         .background(scheme.surfaceContainerLow.ignoresSafeArea())
+        .task(id: track?.musicID) { await loadEntitlementCeiling() }
+    }
+
+    /// 用 `/api/song/enhance/privilege` 拿到账号在这首歌上的可播上限，超过上限的档位置灰。
+    private func loadEntitlementCeiling() async {
+        guard let track, track.source == .wy else {
+            entitledCeiling = nil
+            return
+        }
+        let client = NetEaseWebClient()
+        guard let map = try? await client.privileges(ids: [track.songmid]),
+              let entry = map[track.songmid] else {
+            entitledCeiling = nil
+            return
+        }
+        let level = (entry["playMaxBrLevel"] as? String)
+            ?? (entry["maxBrLevel"] as? String)
+            ?? ""
+        entitledCeiling = Quality(netEaseLevel: level)
     }
 
     /// 先收起弹层再等解析：重新拿播放地址要走一次网络，让用户对着不动的表等没有意义。

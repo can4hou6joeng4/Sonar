@@ -357,6 +357,8 @@ struct PlayerPage: View {
     )
     private var personalPlaylists: [Playlist]
     @State private var lyricsModel = PlayerLyricsModel()
+    @State private var shareCardImage: UIImage?
+    @Environment(\.artworkService) private var artworkService
     @State private var presentedSheet: PresentedSheet?
 
     private var personalPlaylist: Playlist? { personalPlaylists.first }
@@ -401,6 +403,15 @@ struct PlayerPage: View {
         .onChange(of: pullController.pull) { _, pull in
             if pull == 0 { selectedSurface = .artwork }
         }
+        .sheet(isPresented: Binding(
+            get: { shareCardImage != nil },
+            set: { if !$0 { shareCardImage = nil } }
+        )) {
+            if let image = shareCardImage {
+                ActivityShareSheet(image: image)
+                    .presentationDetents([.medium, .large])
+            }
+        }
         .sheet(item: $presentedSheet) { destination in
             switch destination {
             case let .cover(track):
@@ -423,7 +434,19 @@ struct PlayerPage: View {
                         presentedSheet = nil
                         toggleCollection(of: track)
                     },
-                    onSelectQuality: { transitionSheet(to: .quality(track)) }
+                    onSelectQuality: { transitionSheet(to: .quality(track)) },
+                    onShareLyricsCard: {
+                        presentedSheet = nil
+                        Task { @MainActor in
+                            let artwork = try? await artworkService?.image(for: track)
+                            shareCardImage = LyricsShareCardRenderer.render(
+                                track: track,
+                                artwork: artwork,
+                                lyrics: lyricsModel.karaoke,
+                                elapsed: playbackService.elapsed
+                            )
+                        }
+                    }
                 )
                 .presentationDetents([.fraction(0.62)])
                 .presentationDragIndicator(.visible)
@@ -521,6 +544,11 @@ private struct PlayerSurfaceContent: View {
     let onShowArtwork: () -> Void
 
     @Environment(\.sonarReduceMotion) private var reduceMotion
+    @Environment(PlaybackService.self) private var playbackService
+    @Environment(\.m3Scheme) private var scheme
+    @State private var lyricsOffset: TimeInterval = 0
+
+    private var currentMusicID: String? { playbackService.queue.current?.musicID }
 
     var body: some View {
         GeometryReader { _ in
@@ -544,10 +572,14 @@ private struct PlayerSurfaceContent: View {
                             lyrics: lyricsModel.karaoke,
                             errorMessage: lyricsModel.errorMessage,
                             edgeFadeEnabled: true,
-                            isVisible: pullController.pull > 0
+                            isVisible: pullController.pull > 0,
+                            timeOffset: lyricsOffset
                         )
                         .contentShape(Rectangle())
                         .onTapGesture { onShowArtwork() }
+                        .overlay(alignment: .bottom) {
+                            lyricsOffsetBar.padding(.bottom, 10)
+                        }
                     }
                     .transition(.opacity)
                 }
@@ -562,6 +594,56 @@ private struct PlayerSurfaceContent: View {
                 value: selectedSurface
             )
         }
+        .task(id: currentMusicID) {
+            lyricsOffset = LyricsOffsetStore.offset(for: currentMusicID)
+        }
+    }
+
+    private var lyricsOffsetBar: some View {
+        HStack(spacing: 12) {
+            Button {
+                lyricsOffset = LyricsOffsetStore.adjust(currentMusicID, by: -LyricsOffsetStore.step)
+            } label: {
+                Image(systemName: "minus")
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("歌词提前 0.5 秒")
+
+            Text(offsetText)
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .frame(minWidth: 88)
+
+            Button {
+                lyricsOffset = LyricsOffsetStore.adjust(currentMusicID, by: LyricsOffsetStore.step)
+            } label: {
+                Image(systemName: "plus")
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("歌词延后 0.5 秒")
+
+            if abs(lyricsOffset) > 0.001 {
+                Button("复位") {
+                    LyricsOffsetStore.reset(currentMusicID)
+                    lyricsOffset = 0
+                }
+                .font(.system(size: 12, weight: .medium))
+                .buttonStyle(.plain)
+            }
+        }
+        .foregroundStyle(NCMDesignTokens.Player.secondaryInk)
+        .padding(.horizontal, 14)
+        .frame(height: 32)
+        .background(.ultraThinMaterial, in: Capsule())
+        .padding(.bottom, 6)
+        .accessibilityIdentifier("player-lyrics-offset-bar")
+    }
+
+    private var offsetText: String {
+        let value = lyricsOffset
+        if abs(value) < 0.001 { return "歌词偏移 0.0s" }
+        return String(format: "歌词偏移 %+.1fs", value)
     }
 }
 

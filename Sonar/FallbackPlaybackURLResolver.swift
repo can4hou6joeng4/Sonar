@@ -19,7 +19,7 @@ enum PlaybackResolverPipeline {
     }
 }
 
-public final class AlternatePlaybackURLResolver: PlaybackURLRefreshing, @unchecked Sendable {
+public final class AlternatePlaybackURLResolver: PlaybackURLRefreshing, PlaybackQualityReporting, @unchecked Sendable {
     private let preferred: PlaybackURLResolving
     private let fallback: PlaybackURLResolving
     private let preferredLabel: String
@@ -34,6 +34,11 @@ public final class AlternatePlaybackURLResolver: PlaybackURLRefreshing, @uncheck
 
     public func supportsPlayback(of source: MusicSource) -> Bool {
         preferred.supportsPlayback(of: source) || fallback.supportsPlayback(of: source)
+    }
+
+    public func consumeLastResolvedQuality() -> Quality? {
+        (preferred as? PlaybackQualityReporting)?.consumeLastResolvedQuality()
+            ?? (fallback as? PlaybackQualityReporting)?.consumeLastResolvedQuality()
     }
 
     public func musicURL(for track: Track, quality: Quality) async throws -> URL {
@@ -75,7 +80,7 @@ public final class AlternatePlaybackURLResolver: PlaybackURLRefreshing, @uncheck
     }
 }
 
-public final class HighestAvailableQualityPlaybackURLResolver: PlaybackURLRefreshing, @unchecked Sendable {
+public final class HighestAvailableQualityPlaybackURLResolver: PlaybackURLRefreshing, PlaybackQualityReporting, @unchecked Sendable {
     private static let qualityOrder = Quality.descendingOrder
 
     private let resolver: PlaybackURLResolving
@@ -85,6 +90,10 @@ public final class HighestAvailableQualityPlaybackURLResolver: PlaybackURLRefres
     }
 
     public func supportsPlayback(of source: MusicSource) -> Bool { resolver.supportsPlayback(of: source) }
+
+    public func consumeLastResolvedQuality() -> Quality? {
+        (resolver as? PlaybackQualityReporting)?.consumeLastResolvedQuality()
+    }
 
     public func musicURL(for track: Track, quality: Quality) async throws -> URL {
         try await resolve(track: track, quality: quality, refreshing: false)

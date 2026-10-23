@@ -7,6 +7,8 @@ struct KaraokeLyricsView: View {
     let errorMessage: String?
     let edgeFadeEnabled: Bool
     var isVisible = true
+    /// 逐曲歌词偏移：正值表示歌词延后显示。
+    var timeOffset: TimeInterval = 0
 
     @Environment(PlaybackService.self) private var playbackService
     @Environment(\.sonarReduceMotion) private var reduceMotion
@@ -132,7 +134,7 @@ struct KaraokeLyricsView: View {
     private func synchronizePlayback() {
         state.receivePlayback(
             lyrics: lyrics,
-            elapsed: playbackService.elapsed,
+            elapsed: playbackService.elapsed + timeOffset,
             duration: playbackService.duration,
             playbackState: playbackService.state,
             reduceMotion: reduceMotion,
@@ -142,7 +144,7 @@ struct KaraokeLyricsView: View {
 
     private func select(_ line: KaraokeLine) {
         state.selectLine(line.id, startMs: line.startMs, at: .now)
-        Task { await playbackService.seek(to: Double(line.startMs) / 1_000) }
+        Task { await playbackService.seek(to: Double(line.startMs) / 1_000 - timeOffset) }
     }
 }
 

@@ -127,7 +127,7 @@ public struct URLSessionPlaybackHTTPClient: PlaybackHTTPClient {
             return result
         } catch is CancellationError {
             throw CancellationError()
-        } catch let error as URLError where error.code == .cancelled {
+        } catch let error as URLError where error.code == .cancelled && Task.isCancelled {
             throw CancellationError()
         } catch {
             throw SourceError.network(underlying: error)
@@ -135,15 +135,18 @@ public struct URLSessionPlaybackHTTPClient: PlaybackHTTPClient {
     }
 
     public func send(_ request: URLRequest) async throws -> PlaybackHTTPResponse {
+        let transfer = PlaybackDataRequest()
         do {
-            let (data, response) = try await session.data(for: request)
-            guard let http = response as? HTTPURLResponse else {
-                throw URLError(.badServerResponse)
+            let response = try await withTaskCancellationHandler {
+                try Task.checkCancellation()
+                return try await withCheckedThrowingContinuation { continuation in
+                    transfer.start(request, session: session, continuation: continuation)
+                }
+            } onCancel: {
+                transfer.cancel()
             }
-            let headers = http.allHeaderFields.reduce(into: [String: String]()) {
-                $0[String(describing: $1.key).lowercased()] = String(describing: $1.value)
-            }
-            return PlaybackHTTPResponse(statusCode: http.statusCode, headers: headers, body: data)
+            try Task.checkCancellation()
+            return response
         } catch let error as SourceError {
             throw error
         } catch is CancellationError {
@@ -153,6 +156,72 @@ public struct URLSessionPlaybackHTTPClient: PlaybackHTTPClient {
         } catch {
             throw SourceError.network(underlying: error)
         }
+    }
+}
+
+/// URLRequest's timeout measures idle time. A VPN route or a trickling response
+/// must also have a wall-clock deadline, including DNS, redirects and the body.
+private final class PlaybackDataRequest: @unchecked Sendable {
+    private let lock = NSLock()
+    private var completed = false
+    private var continuation: CheckedContinuation<PlaybackHTTPResponse, Error>?
+    private var task: URLSessionDataTask?
+    private var deadline: DispatchWorkItem?
+
+    func start(
+        _ request: URLRequest, session: URLSession,
+        continuation: CheckedContinuation<PlaybackHTTPResponse, Error>
+    ) {
+        lock.lock()
+        guard !completed else {
+            lock.unlock()
+            continuation.resume(throwing: CancellationError())
+            return
+        }
+        self.continuation = continuation
+        var request = request
+        let timeout = request.timeoutInterval.isFinite ? min(max(request.timeoutInterval, 0.01), 30) : 8
+        request.timeoutInterval = timeout
+        let task = session.dataTask(with: request) { [weak self] data, response, error in
+            if let error {
+                self?.finish(.failure(error))
+            } else if let response = response as? HTTPURLResponse {
+                let headers = response.allHeaderFields.reduce(into: [String: String]()) {
+                    $0[String(describing: $1.key).lowercased()] = String(describing: $1.value)
+                }
+                self?.finish(.success(PlaybackHTTPResponse(
+                    statusCode: response.statusCode, headers: headers, body: data ?? Data()
+                )))
+            } else {
+                self?.finish(.failure(URLError(.badServerResponse)))
+            }
+        }
+        let deadline = DispatchWorkItem { [weak self] in
+            self?.finish(.failure(URLError(.timedOut)))
+        }
+        self.task = task
+        self.deadline = deadline
+        lock.unlock()
+        DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: deadline)
+        task.resume()
+    }
+
+    func cancel() { finish(.failure(CancellationError())) }
+
+    private func finish(_ result: Result<PlaybackHTTPResponse, Error>) {
+        lock.lock()
+        guard !completed else { lock.unlock(); return }
+        completed = true
+        let continuation = self.continuation
+        let task = self.task
+        let deadline = self.deadline
+        self.continuation = nil
+        self.task = nil
+        self.deadline = nil
+        lock.unlock()
+        deadline?.cancel()
+        task?.cancel()
+        continuation?.resume(with: result)
     }
 }
 
@@ -326,6 +395,11 @@ public extension PlaybackURLResolving {
     }
 }
 
+/// 解析器可选地回报「这次真正拿到的档位」，供播放服务记录与展示。
+public protocol PlaybackQualityReporting: Sendable {
+    func consumeLastResolvedQuality() -> Quality?
+}
+
 public protocol PlaybackURLRefreshing: PlaybackURLResolving {
     func refreshMusicURL(for track: Track, quality: Quality) async throws -> URL
 }
@@ -405,7 +479,12 @@ public final class PlaybackURLResolver: PlaybackURLRefreshing, @unchecked Sendab
         if let bookmarkBase64 = track.rawPayload["bookmark"] as? String,
            let bookmarkData = Data(base64Encoded: bookmarkBase64) {
             var isStale = false
-            if let resolvedURL = try? URL(resolvingBookmarkData: bookmarkData, options: .withSecurityScope, relativeTo: nil, bookmarkDataIsStale: &isStale) {
+            #if os(macOS)
+            let options: URL.BookmarkResolutionOptions = .withSecurityScope
+            #else
+            let options: URL.BookmarkResolutionOptions = []
+            #endif
+            if let resolvedURL = try? URL(resolvingBookmarkData: bookmarkData, options: options, relativeTo: nil, bookmarkDataIsStale: &isStale) {
                 _ = resolvedURL.startAccessingSecurityScopedResource()
                 if FileManager.default.fileExists(atPath: resolvedURL.path) {
                     return resolvedURL
