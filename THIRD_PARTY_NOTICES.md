@@ -6,9 +6,6 @@
 
 | 来源 | 使用范围 | 许可材料 |
 | --- | --- | --- |
-| [lx-music-mobile](https://github.com/lyswhut/lx-music-mobile) | `js-source/` 中保留并适配的音源与辅助代码，以及生成 bundle 中的对应内容 | [Apache License 2.0](LICENSES/lx-music-mobile.txt) |
-
-`js-source/` 是为 Sonar 修改的分发版本，不能视为未经修改的上游发布版。适配包括 JavaScriptCore 宿主桥接、仅保留 QQ 音乐路径，以及搜索、歌手和专辑等入口调整。文件中的原有来源说明保留，并增加了修改版本标记。
 
 lx-music-mobile 的许可文件来自其上游仓库；核对时根目录没有独立 NOTICE 文件。
 
@@ -47,6 +44,5 @@ lx-music-mobile 的许可文件来自其上游仓库；核对时根目录没有�
 ## 分发与维护
 
 - `LICENSES/` 保存上述许可正文，[sources.json](LICENSES/sources.json) 记录来源、版本与校验信息。
-- `npm run build:source` 将归属说明与许可正文写入 `source-bundle.js` 的注释头，并保留依赖中可识别的许可注释；该资源随 App 一起打包。
 - 更新依赖或增减第三方源码时，应重新核对版本、适用许可和归属信息，而不是沿用旧清单。
 - 对第三方许可的整理不等同于对音乐内容、服务接口或商标取得授权，也不替代对 Sonar 自有代码许可证的明确选择。

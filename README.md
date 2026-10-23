@@ -70,7 +70,7 @@ Sonar is a native SwiftUI music player for **iOS 17+ and macOS 14+**. It support
 
 The current iOS source features an artwork-led home, icon navigation, a floating mini-player, and a cover-tinted player with a glass control card. Circular glass controls and their original press feedback have been restored. The welcome sequence stages the cover, vinyl, and branding before entering the home; the full player slides up from the bottom, and track changes crossfade artwork and transition the background color. Lyrics, queue management, quality selection, and the in-place search overlay remain accessible. The latest screenshots use the iPhone 17 Pro Simulator. These interface and source changes are not included in the existing public IPA.
 
-Public NetEase playlists can be imported from a share link or playlist ID, with a preview and deduplication before merging into the personal library. Search, lyrics, and playback use ChKSz only. Playback starts at master quality and falls back through Hi-Res, lossless, 320K, and 128K for the same song. Local LX scripts are disabled and excluded from both app bundles.
+Public NetEase playlists can be imported from a share link or playlist ID, with a preview and deduplication before merging into the personal library. Search, lyrics, and playback use ChKSz only. Playback starts at master quality and falls back through Hi-Res, lossless, 320K, and 128K for the same song. The repository no longer ships any JavaScript/LX source scripts.
 
 Source code is available under **GPL-3.0**, with separate notices for third-party code. Build both apps from `Sonar.xcodeproj`. [GitHub Releases](https://github.com/can4hou6joeng4/Sonar/releases) provides official pre-built macOS packages (`SonarMac.dmg` & `SonarMac.zip`) and an unsigned iOS preview IPA. The IPA requires your own signing and provisioning; the Mac build is ad-hoc signed and not notarized. Public packages contain no personal API credentials or private LX scripts. Online search, lyrics, playback, and playlist import require your own ChKSz key configured during a source build. Music availability and playback quality depend on third-party services; playlist backups contain metadata, not audio.
 
@@ -124,16 +124,14 @@ v1.0.0-preview.2 的公开 IPA 不包含个人 API 凭据，可使用当时的 Q
 
 仓库已提供 `Sonar.xcodeproj`、共享 Scheme 和音源资源，不需要本地 Agent 框架。直接使用现有工程即可；仅在修改 `project.yml` 并重新生成工程时需要 XcodeGen。App 与 Widget 的构建版本应保持一致。
 
-### 获取源码与构建音源
+### 获取源码
 
 ```sh
 git clone https://github.com/can4hou6joeng4/Sonar.git
 cd Sonar
-npm ci
-npm run build:source
 ```
 
-当前网易云在线功能使用原生 ChKSz 客户端。`npm run build:source` 更新共享工程保留的 JavaScript 适配资源，当前音源不会启动 JavaScriptCore 或 LX 脚本运行器。
+网易云在线功能由原生客户端实现（网易云直连接口 + ChKSz），仓库不再包含 JavaScript/LX 音源脚本，也不需要 Node 音源打包步骤。
 
 ### 运行 iOS App
 
@@ -212,8 +210,6 @@ Mac 资料库位于 `~/Library/Application Support/cn.bobochang.sonar.mac/Sonar.
 
 构建脚本生成 `BuildCredentials.json` 并打包到 App。该文件已被 Git 忽略；使用凭据应遵循相应服务的授权范围和使用条款。
 
-本地 LX 主脚本、备用脚本及其运行器已停用，不再初始化、执行或打包到 iOS / Mac App；当前构建无需配置 LX 脚本路径。
-
 <details>
 <summary>播放解析与切歌</summary>
 
@@ -251,7 +247,7 @@ ChKSz 单次请求默认在 8 秒内结束，媒体加载或缓冲持续等待 2
 
 感谢 [LINUX DO](https://linux.do/) 为开发者提供分享作品、交流想法的空间，也感谢社区中愿意分享经验与开源实践的佬友。
 
-- [lx-music-mobile](https://github.com/lyswhut/lx-music-mobile)：Sonar 的音源与辅助代码基于其开源实践适配，来源说明保留在源码与许可材料中。
+- [lx-music-mobile](https://github.com/lyswhut/lx-music-mobile)：早期版本的 JavaScript 音源适配曾参考其实现，相关脚本已在当前版本移除，历史来源保留在许可材料中。
 - [Atoll](https://github.com/Ebullioscopic/Atoll)：Mac 顶部播放器的交互参考；Sonar 使用自己的窗口、界面与播放实现，未引入其源代码或素材。
 - [Spun 演示视频](https://xhslink.cn/o/9wrbFwvMx18)：iOS 大图主页、悬浮播放条与播放控制卡片的视觉参考，由 Sonar 使用 SwiftUI 实现。
 

@@ -17,17 +17,10 @@ targets:
       - path: Sonar
         excludes:
           - Resources/BuildCredentials.json
-          - Resources/LXCustomSource.js
-          - Resources/LXFallbackSource.js
-          - Resources/lx-source-host.js
-          - LXScriptPlaybackURLResolver.swift
     resources:
       - path: Sonar/Resources
         excludes:
           - BuildCredentials.json
-          - LXCustomSource.js
-          - LXFallbackSource.js
-          - lx-source-host.js
     dependencies:
       - target: SonarWidgetExtension
         embed: true

@@ -15,24 +15,11 @@ xcuserdata/
 Pods/
 .build/
 
-# Node（音源打包链）
-node_modules/
-dist/
-*.bundle.js
 
 # 凭证：任何含真实 token 的脚本或配置，禁止提交
 *credentials*
 Secrets.xcconfig
-lx-custom-source-*.js
 Sonar/Resources/BuildCredentials.json
-Sonar/Resources/LXCustomSource.js
-Sonar/Resources/LXFallbackSource.js
-
-# Retired local LX adapters (unused by the shared application)
-Sonar/LXScriptPlaybackURLResolver.swift
-Sonar/Resources/lx-source-host.js
-scripts/embed-lx-source.mjs
-scripts/lx-source-host.js
 
 # Local development workflow and verification (retained on this machine)
 .trellis/
