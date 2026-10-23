@@ -100,6 +100,7 @@ targets:
       - path: Sonar/LibraryStore.swift
       - path: Sonar/LocalAudioScanner.swift
       - path: Sonar/Lyrics.swift
+      - path: Sonar/PerfLog.swift
       - path: Sonar/PlatformImage.swift
       - path: Sonar/PlaybackQueue.swift
       - path: Sonar/PlaybackService.swift
@@ -111,7 +112,6 @@ targets:
       - path: Sonar/SecurityBridge.swift
       - path: Sonar/SonarBootstrap.swift
       - path: Sonar/SourceModels.swift
-      - path: Sonar/SourceRuntime.swift
       - path: Sonar/ThemeState.swift
       - path: Sonar/Screens/SearchViewModel.swift
       - path: Sonar/Screens/ArtistDetailViewModel.swift
@@ -120,7 +120,6 @@ targets:
       - path: Sonar/DesignSystem/M3Scheme.swift
       - path: Sonar/DesignSystem/UIPreferences.swift
       - path: Sonar/WidgetShare/WidgetSnapshot.swift
-      - path: Sonar/Resources/source-bundle.js
     postBuildScripts:
       - name: Embed local build credentials
         script: |
