@@ -12,6 +12,7 @@ struct MacSearchView: View {
         switch search.selectedScope {
         case .songs: search.isLoading
         case .artists: search.isLoadingArtists
+        case .albums: search.isLoadingAlbums
         case .playlists: search.isLoadingPlaylists
         }
     }
@@ -131,6 +132,27 @@ struct MacSearchView: View {
                         }
                         ForEach(search.artistExpansionWarnings, id: \.self) { source in
                             MacInlineError(message: "\(source.displayName) 更多歌手载入失败") { Task { await search.retryArtistExpansion(source) } }
+                        }
+                    }.padding(26)
+                }
+            }
+        case .albums:
+            if search.isLoadingAlbums, search.albumResults.isEmpty {
+                ProgressView().frame(maxWidth: .infinity, minHeight: 220)
+            } else if search.albumResults.isEmpty {
+                MacEmptyState(title: "没有找到专辑", description: "尝试专辑名或歌手名。", symbol: "square.stack")
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 20)], spacing: 24) {
+                        ForEach(search.albumResults, id: \.stableID) { album in
+                            Button { open(.album(album)) } label: {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    MacArtworkView(url: album.imageURL, size: 160, radius: 10)
+                                    Text(album.name).fontWeight(.medium).lineLimit(2)
+                                    Text(album.artist).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }.buttonStyle(.plain)
                         }
                     }.padding(26)
                 }
