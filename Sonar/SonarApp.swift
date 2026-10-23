@@ -6,6 +6,7 @@ struct SonarApp: App {
     @State private var bootstrap: SonarBootstrap
 
     init() {
+        PerfLog.mark("app_init")
         #if DEBUG
         var failFirstOpen = ProcessInfo.processInfo.arguments.contains("-sonar-test-store-failure-once")
         _bootstrap = State(initialValue: SonarBootstrap(open: {
@@ -44,13 +45,18 @@ private final class SonarServices {
     let uiPreferences: UIPlaybackPreferences
     let toastCenter: ToastCenter
     let confirmationCenter: ConfirmationCenter
+    let sleepTimer: SleepTimer
 
     init() {
         let credentials = BuildCredentialStore()
         let breaker = ChkszCircuitBreaker()
         let chkszAPI = ChkszAPIClient(credentials: credentials, breaker: breaker)
         let netease = ChkszNetEaseClient(api: chkszAPI)
-        let runtime = ChkszSourceRuntime(netease: netease)
+        let direct = NetEaseWebClient()
+        let runtime = NetEaseRuntimeDecorator(
+            base: ChkszSourceRuntime(netease: netease),
+            client: direct
+        )
         sourceRuntime = runtime
         onlinePlaylistImporter = OnlinePlaylistImportService(chkszAPI: chkszAPI)
         let resolver = PlaybackResolverPipeline.make(
@@ -59,7 +65,8 @@ private final class SonarServices {
                 breaker: breaker,
                 chkszAPI: chkszAPI,
                 netease: netease
-            )
+            ),
+            custom: NetEasePlaybackResolver(client: direct)
         )
         playbackService = PlaybackService(
             resolver: resolver
@@ -71,6 +78,7 @@ private final class SonarServices {
         uiPreferences = UIPlaybackPreferences()
         toastCenter = ToastCenter()
         confirmationCenter = ConfirmationCenter()
+        sleepTimer = SleepTimer()
     }
 
 }
@@ -85,6 +93,7 @@ private struct ReadySonarView: View {
             .environment(services.uiPreferences)
             .environment(services.toastCenter)
             .environment(services.confirmationCenter)
+            .environment(services.sleepTimer)
             .environment(\.artworkService, services.artworkService)
             .environment(\.sourceRuntime, services.sourceRuntime)
             .environment(\.trackDetailRefreshCoordinator, services.trackDetailRefreshCoordinator)

@@ -10,6 +10,8 @@ public enum MusicSource: String, Codable, Sendable, CaseIterable {
     public static let allCases: [MusicSource] = [.kg, .wy, .tx, .local]
     public static let searchSources: [MusicSource] = [.wy]
     public static let catalogSources: [MusicSource] = []
+    /// 搜索页允许按歌手 / 专辑 / 歌单分类检索的音源（不启用首页内容流）。
+    public static let browseSources: [MusicSource] = [.wy]
     public static let playlistImportSources: [MusicSource] = [.wy]
     public var isEnabled: Bool { self == .local || Self.searchSources.contains(self) }
     public var supportsCatalog: Bool { Self.catalogSources.contains(self) }
@@ -41,6 +43,18 @@ public enum Quality: String, Codable, Sendable, CaseIterable {
     case master = "master"
 
     static let descendingOrder: [Quality] = [.master, .hiRes, .lossless, .high, .standard]
+
+    /// 网易云 `level` / `playMaxBrLevel` 到本地档位的映射。
+    init?(netEaseLevel: String) {
+        switch netEaseLevel.lowercased() {
+        case "vivid", "jymaster", "sky", "jyeffect": self = .master
+        case "hires": self = .hiRes
+        case "lossless": self = .lossless
+        case "exhigh", "higher": self = .high
+        case "standard": self = .standard
+        default: return nil
+        }
+    }
 }
 
 public struct Track: Codable, Equatable, Sendable {
@@ -90,7 +104,7 @@ public struct Track: Codable, Equatable, Sendable {
     }
 
     public var rawPayload: [String: Any] {
-        (try? JSONSerialization.jsonObject(with: payload)) as? [String: Any] ?? [:]
+        TrackPayloadCache.shared.payload(for: payload)
     }
 
     public var musicID: String { "\(source.rawValue)_\(songmid)" }
@@ -101,6 +115,54 @@ public struct Track: Codable, Equatable, Sendable {
         guard !components.isEmpty else { return nil }
         return components.reversed().enumerated().reduce(0) { result, item in
             result + item.element * pow(60, Double(item.offset))
+        }
+    }
+}
+
+/// `Track.payload` 是 JSON，列表每次渲染都会读 `rawPayload`（音质徽标、是否可播）。
+/// 反复反序列化在长列表里是可观开销，这里按 payload 内容做一层小缓存。
+final class TrackPayloadCache: @unchecked Sendable {
+    static let shared = TrackPayloadCache()
+
+    private let cache = NSCache<NSData, NSDictionary>()
+
+    private init() {
+        cache.countLimit = 512
+    }
+
+    func payload(for data: Data) -> [String: Any] {
+        let key = data as NSData
+        if let hit = cache.object(forKey: key) {
+            return hit as? [String: Any] ?? [:]
+        }
+        guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            return [:]
+        }
+        cache.setObject(object as NSDictionary, forKey: key)
+        return object
+    }
+}
+
+public extension Track {
+    /// 服务端标记下架/不可播（网易云 `st = -1`，或 privilege 里 st < 0）。
+    /// 只有明确标记才判不可播；缺字段时保持可播，避免误伤其他音源。
+    var isPlayable: Bool {
+        if let st = Self.integer(rawPayload["st"]), st < 0 { return false }
+        if let privilege = rawPayload["privilege"] as? [String: Any],
+           let st = Self.integer(privilege["st"]), st < 0 { return false }
+        if let privilege = rawPayload["privilege"] as? [String: Any],
+           let status = Self.integer(privilege["status"]), status < 0 { return false }
+        return true
+    }
+
+    private static func integer(_ value: Any?) -> Int? {
+        switch value {
+        case let value as Int: value
+        case let value as Int64: Int(value)
+        case let value as Double: Int(value)
+        case let value as NSNumber: value.intValue
+        case let value as String: Int(value)
+        default: nil
         }
     }
 }
@@ -475,6 +537,8 @@ public protocol SourceRuntime: Sendable {
     func playlistDetail(source: MusicSource, id: String, page: Int) async throws -> PlaylistDetail
     func searchArtists(_ keyword: String, source: MusicSource, page: Int) async throws -> ArtistSearchPage
     func searchArtists(_ keyword: String, source: MusicSource, page: Int, limit: Int) async throws -> ArtistSearchPage
+    func searchAlbums(_ keyword: String, source: MusicSource, page: Int, limit: Int) async throws -> AlbumPage
+    func artistDetail(_ artist: ArtistSummary) async throws -> ArtistSummary
     func artistPopularTracks(_ artist: ArtistSummary) async throws -> [Track]
     func artistAlbums(_ artist: ArtistSummary, page: Int) async throws -> AlbumPage
     func albumTracks(_ album: AlbumSummary) async throws -> AlbumDetail
@@ -508,6 +572,14 @@ public extension SourceRuntime {
 
     func searchArtists(_ keyword: String, source: MusicSource, page: Int, limit: Int) async throws -> ArtistSearchPage {
         try await searchArtists(keyword, source: source, page: page)
+    }
+
+    func searchAlbums(_ keyword: String, source: MusicSource, page: Int = 1, limit: Int = 20) async throws -> AlbumPage {
+        throw SourceError.source(message: "音源运行时不支持专辑搜索")
+    }
+
+    func artistDetail(_ artist: ArtistSummary) async throws -> ArtistSummary {
+        artist
     }
 
     func artistPopularTracks(_ artist: ArtistSummary) async throws -> [Track] {
