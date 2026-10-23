@@ -11,13 +11,15 @@ struct AddToPlaylistSheet: View {
     @Environment(\.m3Scheme) private var scheme
     @Query(
         filter: #Predicate<Playlist> {
-            !$0.isSystem && $0.kindRaw == "music" && $0.isPrimaryPersonal && !$0.isArchived
+            !$0.isSystem && $0.kindRaw == "music" && !$0.isArchived
         },
         sort: \Playlist.sortIndex
     )
     private var playlists: [Playlist]
 
     @State private var errorMessage: String?
+    @State private var isCreating = false
+    @State private var newName = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -34,6 +36,28 @@ struct AddToPlaylistSheet: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 4) {
+                        Button {
+                            newName = ""
+                            isCreating = true
+                        } label: {
+                            HStack(spacing: 16) {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundStyle(scheme.primary)
+                                    .frame(width: 36, height: 36)
+                                    .background(scheme.primary.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                Text("新建歌单并添加")
+                                    .font(.body.weight(.semibold))
+                                    .foregroundStyle(scheme.onSurface)
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.horizontal, 16)
+                            .frame(minHeight: 64)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("add-to-playlist-create")
+
                         ForEach(playlists) { playlist in
                             Button {
                                 add(to: playlist)
@@ -83,6 +107,13 @@ struct AddToPlaylistSheet: View {
                 errorMessage = error.localizedDescription
             }
         }
+        .alert("新建歌单", isPresented: $isCreating) {
+            TextField("歌单名称", text: $newName)
+            Button("取消", role: .cancel) { newName = "" }
+            Button("创建并添加") { createAndAdd() }
+        } message: {
+            Text("会立刻把《\(track.title)》放进新歌单。")
+        }
         .alert("操作失败", isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
@@ -90,6 +121,25 @@ struct AddToPlaylistSheet: View {
             Button("好", role: .cancel) { errorMessage = nil }
         } message: {
             Text(errorMessage ?? "未知错误")
+        }
+    }
+
+    private func createAndAdd() {
+        let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        newName = ""
+        guard !name.isEmpty else { return }
+        do {
+            let store = LibraryStore(context: modelContext)
+            let playlist = try store.createPlaylist(named: name)
+            _ = try store.add(track, to: playlist)
+            confirmationCenter.enqueueAfterPresentationDismissal(
+                title: "已加入「\(name)」",
+                message: "《\(track.title)》已收藏到新歌单。",
+                acknowledgment: "知道了"
+            )
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 

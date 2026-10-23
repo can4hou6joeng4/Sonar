@@ -147,6 +147,7 @@ struct LocalSongsView: View {
         .background(scheme.appSurface.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden(true)
+        .bottomChromeInset()
         .ncmEdgeSwipeBack()
         .sheet(item: $presentedSheet) { destination in
             switch destination {
@@ -165,8 +166,7 @@ struct LocalSongsView: View {
                     },
                     onDelete: { deleteTrack(track) }
                 )
-                .presentationDetents([.height(264)])
-                .presentationDragIndicator(.visible)
+
             }
         }
     }
@@ -222,55 +222,36 @@ private struct LocalSongActionsSheet: View {
     @Environment(\.m3Scheme) private var scheme
     @State private var confirmingDelete = false
 
-    var body: some View {
-        VStack(spacing: 0) {
-            Text(track.title)
-                .font(.system(size: 16, weight: .semibold))
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
-                .frame(height: 50)
-
-            actionButton("加入待播放", systemImage: "text.badge.plus") {
+    private var actions: [SongAction] {
+        [
+            SongAction(
+                title: "加入待播放",
+                systemImage: "text.badge.plus",
+                isEnabled: track.source.isEnabled && track.isPlayable
+            ) {
                 dismiss()
                 onAddToQueue()
-            }
-            .disabled(!track.source.isEnabled)
-            actionButton("收藏到歌单", systemImage: "music.note.list") {
+            },
+            SongAction(title: "收藏到歌单", systemImage: "music.note.list") {
                 dismiss()
                 onCollect()
-            }
-            actionButton("从曲库删除", systemImage: "trash", role: .destructive) {
+            },
+            SongAction(title: "从曲库删除", systemImage: "trash", role: .destructive, dismissesOnPerform: false) {
                 confirmingDelete = true
-            }
-        }
-        .foregroundStyle(scheme.onSurface)
-        .background(scheme.appSurface.ignoresSafeArea())
-        .confirmationDialog(
-            "确定从曲库删除《\(track.title)》？",
-            isPresented: $confirmingDelete,
-            titleVisibility: .visible
-        ) {
-            Button("删除", role: .destructive) { onDelete() }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("这首歌会同时从最近播放和所有歌单中移除。")
-        }
+            },
+        ]
     }
 
-    private func actionButton(
-        _ title: String,
-        systemImage: String,
-        role: ButtonRole? = nil,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(role: role, action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.system(size: 15))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
-                .frame(height: 54)
-        }
-        .buttonStyle(.plain)
+    var body: some View {
+        SongActionsSheet(track: track, actions: actions) { dismiss() }
+            .alert("确定从曲库删除《\(track.title)》？", isPresented: $confirmingDelete) {
+                Button("删除", role: .destructive) {
+                    dismiss()
+                    onDelete()
+                }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text("这首歌会同时从最近播放和所有歌单中移除。")
+            }
     }
 }

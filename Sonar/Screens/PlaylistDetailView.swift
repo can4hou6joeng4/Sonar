@@ -39,6 +39,8 @@ struct PlaylistDetailView: View {
     private let fallbackDescription: String
     private let fallbackTracks: [Track]
     private let onBack: (() -> Void)?
+    private let showsBackButton: Bool
+    private let onOpenSettings: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -49,14 +51,23 @@ struct PlaylistDetailView: View {
 
     @State private var selectedEntry: Entry?
     @State private var errorMessage: String?
+    @State private var isSelecting = false
+    @State private var selectedIDs: Set<String> = []
 
-    init(playlist: Playlist, onBack: (() -> Void)? = nil) {
+    init(
+        playlist: Playlist,
+        onBack: (() -> Void)? = nil,
+        showsBackButton: Bool = true,
+        onOpenSettings: (() -> Void)? = nil
+    ) {
         self.playlist = playlist
         fallbackTitle = PersonalPlaylistDefaults.name
         fallbackSubtitle = PersonalPlaylistDefaults.name
         fallbackDescription = ""
         fallbackTracks = []
         self.onBack = onBack
+        self.showsBackButton = showsBackButton
+        self.onOpenSettings = onOpenSettings
     }
 
     init(title: String, subtitle: String, description: String, tracks: [Track]) {
@@ -66,6 +77,8 @@ struct PlaylistDetailView: View {
         fallbackDescription = description
         fallbackTracks = tracks
         onBack = nil
+        showsBackButton = true
+        onOpenSettings = nil
     }
 
     private var title: String {
@@ -85,6 +98,9 @@ struct PlaylistDetailView: View {
     var body: some View {
         VStack(spacing: 0) {
             navigationBar
+            if isSelecting {
+                selectionBar
+            }
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -109,56 +125,49 @@ struct PlaylistDetailView: View {
             await refreshTrackDetails()
         }
         .background(scheme.appSurface.ignoresSafeArea())
+        .bottomChromeInset()
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden(true)
         .ncmEdgeSwipeBack()
-        .confirmationDialog(
-            selectedEntry.map { $0.track.title } ?? "歌曲操作",
-            isPresented: Binding(
-            get: { selectedEntry != nil },
-            set: { if !$0 { selectedEntry = nil } }
-        ), titleVisibility: .visible) {
-            Button("立即播放", systemImage: "play.fill") {
-                guard let selected = selectedEntry else { return }
-                selectedEntry = nil
-                let startIndex = selected.playlistIndex ?? tracks.firstIndex(where: { $0.musicID == selected.track.musicID }) ?? 0
-                Task { await playbackService.replaceQueue(tracks, startingAt: startIndex, activePlaylistID: playlist?.id) }
-            }
-            .disabled(!(selectedEntry?.track.source.isEnabled ?? false))
-            Button("下一首播放", systemImage: "text.line.first.and.arrowtriangle.forward") {
-                guard let track = selectedEntry?.track else { return }
-                selectedEntry = nil
-                Task {
-                    await playbackService.playNext(track)
-                    toastCenter.show("已设为下一首播放")
-                }
-            }
-            .disabled(!(selectedEntry?.track.source.isEnabled ?? false))
-            Button("加入待播放", systemImage: "text.badge.plus") {
-                guard let track = selectedEntry?.track else { return }
-                selectedEntry = nil
-                Task {
-                    let added = await playbackService.enqueue(track)
-                    toastCenter.show(added ? "已加入待播放" : "歌曲已在待播放中")
-                }
-            }
-            .disabled(!(selectedEntry?.track.source.isEnabled ?? false))
-            Button("收藏到歌单", systemImage: "music.note.list") {
-                guard let track = selectedEntry?.track else { return }
+        .songActionsSheet(
+            track: Binding(
+                get: { selectedEntry?.track },
+                set: { if $0 == nil { selectedEntry = nil } }
+            ),
+            onCollect: { value in
                 selectedEntry = nil
                 PersonalPlaylistCollectionFeedback.collect(
-                    track,
+                    value,
+                    context: modelContext,
+                    toastCenter: toastCenter,
+                    playbackService: playbackService
+                )
+            }
+        ) { value in
+            var actions = SongActionBuilder.standard(
+                track: value,
+                playback: playbackService,
+                toast: toastCenter
+            ) {
+                selectedEntry = nil
+                PersonalPlaylistCollectionFeedback.collect(
+                    value,
                     context: modelContext,
                     toastCenter: toastCenter,
                     playbackService: playbackService
                 )
             }
             if let entry = selectedEntry, let playlist, !playlist.isSystem, entry.playlistIndex != nil {
-                Button("移出歌单", systemImage: "text.badge.minus", role: .destructive) {
+                actions.append(SongAction(
+                    title: "移出歌单",
+                    systemImage: "text.badge.minus",
+                    role: .destructive
+                ) {
+                    selectedEntry = nil
                     remove(entry, from: playlist)
-                }
+                })
             }
-            Button("取消", role: .cancel) { selectedEntry = nil }
+            return actions
         }
         .alert("操作失败", isPresented: Binding(
             get: { errorMessage != nil },
@@ -172,20 +181,144 @@ struct PlaylistDetailView: View {
 
     private var navigationBar: some View {
         HStack(spacing: 0) {
-            Button(action: navigateBack) {
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(scheme.onSurface)
-                    .frame(width: 44, height: 44, alignment: .leading)
+            if showsBackButton {
+                Button(action: navigateBack) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(scheme.onSurface)
+                        .frame(width: 44, height: 44, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("返回")
+                .accessibilityIdentifier("playlist-detail-back")
+            } else if let onOpenSettings {
+                Button(action: onOpenSettings) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 19, weight: .medium))
+                        .foregroundStyle(scheme.onSurface)
+                        .frame(width: 44, height: 44, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("设置")
+                .accessibilityIdentifier("playlist-detail-settings")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("返回")
-            .accessibilityIdentifier("playlist-detail-back")
 
             Spacer()
+
+            if !entries.isEmpty {
+                Button(isSelecting ? "取消" : "选择") {
+                    if isSelecting {
+                        isSelecting = false
+                        selectedIDs.removeAll()
+                    } else {
+                        isSelecting = true
+                    }
+                }
+                .font(.system(size: 15))
+                .foregroundStyle(scheme.onSurface)
+                .frame(height: 44)
+                .accessibilityIdentifier("playlist-detail-select")
+            }
         }
         .padding(.horizontal, 16)
         .frame(height: 44)
+    }
+
+    private var selectionBar: some View {
+        HStack(spacing: 12) {
+            Button(allSelected ? "取消全选" : "全选") {
+                if allSelected {
+                    selectedIDs.removeAll()
+                } else {
+                    selectedIDs = Set(entries.map(\.id))
+                }
+            }
+            .font(.system(size: 14))
+            .foregroundStyle(scheme.onSurface)
+
+            Text("已选 \(selectedIDs.count)")
+                .font(.system(size: 14))
+                .foregroundStyle(scheme.onSurfaceVariant)
+
+            Spacer(minLength: 0)
+
+            Button("入队") { enqueueSelected() }
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(scheme.onSurface)
+                .disabled(selectedIDs.isEmpty)
+                .accessibilityIdentifier("playlist-select-enqueue")
+
+            if let playlist, !playlist.isSystem {
+                Button("移出") { removeSelected() }
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(scheme.primary)
+                    .disabled(selectedIDs.isEmpty)
+                    .accessibilityIdentifier("playlist-select-remove")
+            }
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 44)
+        .background(scheme.surfaceContainer)
+    }
+
+    private var allSelected: Bool {
+        !entries.isEmpty && selectedIDs.count == entries.count
+    }
+
+    private var selectedEntries: [Entry] {
+        entries.filter { selectedIDs.contains($0.id) }
+    }
+
+    private func toggleSelection(_ id: String) {
+        if selectedIDs.contains(id) {
+            selectedIDs.remove(id)
+        } else {
+            selectedIDs.insert(id)
+        }
+    }
+
+    private func collectSelected() {
+        let values = selectedEntries.map(\.track)
+        guard !values.isEmpty else { return }
+        let store = LibraryStore(context: modelContext)
+        var inserted = 0
+        for track in values {
+            if let result = try? store.collect(track), result.inserted { inserted += 1 }
+        }
+        toastCenter.show("已收藏 \(inserted) 首")
+        isSelecting = false
+        selectedIDs.removeAll()
+    }
+
+    private func enqueueSelected() {
+        let values = selectedEntries.map(\.track)
+        guard !values.isEmpty else { return }
+        Task {
+            var added = 0
+            for track in values {
+                if await playbackService.enqueue(track) { added += 1 }
+            }
+            toastCenter.show("已加入待播放 \(added) 首")
+            isSelecting = false
+            selectedIDs.removeAll()
+        }
+    }
+
+    private func removeSelected() {
+        guard let playlist, !playlist.isSystem else { return }
+        let indices = selectedEntries.compactMap(\.playlistIndex).sorted(by: >)
+        guard !indices.isEmpty else { return }
+        let store = LibraryStore(context: modelContext)
+        do {
+            for index in indices {
+                try store.removeItem(at: index, from: playlist)
+            }
+            toastCenter.show("已移出 \(indices.count) 首")
+            isSelecting = false
+            selectedIDs.removeAll()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private var headerSection: some View {
@@ -230,13 +363,19 @@ struct PlaylistDetailView: View {
                     SongRow(
                         track: entry.track,
                         leading: .index(index + 1),
-                        trailing: .more,
+                        trailing: isSelecting ? .collectionStatus(selectedIDs.contains(entry.id)) : .more,
                         showAlbum: false,
                         showDivider: index < entries.count - 1,
                         isCurrent: playbackService.queue.current?.musicID == entry.track.musicID,
                         isPlaying: playbackService.state == .playing,
-                        onPlay: { Task { await playbackService.replaceQueue(tracks, startingAt: index, activePlaylistID: playlist?.id) } },
-                        onAction: { selectedEntry = entry }
+                        onPlay: {
+                            if isSelecting {
+                                toggleSelection(entry.id)
+                            } else {
+                                Task { await playbackService.replaceQueue(tracks, startingAt: index, activePlaylistID: playlist?.id) }
+                            }
+                        },
+                        onAction: isSelecting ? { toggleSelection(entry.id) } : { selectedEntry = entry }
                     )
                     .contextMenu {
                         Button("立即播放", systemImage: "play.fill") {

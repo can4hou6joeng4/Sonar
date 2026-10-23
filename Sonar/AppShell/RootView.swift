@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 
 private enum HomeTab {
-    case spotlight, collection, library
+    case home, library
 }
 
 private enum ShellLayer: Hashable {
@@ -13,6 +13,7 @@ private enum ShellLayer: Hashable {
 
 private enum HomeSearchDestination: Hashable {
     case artist(ArtistSummary)
+    case album(AlbumSummary)
     case playlist(PlaylistSummary)
 
     func hash(into hasher: inout Hasher) {
@@ -20,6 +21,9 @@ private enum HomeSearchDestination: Hashable {
         case let .artist(artist):
             hasher.combine("artist")
             hasher.combine(artist.stableID)
+        case let .album(album):
+            hasher.combine("album")
+            hasher.combine(album.stableID)
         case let .playlist(playlist):
             hasher.combine("playlist")
             hasher.combine(playlist.key)
@@ -163,7 +167,7 @@ struct RootView: View {
 
     @State private var pullController = PlayerPullController()
     @State private var playerSurface: PlayerSurface = .artwork
-    @State private var homeTab: HomeTab = .spotlight
+    @State private var homeTab: HomeTab = .home
     @State private var routeRevision = 0
     @State private var introIsVisible = true
     @State private var drawerIsOpen = false
@@ -301,6 +305,10 @@ struct RootView: View {
                         focusSearchOnAppear = false
                         searchDestination = .artist($0)
                     },
+                    onOpenAlbum: {
+                        focusSearchOnAppear = false
+                        searchDestination = .album($0)
+                    },
                     onOpenPlaylist: {
                         focusSearchOnAppear = false
                         searchDestination = .playlist($0)
@@ -316,8 +324,12 @@ struct RootView: View {
                     .accessibilityHidden(true)
             }
         }
+        .task {
+            PerfLog.mark("first_frame")
+            await playbackService.restoreLastSessionIfNeeded()
+            await warmUpCaches()
+        }
         .task(id: playbackService.queue.current?.musicID, updateArtworkAndTheme)
-        .task(id: successfullyLoadedTrackID, recordRecentTrack)
         .onChange(of: pullController.pull) { _, pull in
             if pull > 0 {
                 closeSearch()
@@ -353,24 +365,26 @@ struct RootView: View {
         NavigationStack {
             Group {
                 switch homeTab {
-                case .spotlight, .collection:
+                case .home:
                     DiscoverView(
                         isActive: !searchOverlayIsVisible,
-                        showsSpotlight: homeTab == .spotlight,
+                        showsSpotlight: true,
                         onOpenSearch: openSearch,
                         onOpenSettings: openSettingsDrawer,
-                        onShowCollection: { selectTab(.collection) },
+                        onShowCollection: { selectTab(.library) },
                         onSettingsDragChanged: { handleEdgeDrawerDragChanged($0, width: drawerWidth) },
                         onSettingsDragEnded: { handleEdgeDrawerDragEnded($0, width: drawerWidth) }
                     )
                 case .library:
-                    LibraryOverviewView(onOpenSettings: openSettingsDrawer, onOpenCollection: { selectTab(.collection) })
+                    LibraryPlaylistView(onOpenSettings: openSettingsDrawer)
                 }
             }
             .navigationDestination(item: $searchDestination) { destination in
                 switch destination {
                 case let .artist(artist):
                     ArtistDetailView(artist: artist, runtime: sourceRuntime)
+                case let .album(album):
+                    AlbumDetailView(album: album, runtime: sourceRuntime)
                 case let .playlist(playlist):
                     RemotePlaylistDetailView(playlist: playlist, runtime: sourceRuntime)
                 }
@@ -378,19 +392,12 @@ struct RootView: View {
         }
         .id(routeRevision)
         .transition(.opacity)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            Color.clear.frame(height: ShellBottomLayout.contentReservation(
-                hasCurrentTrack: hasCurrentTrack,
-                safeAreaBottom: safeAreaBottom
-            ))
-        }
+        .environment(\.bottomChromeHeight, BottomChromeLayout.height(hasCurrentTrack: hasCurrentTrack))
     }
 
     private var bottomNavigation: some View {
         HStack(spacing: 0) {
-            navigationButton("music.note", title: "聆听", identifier: "tab-spotlight", selected: homeTab == .spotlight) { selectTab(.spotlight) }
-            navigationButton("magnifyingglass", title: "搜索", identifier: "tab-search", selected: searchIsPresented, action: openSearch)
-            navigationButton(homeTab == .collection ? "heart.fill" : "heart", title: "收藏", identifier: "tab-favorites", selected: homeTab == .collection) { selectTab(.collection) }
+            navigationButton("music.note", title: "首页", identifier: "tab-home", selected: homeTab == .home) { selectTab(.home) }
             navigationButton("rectangle.stack", title: "资料库", identifier: "tab-library", selected: homeTab == .library) { selectTab(.library) }
         }
         .frame(height: SpotlightLayout.navigationHeight)
@@ -597,6 +604,22 @@ struct RootView: View {
         } catch {
             return
         }
+    }
+
+    /// 冷启动预热：当前曲目与收藏前 3 首的封面，减少首屏空图。
+    private func warmUpCaches() async {
+        guard let artworkService else { return }
+        if let current = playbackService.queue.current {
+            _ = try? await artworkService.image(for: current)
+        }
+        let store = LibraryStore(context: modelContext)
+        if let playlist = try? store.ensurePersonalPlaylist() {
+            for item in playlist.orderedItems.prefix(3) {
+                guard let track = item.track.track else { continue }
+                _ = try? await artworkService.image(for: track)
+            }
+        }
+        PerfLog.mark("warm_done")
     }
 
     private func recordRecentTrack() async {

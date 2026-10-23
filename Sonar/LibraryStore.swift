@@ -147,9 +147,10 @@ public final class LibraryStore {
             primary.isPrimaryPersonal = true
             didChange = true
         }
+        // 只合并历史遗留的「多个个人收藏」；用户自建歌单必须保持独立，不能再被归档。
         var existingIDs = Set(primary.orderedItems.map(\.track.musicId))
         var nextItemIndex = (primary.orderedItems.map(\.sortIndex).max() ?? -1) + 1
-        for playlist in userPlaylists where playlist !== primary {
+        for playlist in userPlaylists where playlist !== primary && playlist.isPrimaryPersonal {
             for item in playlist.orderedItems where existingIDs.insert(item.track.musicId).inserted {
                 let copy = PlaylistItem(sortIndex: nextItemIndex, playlist: primary, track: item.track)
                 nextItemIndex += 1
@@ -157,14 +158,24 @@ public final class LibraryStore {
                 primary.items.append(copy)
                 didChange = true
             }
-            if playlist.isPrimaryPersonal {
-                playlist.isPrimaryPersonal = false
-                didChange = true
-            }
+            playlist.isPrimaryPersonal = false
             if !playlist.isArchived {
                 playlist.isArchived = true
+            }
+            didChange = true
+        }
+
+        // 老版本把用户自建歌单误标为归档（App 内没有归档入口）。
+        // 一次性修复：把空的归档歌单恢复显示，避免用户以为歌单丢了。
+        let repairKey = "sonar.library.unarchiveEmptyPlaylists.v2"
+        if !UserDefaults.standard.bool(forKey: repairKey) {
+            let archived = (try? playlists(includeSystem: false, includeArchived: true)) ?? []
+            for playlist in archived
+            where playlist !== primary && playlist.isArchived && !playlist.isSystem && playlist.items.isEmpty {
+                playlist.isArchived = false
                 didChange = true
             }
+            UserDefaults.standard.set(true, forKey: repairKey)
         }
 
         return (primary, didChange)
