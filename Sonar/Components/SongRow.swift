@@ -25,6 +25,9 @@ struct SongRow: View {
 
     @Environment(\.m3Scheme) private var scheme
 
+    /// 音源被停用，或服务端标记下架，都不可播。
+    private var isUnavailable: Bool { !track.source.isEnabled || !track.isPlayable }
+
     var body: some View {
         HStack(spacing: 12) {
             if let onPlay {
@@ -55,6 +58,14 @@ struct SongRow: View {
             }
         }
         .contentShape(Rectangle())
+        .simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.35, maximumDistance: 12)
+                .onEnded { _ in
+                    guard let onAction else { return }
+                    AppHaptics.medium()
+                    onAction()
+                }
+        )
     }
 
     private var leadingContent: some View {
@@ -97,12 +108,16 @@ struct SongRow: View {
                     .lineLimit(1)
             }
             HStack(spacing: 5) {
-                if track.source.isEnabled {
-                    QualityBadge(quality: track.highestKnownQuality)
-                } else {
+                if !track.source.isEnabled {
                     Text("不可用")
                         .font(.caption2)
                         .foregroundStyle(scheme.onSurfaceVariant)
+                } else if !track.isPlayable {
+                    Text("已下架")
+                        .font(.caption2)
+                        .foregroundStyle(scheme.onSurfaceVariant)
+                } else {
+                    QualityBadge(quality: track.highestKnownQuality)
                 }
                 Text(subtitle)
                     .font(.caption)
@@ -119,14 +134,14 @@ struct SongRow: View {
         case .play:
             if let onPlay {
                 Button(action: onPlay) {
-                    Image(systemName: "play.fill")
+                    Image(systemName: isUnavailable ? "nosign" : "play.fill")
                         .font(.system(size: 19, weight: .regular))
-                        .foregroundStyle(scheme.onSurface)
+                        .foregroundStyle(isUnavailable ? scheme.outline : scheme.onSurface)
                         .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.circleIcon(diameter: 34))
-                .accessibilityLabel("播放 \(track.title)")
-                .disabled(!track.source.isEnabled)
+                .accessibilityLabel(isUnavailable ? "\(track.title) 不可播放" : "播放 \(track.title)")
+                .disabled(isUnavailable)
             }
         case .more:
             if let onAction {
@@ -179,13 +194,14 @@ struct SongRow: View {
     }
 
     private var primaryForeground: Color {
-        if !track.source.isEnabled { return scheme.onSurfaceVariant }
+        if isUnavailable { return scheme.onSurfaceVariant }
         if isSelected { return scheme.onPrimaryContainer }
         if isCurrent { return scheme.primary }
         return scheme.onSurface
     }
 
     private var secondaryForeground: Color {
+        if isUnavailable { return scheme.onSurfaceVariant.opacity(0.72) }
         if isSelected { return scheme.onPrimaryContainer.opacity(0.86) }
         if isCurrent { return scheme.primary.opacity(0.86) }
         return scheme.onSurfaceVariant
