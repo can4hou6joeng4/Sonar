@@ -4,14 +4,9 @@
 
 ## 音源实现
 
-| 来源 | 使用范围 | 许可材料 |
-| --- | --- | --- |
+当前版本不打包任何第三方音源脚本：网易云的搜索、歌词与播放由 Sonar 自身的 Swift 客户端完成（网易云直连接口为主，ChKSz 作为歌词/歌单导入等补充）。
 
-lx-music-mobile 的许可文件来自其上游仓库；核对时根目录没有独立 NOTICE 文件。
-
-网易适配器及其参考的 [NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi) 实现已从当前分发代码中移除。[MIT 许可文本](LICENSES/NeteaseCloudMusicApi.txt)和 `LICENSES/sources.json` 中的原始核对记录仍保留，用于追溯历史版本。
-
-当前网易云歌曲搜索、歌词和播放通过 Sonar 的 Swift 适配器请求 ChKSz API，未恢复上述 JavaScript 网易客户端实现。
+早期版本曾引用 lx-music-mobile 的音源适配与 [NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi) 的实现，相关 JavaScript 代码已从仓库与分发包中移除；[MIT 许可文本](LICENSES/NeteaseCloudMusicApi.txt)、lx-music-mobile 的许可文件与 `LICENSES/sources.json` 中的核对记录保留，仅用于追溯历史版本。
 
 ## npm 依赖
 
