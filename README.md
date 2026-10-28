@@ -32,9 +32,9 @@
   <a href="assets/previews/ios-main.png"><img src="assets/previews/ios-main.png" width="900" alt="iOS 封面大图主页、播放页与资料库实图" /></a>
 </p>
 
-当前 iOS 源码使用封面大图主页、四个图标导航与悬浮播放条。播放、收起和收藏等控件恢复圆形玻璃按钮及原有按压反馈，主页保留两枚填充操作按钮。启动动画按封面显现、黑胶滑出、品牌出现与黑胶回收分段推进；播放页自底部整体展开，换歌时封面淡入并过渡背景颜色。播放页保留歌词、队列和音质选择；搜索仍在原页遮罩中展开，不显示音源筛选控件。
+当前 iOS 源码使用封面大图主页、「首页 / 资料库」两个导航入口与悬浮播放条。播放、收起和收藏等控件恢复圆形玻璃按钮及原有按压反馈，主页保留两枚填充操作按钮。启动动画按封面显现、黑胶滑出、品牌出现与黑胶回收分段推进；播放页自底部整体展开，换歌时封面淡入并过渡背景颜色。播放页保留歌词、队列和音质选择；搜索仍在原页遮罩中展开，不显示音源筛选控件。
 
-截图来自当前源码的 iPhone 17 Pro 模拟器。当前仅启用网易云音源，其他音源隐藏并停止调用；旧收藏保留并标记为「不可用」。这轮界面与音源调整尚未包含在已发布的 IPA 中。
+截图为此前使用 iPhone 17 Pro 模拟器拍摄的界面，未覆盖最新导航与输入法调整。当前仅启用网易云音源，其他音源隐藏并停止调用；旧收藏保留并标记为「不可用」。这轮界面与音源调整尚未包含在已发布的 IPA 中。
 
 <p align="center">
   <a href="assets/previews/ios-details.png"><img src="assets/previews/ios-details.png" width="900" alt="iOS 黑胶启动动画、同步歌词与浅色主页实图" /></a>
@@ -55,6 +55,8 @@
 - **本地音乐播放**：支持导入本地音频文件或文件夹（MP3、FLAC、M4A、WAV 等），自动读取 ID3 元数据、艺术家、专辑与内嵌封面，自动匹配同目录下的同名 .lrc 同步歌词。无需任何第三方凭据与网络即可离线畅享原生播放体验。
 - **iOS 聆听界面**：分段黑胶启动动画、封面大图主页、圆形玻璃播控与原有按压反馈；播放页整体展开，换歌时封面与背景平滑过渡。
 - **音乐搜索**：一个搜索框查询网易云结果，保留原页面遮罩交互；QQ、酷狗等其他音源暂时隐藏并停用，已有收藏仍保留。
+- **iOS 输入法兼容**：搜索框自动处理首次键盘显示后的重新聚焦，无需在设置中手动开启；组合输入期间不触发自动搜索。第三方输入法需先在系统键盘设置中启用。
+- **iOS 桌面小组件**：中号「正在播放」小组件支持切换随机播放，按钮状态与 App 播放模式同步。
 - **封面与歌词**：播放页随封面取色，支持明暗外观、同步歌词与逐字高亮；缺少逐字时间时会明确标注合成效果。
 - **本地歌单**：用 SwiftData 保存收藏和歌曲信息，支持 JSON 导入、导出与重复歌曲去重。
 - **播放队列**：支持下一首播放、加入待播，以及随机、单曲循环、顺序播放和列表循环。
@@ -68,7 +70,7 @@ Sonar 没有开屏广告或内置社交页面。本地音乐完全离线读取�
 
 Sonar is a native SwiftUI music player for **iOS 17+ and macOS 14+**. It supports offline local music playback (MP3, FLAC, M4A, WAV) with automatic ID3 metadata and synchronized LRC lyrics, as well as online querying through NetEase via ChKSz. QQ Music, Kugou, and other sources are temporarily hidden and disabled. Existing favorites and backups are preserved; tracks from disabled sources are marked unavailable and excluded from playback. It provides local playlists, JSON backup, synchronized lyrics, and playback queues. The Mac app combines a menu bar library with a notch player; displays without a notch use a top capsule. Both surfaces share playback and library state.
 
-The current iOS source features an artwork-led home, icon navigation, a floating mini-player, and a cover-tinted player with a glass control card. Circular glass controls and their original press feedback have been restored. The welcome sequence stages the cover, vinyl, and branding before entering the home; the full player slides up from the bottom, and track changes crossfade artwork and transition the background color. Lyrics, queue management, quality selection, and the in-place search overlay remain accessible. The latest screenshots use the iPhone 17 Pro Simulator. These interface and source changes are not included in the existing public IPA.
+The current iOS source features an artwork-led home, icon navigation, a floating mini-player, and a cover-tinted player with a glass control card. Circular glass controls and their original press feedback have been restored. The welcome sequence stages the cover, vinyl, and branding before entering the home; the full player slides up from the bottom, and track changes crossfade artwork and transition the background color. Lyrics, queue management, quality selection, and the in-place search overlay remain accessible. Search automatically refocuses once after the keyboard first appears, with no compatibility setting required, and protects marked-text composition from automatic searches. Third-party keyboards must be enabled in iOS Settings. The medium iOS Now Playing widget includes a shuffle button synchronized with the app. The screenshots were captured on the iPhone 17 Pro Simulator before the latest navigation and keyboard changes. These interface and source changes are not included in the existing public IPA.
 
 Public NetEase playlists can be imported from a share link or playlist ID, with a preview and deduplication before merging into the personal library. Search, lyrics, and playback use ChKSz only. Playback starts at master quality and falls back through Hi-Res, lossless, 320K, and 128K for the same song. The repository no longer ships any JavaScript/LX source scripts.
 
@@ -76,7 +78,7 @@ Source code is available under **GPL-3.0**, with separate notices for third-part
 
 ## 运行与安装
 
-两端均可从同一个 Xcode 工程构建。[v1.0.0](https://github.com/can4hou6joeng4/Sonar/releases/tag/v1.0.0) 正式发布 macOS 安装包（提供精致拖拽安装界面 DMG 与 ZIP）、SHA-256 校验值及本地音乐离线播放支持；iOS 未签名 IPA 见 [v1.0.0-preview.2](https://github.com/can4hou6joeng4/Sonar/releases/tag/v1.0.0-preview.2)，App 与 Widget 版本为 **1.0 (22)**。双端最新源码的变化见 [更新记录](CHANGELOG.md)。
+两端均可从同一个 Xcode 工程构建。[v1.0.0](https://github.com/can4hou6joeng4/Sonar/releases/tag/v1.0.0) 正式发布 macOS 安装包（提供精致拖拽安装界面 DMG 与 ZIP）、SHA-256 校验值及本地音乐离线播放支持；iOS 未签名 IPA 见 [v1.0.0-preview.2](https://github.com/can4hou6joeng4/Sonar/releases/tag/v1.0.0-preview.2)，App 与 Widget 版本为 **1.0 (22)**。当前 iOS 源码的 App 与 Widget 均为 **1.0 (26)**，尚未发布对应 IPA；输入法自动兼容与小组件随机播放包含在源码中。双端最新源码的变化见 [更新记录](CHANGELOG.md)。
 
 Mac 安装包采用本地 ad-hoc 签名，没有 Developer ID 签名或 Apple 公证，首次打开可能被 macOS Gatekeeper 拦截。请先核对下载来源与校验值，首次打开若提示受限，按系统「隐私与安全性」提示允许，或在终端执行 `xattr -cr /Applications/SonarMac.app` 即可流畅运行。也可以按下方步骤直接打包或自行构建。
 
@@ -112,17 +114,9 @@ v1.0.0-preview.2 的公开 IPA 不包含个人 API 凭据，可使用当时的 Q
 
 ## 从源码构建
 
-需要一台 Mac、Xcode 与命令行工具，以及 **Node.js 18+ 和 npm**。Xcode 应包含目标系统所需的 iOS / macOS SDK。建议优先使用下面已验证的环境：
+需要一台 Mac、Xcode 与命令行工具，Xcode 应包含目标系统所需的 iOS / macOS SDK。当前原生音源实现无需 Node.js 或 npm；直接使用共享工程构建，也不需要本地 Agent 框架。
 
-| 工具 | 已验证版本 |
-| --- | --- |
-| Xcode | 27.0（27A266a） |
-| Node.js | 24.19.0 |
-| npm | 11.17.0 |
-
-2026-10-05 已在上述环境中从公开仓库独立拉取，完成音源构建、iOS 模拟器构建、未签名 IPA 打包及 Mac 双架构（Apple Silicon / Intel）构建，无需作者的音源凭据。较旧的 Xcode 或 Node.js 18 组合尚未单独验证。
-
-仓库已提供 `Sonar.xcodeproj`、共享 Scheme 和音源资源，不需要本地 Agent 框架。直接使用现有工程即可；仅在修改 `project.yml` 并重新生成工程时需要 XcodeGen。App 与 Widget 的构建版本应保持一致。
+仓库已提供 `Sonar.xcodeproj` 与共享 Scheme。直接使用现有工程即可；仅在修改 `project.yml` 并重新生成工程时需要 XcodeGen。App 与 Widget 的构建版本应保持一致。
 
 ### 获取源码
 
@@ -168,27 +162,19 @@ Mac 启动后显示状态栏图标及已启用的顶部播放器。点击状态�
 
 ### 自行打包 IPA
 
-以下命令生成未签名 IPA；通过 Xcode 安装到真机的签名配置见[运行 iOS App](#运行-ios-app)。
+使用仓库脚本生成未签名 IPA；通过 Xcode 安装到真机的签名配置见[运行 iOS App](#运行-ios-app)。
 
 ```sh
-set -e
+# 常规设备包，包含 Widget 扩展
+./scripts/package-ios.sh --out=build/Sonar-local.ipa
 
-xcodebuild -project Sonar.xcodeproj -scheme Sonar \
-  -configuration Release -destination 'generic/platform=iOS' \
-  -archivePath build/Sonar.xcarchive archive \
-  CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
-  CODE_SIGN_IDENTITY='' DEVELOPMENT_TEAM=''
-
-# 在独立临时目录中封装，避免混入之前的 Payload
-SONAR_IPA_STAGE="$(mktemp -d "${TMPDIR:-/tmp}/sonar-ipa.XXXXXX")"
-mkdir -p "$SONAR_IPA_STAGE/Payload"
-cp -R build/Sonar.xcarchive/Products/Applications/Sonar.app "$SONAR_IPA_STAGE/Payload/"
-(cd "$SONAR_IPA_STAGE" && zip -qr Sonar.ipa Payload)
-mv "$SONAR_IPA_STAGE/Sonar.ipa" build/Sonar.ipa
-rm -rf "$SONAR_IPA_STAGE"
+# VPhone 验证包，移除 Widget 扩展
+./scripts/package-ios.sh --no-widget --out=build/Sonar-vphone.ipa
 ```
 
-产物为 `build/Sonar.ipa`。使用个人签名工具安装时，需同时处理 App 与内嵌 Widget 的签名，并保持 Bundle ID、App Group 与描述文件一致；具体安装方式以设备和工具的支持范围为准。若构建时注入了个人音源凭据，安装包也会包含这些值，请勿公开分发。
+默认包含 Widget。`--no-widget` 用于规避当前 VPhone 环境观察到的 WidgetKit 扩展崩溃，该包不提供桌面小组件；常规设备使用包含 Widget 的版本。
+
+两种产物均未签名，需使用个人签名工具签名后安装。包含 Widget 时，需同时处理 App 与扩展的签名，并保持 Bundle ID、App Group 与描述文件一致；具体安装方式以设备和工具的支持范围为准。若构建时注入了个人音源凭据，安装包也会包含这些值，请勿公开分发。
 
 ## 数据与音源
 
