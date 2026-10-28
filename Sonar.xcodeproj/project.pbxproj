@@ -95,6 +95,7 @@
 		A4AA32949043B0D5D115CF7E /* PlayerPullController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0865577F07EB71937350124 /* PlayerPullController.swift */; };
 		A6411F3CD7683F1FA622C9F4 /* NetEaseRuntimeDecorator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03D8263BC74AA7617B31370A /* NetEaseRuntimeDecorator.swift */; };
 		A7BF89AEB063AECC71DA0947 /* ThemeState.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACC2B15B9CA2543216C4296B /* ThemeState.swift */; };
+		A92999B712BABEC7B6C0ACE5 /* KeyboardDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81151CCE9813E1145F674387 /* KeyboardDiagnostics.swift */; };
 		A9A674847B1CF57FEAF2C014 /* OnlinePlaylistImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FCAFB773442E543F2644D49 /* OnlinePlaylistImportView.swift */; };
 		A9AE8D025631CAF898D158A9 /* BuildCredentialStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F60B4B0591442EA64C302E0 /* BuildCredentialStore.swift */; };
 		AA7B15B6AEE1E3EC2250794D /* MacPlayerInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A02BA723056F35F973D8692 /* MacPlayerInspector.swift */; };
@@ -209,6 +210,7 @@
 		7EFC9D29E2E8C6E459BE3932 /* KaraokeLyricsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KaraokeLyricsView.swift; sourceTree = "<group>"; };
 		7FD6117061EF6855072332D5 /* QueueSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueSheet.swift; sourceTree = "<group>"; };
 		80A3D173DFB6CE7A7020235B /* SonarBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonarBootstrap.swift; sourceTree = "<group>"; };
+		81151CCE9813E1145F674387 /* KeyboardDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardDiagnostics.swift; sourceTree = "<group>"; };
 		894FFA986F474E822DF07866 /* FallbackPlaybackURLResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FallbackPlaybackURLResolver.swift; sourceTree = "<group>"; };
 		8A3DC582BF54B809E00F210B /* BottomCapsule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BottomCapsule.swift; sourceTree = "<group>"; };
 		8B5EFA07054F3FBC03C71F08 /* SkeletonView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkeletonView.swift; sourceTree = "<group>"; };
@@ -418,6 +420,7 @@
 			isa = PBXGroup;
 			children = (
 				8A3DC582BF54B809E00F210B /* BottomCapsule.swift */,
+				81151CCE9813E1145F674387 /* KeyboardDiagnostics.swift */,
 				0FCAFB773442E543F2644D49 /* OnlinePlaylistImportView.swift */,
 				07B622B9E6C84FC10638B2D6 /* PlayingEqualizer.swift */,
 				B360F26B77EE77962CC5B76E /* PlaylistDetailActions.swift */,
@@ -693,6 +696,7 @@
 				5A55326C0B38E947E1B5A637 /* Icons.swift in Sources */,
 				4B5AA5F26183998A2CCDC40A /* KaraokeLyrics.swift in Sources */,
 				11655853DA39CABB92DCF693 /* KaraokeLyricsView.swift in Sources */,
+				A92999B712BABEC7B6C0ACE5 /* KeyboardDiagnostics.swift in Sources */,
 				158D633DE820239A440A6817 /* LibraryModels.swift in Sources */,
 				9CA9C689E10D87594D884A0B /* LibraryPlaylistView.swift in Sources */,
 				A33731C2FB928F04D0A6E14A /* LibraryStore.swift in Sources */,

@@ -326,6 +326,7 @@ struct RootView: View {
         }
         .task {
             PerfLog.mark("first_frame")
+            KeyboardDiagnostics.shared.start()
             await playbackService.restoreLastSessionIfNeeded()
             await warmUpCaches()
         }

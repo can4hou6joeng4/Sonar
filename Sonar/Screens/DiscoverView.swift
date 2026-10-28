@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct DiscoverView: View {
     let isActive: Bool
