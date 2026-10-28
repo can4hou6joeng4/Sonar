@@ -193,7 +193,6 @@ Mac 资料库位于 `~/Library/Application Support/cn.bobochang.sonar.mac/Sonar.
 | 变量 | 用途 |
 | --- | --- |
 | `SONAR_CHKSZ_KEY` | ChKSz 的网易云歌曲与歌单接口凭据 |
-| `SONAR_WY_TOKEN` | 可选，仅供私人构建嵌入自己的网易云登录态；公开包必须留空 |
 
 构建脚本生成 `BuildCredentials.json` 并打包到 App。该文件已被 Git 忽略；使用凭据应遵循相应服务的授权范围和使用条款。
 
