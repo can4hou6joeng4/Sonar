@@ -120,21 +120,31 @@ struct NowPlayingWidgetView: View {
                 Spacer()
 
                 // Playback Control Buttons (iOS 17 AppIntents)
-                HStack(spacing: 20) {
+                HStack(spacing: 10) {
+                    Button(intent: ToggleShuffleIntent()) {
+                        Image(systemName: "shuffle")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(entry.snapshot.isShuffleOn ? Color.red : Color.primary)
+                            .frame(width: 32, height: 32)
+                            .background(Color.white.opacity(entry.snapshot.isShuffleOn ? 0.22 : 0.12), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(entry.snapshot.isShuffleOn ? "关闭随机播放" : "开启随机播放")
+
                     Button(intent: PreviousTrackIntent()) {
                         Image(systemName: "backward.fill")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(.primary)
-                            .frame(width: 36, height: 36)
+                            .frame(width: 32, height: 32)
                             .background(Color.white.opacity(0.12), in: Circle())
                     }
                     .buttonStyle(.plain)
 
                     Button(intent: TogglePlayIntent()) {
                         Image(systemName: entry.snapshot.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 18, weight: .bold))
+                            .font(.system(size: 16, weight: .bold))
                             .foregroundStyle(.white)
-                            .frame(width: 44, height: 44)
+                            .frame(width: 40, height: 40)
                             .background(Color.red, in: Circle())
                             .shadow(color: Color.red.opacity(0.4), radius: 6, x: 0, y: 3)
                     }
@@ -142,9 +152,9 @@ struct NowPlayingWidgetView: View {
 
                     Button(intent: NextTrackIntent()) {
                         Image(systemName: "forward.fill")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(.primary)
-                            .frame(width: 36, height: 36)
+                            .frame(width: 32, height: 32)
                             .background(Color.white.opacity(0.12), in: Circle())
                     }
                     .buttonStyle(.plain)

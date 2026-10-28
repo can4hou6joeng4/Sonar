@@ -15,6 +15,7 @@ public struct WidgetPlaybackSnapshot: Codable, Equatable, Sendable {
     public let quality: String
     public let isPlaying: Bool
     public let hasTrack: Bool
+    public let isShuffleOn: Bool
     public let favoritesCount: Int
     public let updatedAt: Date
 
@@ -25,6 +26,7 @@ public struct WidgetPlaybackSnapshot: Codable, Equatable, Sendable {
         quality: String = "",
         isPlaying: Bool = false,
         hasTrack: Bool = false,
+        isShuffleOn: Bool = false,
         favoritesCount: Int = 0,
         updatedAt: Date = Date()
     ) {
@@ -34,8 +36,27 @@ public struct WidgetPlaybackSnapshot: Codable, Equatable, Sendable {
         self.quality = quality
         self.isPlaying = isPlaying
         self.hasTrack = hasTrack
+        self.isShuffleOn = isShuffleOn
         self.favoritesCount = favoritesCount
         self.updatedAt = updatedAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case title, artist, album, quality, isPlaying, hasTrack, isShuffleOn, favoritesCount, updatedAt
+    }
+
+    /// 旧版本快照没有 `isShuffleOn` 字段，缺失时按关闭处理，避免整个快照解码失败。
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        title = try container.decode(String.self, forKey: .title)
+        artist = try container.decode(String.self, forKey: .artist)
+        album = try container.decode(String.self, forKey: .album)
+        quality = try container.decode(String.self, forKey: .quality)
+        isPlaying = try container.decode(Bool.self, forKey: .isPlaying)
+        hasTrack = try container.decode(Bool.self, forKey: .hasTrack)
+        isShuffleOn = try container.decodeIfPresent(Bool.self, forKey: .isShuffleOn) ?? false
+        favoritesCount = try container.decode(Int.self, forKey: .favoritesCount)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
     }
 
     public static let empty = WidgetPlaybackSnapshot(
@@ -45,6 +66,7 @@ public struct WidgetPlaybackSnapshot: Codable, Equatable, Sendable {
         quality: "",
         isPlaying: false,
         hasTrack: false,
+        isShuffleOn: false,
         favoritesCount: 0,
         updatedAt: Date()
     )
@@ -66,6 +88,7 @@ public final class WidgetShareStore: @unchecked Sendable {
         public static let previousTrack = "cn.bobochang.sonar.remote.previous"
         public static let play = "cn.bobochang.sonar.remote.play"
         public static let pause = "cn.bobochang.sonar.remote.pause"
+        public static let toggleShuffle = "cn.bobochang.sonar.remote.toggleShuffle"
         public static let widgetReload = "cn.bobochang.sonar.remote.reload"
     }
 
@@ -146,6 +169,7 @@ public final class WidgetShareStore: @unchecked Sendable {
            last.quality == snapshot.quality,
            last.isPlaying == snapshot.isPlaying,
            last.hasTrack == snapshot.hasTrack,
+           last.isShuffleOn == snapshot.isShuffleOn,
            last.favoritesCount == snapshot.favoritesCount {
             lock.unlock()
             return
@@ -171,6 +195,7 @@ public final class WidgetShareStore: @unchecked Sendable {
             defaults.set(snapshot.quality, forKey: "sonar.widget.quality")
             defaults.set(snapshot.isPlaying, forKey: "sonar.widget.isPlaying")
             defaults.set(snapshot.hasTrack, forKey: "sonar.widget.hasTrack")
+            defaults.set(snapshot.isShuffleOn, forKey: "sonar.widget.isShuffleOn")
             defaults.set(snapshot.favoritesCount, forKey: "sonar.widget.favoritesCount")
             defaults.set(snapshot.updatedAt.timeIntervalSince1970, forKey: "sonar.widget.updatedAt")
             defaults.synchronize()
@@ -206,6 +231,7 @@ public final class WidgetShareStore: @unchecked Sendable {
             let album = defaults.string(forKey: "sonar.widget.album") ?? ""
             let quality = defaults.string(forKey: "sonar.widget.quality") ?? ""
             let isPlaying = defaults.bool(forKey: "sonar.widget.isPlaying")
+            let isShuffleOn = defaults.bool(forKey: "sonar.widget.isShuffleOn")
             let favoritesCount = defaults.integer(forKey: "sonar.widget.favoritesCount")
             let timestamp = defaults.double(forKey: "sonar.widget.updatedAt")
             let updatedAt = timestamp > 0 ? Date(timeIntervalSince1970: timestamp) : Date()
@@ -216,6 +242,7 @@ public final class WidgetShareStore: @unchecked Sendable {
                 quality: quality,
                 isPlaying: isPlaying,
                 hasTrack: hasTrack,
+                isShuffleOn: isShuffleOn,
                 favoritesCount: favoritesCount,
                 updatedAt: updatedAt
             )
@@ -234,11 +261,30 @@ public final class WidgetShareStore: @unchecked Sendable {
             quality: current.quality,
             isPlaying: current.isPlaying,
             hasTrack: current.hasTrack,
+            isShuffleOn: current.isShuffleOn,
             favoritesCount: count,
             updatedAt: Date()
         )
         saveSnapshot(updated)
         #endif
+    }
+
+    /// 供小组件按钮在宿主 app 未运行时也能立即翻转随机播放状态。
+    public func toggleShuffleState() {
+        let current = loadSnapshot()
+        guard current.hasTrack else { return }
+        let updated = WidgetPlaybackSnapshot(
+            title: current.title,
+            artist: current.artist,
+            album: current.album,
+            quality: current.quality,
+            isPlaying: current.isPlaying,
+            hasTrack: current.hasTrack,
+            isShuffleOn: !current.isShuffleOn,
+            favoritesCount: current.favoritesCount,
+            updatedAt: Date()
+        )
+        saveSnapshot(updated)
     }
 
     public func saveArtwork(_ data: Data) {

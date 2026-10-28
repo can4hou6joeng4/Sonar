@@ -22,6 +22,7 @@ struct TogglePlayIntent: AudioPlaybackIntent {
                 quality: snapshot.quality,
                 isPlaying: !snapshot.isPlaying,
                 hasTrack: snapshot.hasTrack,
+                isShuffleOn: snapshot.isShuffleOn,
                 favoritesCount: snapshot.favoritesCount,
                 updatedAt: Date()
             )
@@ -59,6 +60,23 @@ struct PreviousTrackIntent: AudioPlaybackIntent {
             nil,
             true
         )
+        return .result()
+    }
+}
+
+struct ToggleShuffleIntent: AudioPlaybackIntent {
+    static var title: LocalizedStringResource = "随机播放"
+    static var description = IntentDescription("开启或关闭随机播放")
+
+    func perform() async throws -> some IntentResult {
+        CFNotificationCenterPostNotification(
+            CFNotificationCenterGetDarwinNotifyCenter(),
+            CFNotificationName("cn.bobochang.sonar.remote.toggleShuffle" as CFString),
+            nil,
+            nil,
+            true
+        )
+        WidgetShareStore.shared.toggleShuffleState()
         return .result()
     }
 }

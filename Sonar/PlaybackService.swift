@@ -493,6 +493,9 @@ public final class PlaybackService {
         defaults.set(mode.rawValue, forKey: Self.playbackModeKey)
         queue.setShuffled(mode == .shuffle)
         logger.info("mode_changed mode=\(mode.rawValue, privacy: .public)")
+        #if os(iOS)
+        updateWidgetSnapshot(for: queue.current)
+        #endif
         prefetchUpcomingTrackIfNeeded()
     }
 
@@ -1700,6 +1703,7 @@ public final class PlaybackService {
                 quality: "",
                 isPlaying: false,
                 hasTrack: false,
+                isShuffleOn: playbackMode == .shuffle,
                 favoritesCount: currentSnapshot.favoritesCount,
                 updatedAt: Date()
             )
@@ -1723,6 +1727,7 @@ public final class PlaybackService {
             quality: qualityString,
             isPlaying: state == .playing,
             hasTrack: true,
+            isShuffleOn: playbackMode == .shuffle,
             favoritesCount: currentSnapshot.favoritesCount,
             updatedAt: Date()
         )
@@ -1739,7 +1744,8 @@ public final class PlaybackService {
             "cn.bobochang.sonar.remote.next",
             "cn.bobochang.sonar.remote.previous",
             "cn.bobochang.sonar.remote.play",
-            "cn.bobochang.sonar.remote.pause"
+            "cn.bobochang.sonar.remote.pause",
+            WidgetShareStore.DarwinNotification.toggleShuffle
         ]
         for name in names {
             CFNotificationCenterAddObserver(
@@ -1761,6 +1767,9 @@ public final class PlaybackService {
                             await service.play()
                         case "cn.bobochang.sonar.remote.pause":
                             service.pause()
+                        case WidgetShareStore.DarwinNotification.toggleShuffle:
+                            let mode: PlaybackMode = service.playbackMode == .shuffle ? .sequence : .shuffle
+                            service.setPlaybackMode(mode)
                         default:
                             break
                         }
