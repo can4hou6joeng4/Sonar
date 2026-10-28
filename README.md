@@ -34,7 +34,7 @@
 
 当前 iOS 源码使用封面大图主页、「首页 / 资料库」两个导航入口与悬浮播放条。播放、收起和收藏等控件恢复圆形玻璃按钮及原有按压反馈，主页保留两枚填充操作按钮。启动动画按封面显现、黑胶滑出、品牌出现与黑胶回收分段推进；播放页自底部整体展开，换歌时封面淡入并过渡背景颜色。播放页保留歌词、队列和音质选择；搜索仍在原页遮罩中展开，不显示音源筛选控件。
 
-截图为此前使用 iPhone 17 Pro 模拟器拍摄的界面，未覆盖最新导航与输入法调整。当前仅启用网易云音源，其他音源隐藏并停止调用；旧收藏保留并标记为「不可用」。这轮界面与音源调整尚未包含在已发布的 IPA 中。
+截图为此前使用 iPhone 17 Pro 模拟器拍摄的界面，未覆盖最新导航与输入法调整。当前仅启用网易云音源，其他音源隐藏并停止调用；旧收藏保留并标记为「不可用」。最新 iOS 预览包包含这些源码调整，下载与安装方式见下文。
 
 <p align="center">
   <a href="assets/previews/ios-details.png"><img src="assets/previews/ios-details.png" width="900" alt="iOS 黑胶启动动画、同步歌词与浅色主页实图" /></a>
@@ -70,15 +70,15 @@ Sonar 没有开屏广告或内置社交页面。本地音乐完全离线读取�
 
 Sonar is a native SwiftUI music player for **iOS 17+ and macOS 14+**. It supports offline local music playback (MP3, FLAC, M4A, WAV) with automatic ID3 metadata and synchronized LRC lyrics, as well as online querying through NetEase via ChKSz. QQ Music, Kugou, and other sources are temporarily hidden and disabled. Existing favorites and backups are preserved; tracks from disabled sources are marked unavailable and excluded from playback. It provides local playlists, JSON backup, synchronized lyrics, and playback queues. The Mac app combines a menu bar library with a notch player; displays without a notch use a top capsule. Both surfaces share playback and library state.
 
-The current iOS source features an artwork-led home, icon navigation, a floating mini-player, and a cover-tinted player with a glass control card. Circular glass controls and their original press feedback have been restored. The welcome sequence stages the cover, vinyl, and branding before entering the home; the full player slides up from the bottom, and track changes crossfade artwork and transition the background color. Lyrics, queue management, quality selection, and the in-place search overlay remain accessible. Search automatically refocuses once after the keyboard first appears, with no compatibility setting required, and protects marked-text composition from automatic searches. Third-party keyboards must be enabled in iOS Settings. The medium iOS Now Playing widget includes a shuffle button synchronized with the app. The screenshots were captured on the iPhone 17 Pro Simulator before the latest navigation and keyboard changes. These interface and source changes are not included in the existing public IPA.
+The current iOS source features an artwork-led home, icon navigation, a floating mini-player, and a cover-tinted player with a glass control card. Circular glass controls and their original press feedback have been restored. The welcome sequence stages the cover, vinyl, and branding before entering the home; the full player slides up from the bottom, and track changes crossfade artwork and transition the background color. Lyrics, queue management, quality selection, and the in-place search overlay remain accessible. Search automatically refocuses once after the keyboard first appears, with no compatibility setting required, and protects marked-text composition from automatic searches. Third-party keyboards must be enabled in iOS Settings. The medium iOS Now Playing widget includes a shuffle button synchronized with the app. The screenshots were captured on the iPhone 17 Pro Simulator before the latest navigation and keyboard changes. These changes are included in the build 26 iOS preview IPA.
 
-Public NetEase playlists can be imported from a share link or playlist ID, with a preview and deduplication before merging into the personal library. Search, lyrics, and playback use ChKSz only. Playback starts at master quality and falls back through Hi-Res, lossless, 320K, and 128K for the same song. The repository no longer ships any JavaScript/LX source scripts.
+Public NetEase playlists can be imported from a share link or playlist ID, with a preview and deduplication before merging into the personal library. The native NetEase client provides artist and album browsing, lyrics, and direct playback; ChKSz provides song search and fallback services. Playback starts at master quality and falls back through Hi-Res, lossless, 320K, and 128K for the same song. The repository no longer ships any JavaScript/LX source scripts.
 
-Source code is available under **GPL-3.0**, with separate notices for third-party code. Build both apps from `Sonar.xcodeproj`. [GitHub Releases](https://github.com/can4hou6joeng4/Sonar/releases) provides official pre-built macOS packages (`SonarMac.dmg` & `SonarMac.zip`) and an unsigned iOS preview IPA. The IPA requires your own signing and provisioning; the Mac build is ad-hoc signed and not notarized. Public packages contain no personal API credentials or private LX scripts. Online search, lyrics, playback, and playlist import require your own ChKSz key configured during a source build. Music availability and playback quality depend on third-party services; playlist backups contain metadata, not audio.
+Source code is available under **GPL-3.0**, with separate notices for third-party code. Build both apps from `Sonar.xcodeproj`. [GitHub Releases](https://github.com/can4hou6joeng4/Sonar/releases) provides official pre-built macOS packages (`SonarMac.dmg` & `SonarMac.zip`) and an unsigned iOS preview IPA. The IPA requires your own signing and provisioning; the Mac build is ad-hoc signed and not notarized. Public packages contain no personal API credentials or private LX scripts. ChKSz services require your own key configured during a source build; the native NetEase client accepts your own login cookie in Settings. Public packages include neither credential. Music availability and playback quality depend on third-party services; playlist backups contain metadata, not audio.
 
 ## 运行与安装
 
-两端均可从同一个 Xcode 工程构建。[v1.0.0](https://github.com/can4hou6joeng4/Sonar/releases/tag/v1.0.0) 正式发布 macOS 安装包（提供精致拖拽安装界面 DMG 与 ZIP）、SHA-256 校验值及本地音乐离线播放支持；iOS 未签名 IPA 见 [v1.0.0-preview.2](https://github.com/can4hou6joeng4/Sonar/releases/tag/v1.0.0-preview.2)，App 与 Widget 版本为 **1.0 (22)**。当前 iOS 源码的 App 与 Widget 均为 **1.0 (26)**，尚未发布对应 IPA；输入法自动兼容与小组件随机播放包含在源码中。双端最新源码的变化见 [更新记录](CHANGELOG.md)。
+两端均可从同一个 Xcode 工程构建。[v1.0.0](https://github.com/can4hou6joeng4/Sonar/releases/tag/v1.0.0) 正式发布 macOS 安装包（提供精致拖拽安装界面 DMG 与 ZIP）、SHA-256 校验值及本地音乐离线播放支持；iOS 未签名 IPA 见 [v1.0.0-preview.4](https://github.com/can4hou6joeng4/Sonar/releases/tag/v1.0.0-preview.4)，App 与 Widget 均为 **1.0 (26)**，包含输入法自动兼容与小组件随机播放。双端最新源码的变化见 [更新记录](CHANGELOG.md)。
 
 Mac 安装包采用本地 ad-hoc 签名，没有 Developer ID 签名或 Apple 公证，首次打开可能被 macOS Gatekeeper 拦截。请先核对下载来源与校验值，首次打开若提示受限，按系统「隐私与安全性」提示允许，或在终端执行 `xattr -cr /Applications/SonarMac.app` 即可流畅运行。也可以按下方步骤直接打包或自行构建。
 
@@ -106,15 +106,15 @@ xattr -cr /Applications/SonarMac.app
 
 ### 安装公开 IPA
 
-1. 从上述 iOS Release 下载 `Sonar-1.0-build22-unsigned.ipa`、同名 `.sha256` 和 `INSTALL-iOS.md`。
-2. 在下载目录运行 `shasum -a 256 -c Sonar-1.0-build22-unsigned.ipa.sha256`，确认校验通过。
+1. 从上述 iOS Release 下载 `Sonar-1.0-build26-unsigned.ipa`、同名 `.sha256` 和 `INSTALL-iOS.md`。
+2. 在下载目录运行 `shasum -a 256 -c Sonar-1.0-build26-unsigned.ipa.sha256`，确认校验通过。
 3. 使用适用的个人签名工具签名 App 与内嵌 Widget，并按工具要求配置 Bundle ID、App Group 和描述文件，再安装到 iPhone。该 IPA 未签名，不能直接当作 App Store 安装包使用。
 
-v1.0.0-preview.2 的公开 IPA 不包含个人 API 凭据，可使用当时的 QQ 搜索、歌词、公开 QQ 歌单预览及本地资料库；它尚未包含当前源码的界面更新与仅启用网易云的调整。当前源码的在线功能需要有效 ChKSz 凭据，通过[构建环境变量](#播放解析凭据)配置自己的 Key 后重新构建。预览包尚未完成本轮真机验收，第三方服务的 502/503 错误仍可能影响播放。
+v1.0.0-preview.4 的公开 IPA 不含个人 API 凭据或网易云登录 Cookie。可在设置中配置自己的网易云 Cookie；ChKSz 功能需要通过[构建环境变量](#播放解析凭据)配置自己的 Key 后重新构建。输入法兼容处理默认自动执行；第三方输入法须先在系统键盘设置中启用。自动兼容版本仍需在不同真机及签名工具组合下验证，第三方服务也可能影响在线功能。
 
 ## 从源码构建
 
-需要一台 Mac、Xcode 与命令行工具，Xcode 应包含目标系统所需的 iOS / macOS SDK。当前原生音源实现无需 Node.js 或 npm；直接使用共享工程构建，也不需要本地 Agent 框架。
+需要一台 Mac、Xcode 与命令行工具，Xcode 应包含目标系统所需的 iOS / macOS SDK。音源实现为原生代码，无需 npm 或 JavaScript 音源打包；构建阶段生成凭据资源的脚本仍需要 Node.js 18+。无需本地 Agent 框架。
 
 仓库已提供 `Sonar.xcodeproj` 与共享 Scheme。直接使用现有工程即可；仅在修改 `project.yml` 并重新生成工程时需要 XcodeGen。App 与 Widget 的构建版本应保持一致。
 
@@ -182,17 +182,18 @@ Mac 启动后显示状态栏图标及已启用的顶部播放器。点击状态�
 
 歌单与歌曲元数据保存在本机。iOS 设置中的「歌单备份」和 Mac 面板设置支持 JSON 导入、导出；导入会追加新歌曲并跳过重复项。两端资料库独立，可用备份手动迁移。
 
-当前仅启用网易云音乐，不显示音源筛选控件。搜索、歌词、播放与公开歌单导入均通过 ChKSz 获取，播放与收藏保留所选歌曲 ID。QQ、酷狗及其他音源的入口和网络调用暂时停用；已有收藏和备份完整保留，相关歌曲标记为「不可用」，无法播放或加入待播队列，仍可管理与备份。播放全部及随机播放会跳过停用音源，不会跨平台替换歌曲。
+当前仅启用网易云音乐，不显示音源筛选控件。网易云直连层提供歌手、专辑、歌词、歌单详情与播放地址，ChKSz 提供歌曲搜索及部分回退服务；播放与收藏保留所选歌曲 ID。QQ、酷狗及其他音源的入口和网络调用暂时停用；已有收藏和备份完整保留，相关歌曲标记为「不可用」，无法播放或加入待播队列，仍可管理与备份。播放全部及随机播放会跳过停用音源，不会跨平台替换歌曲。
 
 Mac 资料库位于 `~/Library/Application Support/cn.bobochang.sonar.mac/Sonar.store`；启用 App Sandbox 签名时位于应用容器对应目录。资料库打开失败时保留原文件，并提供重试与原始资料导出。
 
 ### 播放解析凭据
 
-公开源码不包含个人音源凭据，未配置凭据也可以构建并管理本地资料库。网易云的在线搜索、歌词、播放解析及公开歌单导入均通过 ChKSz 获取，需要配置有效凭据；实际可用性与音质仍取决于第三方服务。可通过构建环境变量配置：
+公开源码不包含个人音源凭据，未配置凭据也可以构建并管理本地资料库。ChKSz 功能需要配置自己的 Key；网易云直连功能可在设置中保存自己的登录 Cookie（存入本机钥匙串），可用音质取决于账号权益与服务返回结果。公开包不内置登录态，也不提供会员权益。可通过构建环境变量配置：
 
 | 变量 | 用途 |
 | --- | --- |
 | `SONAR_CHKSZ_KEY` | ChKSz 的网易云歌曲与歌单接口凭据 |
+| `SONAR_WY_TOKEN` | 可选，仅供私人构建嵌入自己的网易云登录态；公开包必须留空 |
 
 构建脚本生成 `BuildCredentials.json` 并打包到 App。该文件已被 Git 忽略；使用凭据应遵循相应服务的授权范围和使用条款。
 
