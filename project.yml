@@ -82,30 +82,30 @@ targets:
     deploymentTarget: "14.0"
     sources:
       - path: SonarMac
-      - path: Sonar/ArtworkPalette.swift
-      - path: Sonar/ArtworkService.swift
-      - path: Sonar/BackupDocument.swift
-      - path: Sonar/BuildCredentialStore.swift
-      - path: Sonar/ChkszSourceRuntime.swift
-      - path: Sonar/CommonCryptoBridge.swift
-      - path: Sonar/FallbackPlaybackURLResolver.swift
-      - path: Sonar/LibraryModels.swift
-      - path: Sonar/LibraryStore.swift
-      - path: Sonar/LocalAudioScanner.swift
-      - path: Sonar/Lyrics.swift
-      - path: Sonar/PerfLog.swift
-      - path: Sonar/PlatformImage.swift
-      - path: Sonar/PlaybackQueue.swift
-      - path: Sonar/PlaybackService.swift
-      - path: Sonar/PlaybackURLCache.swift
-      - path: Sonar/PlaybackURLResolver.swift
-      - path: Sonar/PlaylistBackup.swift
-      - path: Sonar/OnlinePlaylistImportService.swift
+      - path: Sonar/Artwork/ArtworkPalette.swift
+      - path: Sonar/Artwork/ArtworkService.swift
+      - path: Sonar/Library/BackupDocument.swift
+      - path: Sonar/Core/BuildCredentialStore.swift
+      - path: Sonar/MusicSource/ChkszSourceRuntime.swift
+      - path: Sonar/Core/CommonCryptoBridge.swift
+      - path: Sonar/Playback/FallbackPlaybackURLResolver.swift
+      - path: Sonar/Library/LibraryModels.swift
+      - path: Sonar/Library/LibraryStore.swift
+      - path: Sonar/Playback/LocalAudioScanner.swift
+      - path: Sonar/Playback/Lyrics.swift
+      - path: Sonar/Core/PerfLog.swift
+      - path: Sonar/Core/PlatformImage.swift
+      - path: Sonar/Playback/PlaybackQueue.swift
+      - path: Sonar/Playback/PlaybackService.swift
+      - path: Sonar/Playback/PlaybackURLCache.swift
+      - path: Sonar/Playback/PlaybackURLResolver.swift
+      - path: Sonar/Library/PlaylistBackup.swift
+      - path: Sonar/MusicSource/OnlinePlaylistImportService.swift
       - path: Sonar/Components/OnlinePlaylistImportView.swift
-      - path: Sonar/SecurityBridge.swift
-      - path: Sonar/SonarBootstrap.swift
-      - path: Sonar/SourceModels.swift
-      - path: Sonar/ThemeState.swift
+      - path: Sonar/Core/SecurityBridge.swift
+      - path: Sonar/App/SonarBootstrap.swift
+      - path: Sonar/MusicSource/SourceModels.swift
+      - path: Sonar/DesignSystem/ThemeState.swift
       - path: Sonar/Screens/SearchViewModel.swift
       - path: Sonar/Screens/ArtistDetailViewModel.swift
       - path: Sonar/Screens/DiscoveryViewModel.swift
