@@ -870,7 +870,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Sonar/Sonar.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 26;
+				CURRENT_PROJECT_VERSION = 27;
 				INFOPLIST_FILE = Sonar/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Sonar;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -920,7 +920,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = SonarWidgetExtension/SonarWidgetExtension.entitlements;
-				CURRENT_PROJECT_VERSION = 26;
+				CURRENT_PROJECT_VERSION = 27;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SonarWidgetExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Sonar;
@@ -1060,7 +1060,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = SonarWidgetExtension/SonarWidgetExtension.entitlements;
-				CURRENT_PROJECT_VERSION = 26;
+				CURRENT_PROJECT_VERSION = 27;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SonarWidgetExtension/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Sonar;
@@ -1085,7 +1085,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Sonar/Sonar.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
-				CURRENT_PROJECT_VERSION = 26;
+				CURRENT_PROJECT_VERSION = 27;
 				INFOPLIST_FILE = Sonar/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Sonar;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
