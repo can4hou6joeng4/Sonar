@@ -6,6 +6,7 @@
 - 共享源码按职责归组：新增 `Sonar/App`、`Sonar/Core`、`Sonar/Artwork`、`Sonar/Library`、`Sonar/Playback`、`Sonar/MusicSource`；原 `Sonar/NetEase` 并入 `MusicSource`，`ThemeState.swift` 移入 `DesignSystem`。文件内容未改动，仅位置调整。
 - 合并重复的 `script/` 与 `scripts/` 目录，统一为 `scripts/`，本机调试脚本更名为 `scripts/build-and-run.sh`。
 - 本地录制素材与设计稿目录不再纳入版本控制（`assets/promo-capture/`、`design/`）。
+- 清理搜索框键盘诊断代码：移除无引用的诊断浮层与设置键，键盘事件改为写入系统日志（`log stream --predicate 'process == "Sonar"'`）。
 
 ## v1.0.0-preview.4 - 2026-10-28
 

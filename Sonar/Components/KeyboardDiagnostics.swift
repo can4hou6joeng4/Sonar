@@ -1,51 +1,31 @@
 import Foundation
-import Observation
-import SwiftUI
+import os
 import UIKit
 
 /// 第三方输入法（微信输入法等）在首次呼出键盘时可能连不上键盘宿主，
 /// 表现为键盘可见但按键无响应，切到其他应用再回来才恢复。
 ///
-/// 记录键盘生命周期与输入事件，并提供搜索框的自动兼容策略。
+/// 这里集中记录键盘生命周期与输入事件，并提供搜索框的兼容策略。
+/// 事件只写入系统日志（Console / `log stream`），不保留内存副本。
 @MainActor
-@Observable
 final class KeyboardDiagnostics {
-    enum RepairMode: String, CaseIterable, Identifiable {
+    /// 键盘弹出后的兼容处理方式。设置入口已移除，当前固定使用 `.refocus`
+    /// （等价于切后台再回来）；其余两项保留用于临时排查。
+    enum RepairMode {
+        /// 不处理，仅记录事件。
         case off
+        /// 调用 `reloadInputViews()` 重建输入视图。
         case reload
+        /// 取消并重新获取焦点。
         case refocus
-
-        var id: String { rawValue }
-
-        var title: String {
-            switch self {
-            case .off: "关闭"
-            case .reload: "重建键盘"
-            case .refocus: "重新聚焦"
-            }
-        }
-
-        var subtitle: String {
-            switch self {
-            case .off: "不做处理，仅记录事件"
-            case .reload: "键盘弹出后调用 reloadInputViews() 重建输入视图"
-            case .refocus: "键盘弹出后取消并重新获取焦点（等同于切后台再回来）"
-            }
-        }
     }
 
     static let shared = KeyboardDiagnostics()
 
-    static let repairModeKey = "sonar.keyboardRepair.mode"
-    static let hudVisibleKey = "sonar.keyboardDiagnostics.hud"
+    private static let logger = Logger(subsystem: "cn.bobochang.sonar", category: "keyboard")
 
-    static var currentRepairMode: RepairMode {
-        // 设置入口已移除，旧版本保存的关闭选项不再禁用兼容处理。
-        .refocus
-    }
+    static var currentRepairMode: RepairMode { .refocus }
 
-    private(set) var lines: [String] = []
-    private let startedAt = ProcessInfo.processInfo.systemUptime
     private var isObserving = false
     private var observers: [NSObjectProtocol] = []
 
@@ -74,23 +54,17 @@ final class KeyboardDiagnostics {
     }
 
     func log(_ event: String) {
-        let ms = Int((ProcessInfo.processInfo.systemUptime - startedAt) * 1000)
-        lines.append("\(ms) \(event)")
-        if lines.count > 16 {
-            lines.removeFirst(lines.count - 16)
-        }
+        Self.logger.info("keyboard \(event, privacy: .public)")
     }
 
-    /// 当前键盘输入模式 + 系统里已启用的输入模式列表。
-    /// 第三方键盘的标识只能通过 KVC 读取，仅用于诊断展示。
+    /// 系统里已启用的输入模式列表。第三方键盘只能通过 KVC 读取标识，仅用于诊断。
     func inputModeSummary() -> String {
         let active = UITextInputMode.activeInputModes.map(Self.describe)
         return "active=[\(active.joined(separator: " | "))]"
     }
 
     func summary(for field: UITextField?) -> String {
-        let current = Self.describe(field?.textInputMode)
-        return "cur=\(current)"
+        "cur=\(Self.describe(field?.textInputMode))"
     }
 
     private func keyboardSummary(_ notification: Notification) -> String {
@@ -116,26 +90,5 @@ final class KeyboardDiagnostics {
             }
         }
         observers.append(token)
-    }
-}
-
-struct KeyboardDiagnosticsHUD: View {
-    @State private var diagnostics = KeyboardDiagnostics.shared
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            ForEach(Array(diagnostics.lines.enumerated()), id: \.offset) { _, line in
-                Text(line)
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(8)
-        .background(Color.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .padding(.horizontal, 12)
-        .allowsHitTesting(false)
     }
 }
