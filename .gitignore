@@ -34,4 +34,6 @@ scripts/smoke-runtime.sh
 scripts/setup_widget_extension.py
 docs/
 design/
-designs/
+
+# 本地录制素材（宣传视频/帧序列），不纳入仓库
+assets/promo-capture/

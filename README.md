@@ -145,7 +145,7 @@ App Groups 的可用性取决于开发者账户及签名工具；免费账户或
 在同一工程中选择 **SonarMac** 和 **My Mac**，或运行：
 
 ```sh
-./script/build_and_run.sh --verify
+./scripts/build-and-run.sh --verify
 ```
 
 脚本会生成 `build/macOS/Build/Products/Debug/SonarMac.app`，使用无需开发者证书的本地 ad-hoc 签名，并启动 App。可用 `--debug` 进入 LLDB、`--logs` 查看日志、`--telemetry` 查看播放切换事件。
