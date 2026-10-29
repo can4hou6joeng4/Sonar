@@ -1,8 +1,8 @@
 # 更新记录
 
-## 未发布
+## v1.0.0-preview.5 - 2026-10-29
 
-- 构建号提升至 **1.0 (27)**，未对外发布，仅用于本机签名安装。
+- iOS App 与 Widget 构建号同步为 **1.0 (27)**；本次为源码结构调整后的预览包，未改变应用功能行为，macOS 安装包沿用 v1.0.0。
 - 共享源码按职责归组：新增 `Sonar/App`、`Sonar/Core`、`Sonar/Artwork`、`Sonar/Library`、`Sonar/Playback`、`Sonar/MusicSource`；原 `Sonar/NetEase` 并入 `MusicSource`，`ThemeState.swift` 移入 `DesignSystem`。文件内容未改动，仅位置调整。
 - 合并重复的 `script/` 与 `scripts/` 目录，统一为 `scripts/`，本机调试脚本更名为 `scripts/build-and-run.sh`。
 - 本地录制素材与设计稿目录不再纳入版本控制（`assets/promo-capture/`、`design/`）。
