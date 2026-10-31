@@ -64,7 +64,7 @@ echo "==> 正在打包 SonarMac.zip..."
 # 先删除旧包：zip 只增不删，沿用旧文件会把已下线的资源留在新包里并破坏签名封印。
 rm -f "${OUTPUT_DIR}/SonarMac.zip"
 (cd "${DERIVED_DIR}/Build/Products/Release" && zip -qry "${OUTPUT_DIR}/SonarMac.zip" "SonarMac.app")
-shasum -a 256 "${OUTPUT_DIR}/SonarMac.zip" > "${OUTPUT_DIR}/SonarMac.zip.sha256"
+(cd "${OUTPUT_DIR}" && shasum -a 256 "SonarMac.zip" > "SonarMac.zip.sha256")
 
 echo "==> 正在生成自定义安装界面背景图..."
 BG_DIR="${STAGE_DIR}/.background"
@@ -123,7 +123,7 @@ hdiutil detach "${DEV}" 2>/dev/null || hdiutil detach "/Volumes/Sonar" 2>/dev/nu
 echo "==> 正在生成最终压缩版 SonarMac.dmg..."
 hdiutil convert "${TEMP_DMG}" -format UDZO -imagekey zlib-level=9 -ov -o "${DMG_PATH}" >/dev/null
 rm -f "${TEMP_DMG}"
-shasum -a 256 "${DMG_PATH}" > "${DMG_PATH}.sha256"
+(cd "${OUTPUT_DIR}" && shasum -a 256 "SonarMac.dmg" > "SonarMac.dmg.sha256")
 
 echo ""
 echo "=================================================="
