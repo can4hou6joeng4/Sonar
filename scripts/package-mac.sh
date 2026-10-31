@@ -3,6 +3,18 @@ set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${PROJECT_ROOT}/build"
+
+case "${1:-}" in
+  --public) PUBLIC=1 ;;
+  "") PUBLIC=0 ;;
+  *) echo "用法: $0 [--public]" >&2; exit 2 ;;
+esac
+
+if [ "${PUBLIC}" -eq 1 ]; then
+  OUTPUT_DIR="${BUILD_DIR}/public-mac"
+else
+  OUTPUT_DIR="${BUILD_DIR}"
+fi
 DERIVED_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sonar-mac-derived.XXXXXX")"
 STAGE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sonar-mac-stage.XXXXXX")"
 
@@ -28,13 +40,31 @@ if [ ! -d "${APP_PATH}" ]; then
   exit 1
 fi
 
-mkdir -p "${BUILD_DIR}"
+if [ "${PUBLIC}" -eq 1 ]; then
+  echo "==> 正在清洗公开包内的构建凭据..."
+  CREDENTIALS="${APP_PATH}/Contents/Resources/BuildCredentials.json"
+  printf '{\n  "chkszKey": "",\n  "wyToken": ""\n}\n' > "${CREDENTIALS}"
+  chmod 600 "${CREDENTIALS}"
+  node -e '
+    const fs = require("fs");
+    const c = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    if ((c.chkszKey || "").trim() || (c.wyToken || "").trim()) {
+      console.error("错误: 公开包仍包含凭据，已中止打包");
+      process.exit(1);
+    }
+  ' "${CREDENTIALS}"
+  # 资源已改动，必须重新 ad-hoc 签名并保留沙盒 entitlement。
+  codesign --force --deep --sign - --entitlements "${PROJECT_ROOT}/SonarMac/SonarMac.entitlements" "${APP_PATH}"
+  echo "==> 已确认公开包不包含任何凭据"
+fi
+
+mkdir -p "${OUTPUT_DIR}"
 
 echo "==> 正在打包 SonarMac.zip..."
 # 先删除旧包：zip 只增不删，沿用旧文件会把已下线的资源留在新包里并破坏签名封印。
-rm -f "${BUILD_DIR}/SonarMac.zip"
-(cd "${DERIVED_DIR}/Build/Products/Release" && zip -qry "${BUILD_DIR}/SonarMac.zip" "SonarMac.app")
-shasum -a 256 "${BUILD_DIR}/SonarMac.zip" > "${BUILD_DIR}/SonarMac.zip.sha256"
+rm -f "${OUTPUT_DIR}/SonarMac.zip"
+(cd "${DERIVED_DIR}/Build/Products/Release" && zip -qry "${OUTPUT_DIR}/SonarMac.zip" "SonarMac.app")
+shasum -a 256 "${OUTPUT_DIR}/SonarMac.zip" > "${OUTPUT_DIR}/SonarMac.zip.sha256"
 
 echo "==> 正在生成自定义安装界面背景图..."
 BG_DIR="${STAGE_DIR}/.background"
@@ -48,7 +78,7 @@ cp -R "${APP_PATH}" "${STAGE_DIR}/"
 ln -s /Applications "${STAGE_DIR}/Applications"
 
 echo "==> 正在配置 DMG 拖拽安装交互界面..."
-DMG_PATH="${BUILD_DIR}/SonarMac.dmg"
+DMG_PATH="${OUTPUT_DIR}/SonarMac.dmg"
 TEMP_DMG="${DERIVED_DIR}/Sonar_rw.dmg"
 rm -f "${DMG_PATH}" "${DMG_PATH}.sha256" "${TEMP_DMG}"
 
@@ -99,7 +129,7 @@ echo ""
 echo "=================================================="
 echo " 恭喜！macOS 打包已顺利完成："
 echo " DMG 安装包: ${DMG_PATH}"
-echo " ZIP 压缩包: ${BUILD_DIR}/SonarMac.zip"
+echo " ZIP 压缩包: ${OUTPUT_DIR}/SonarMac.zip"
 echo "=================================================="
 echo "普通 Mac 用户首次运行若遇到安全提示，可在终端执行："
 echo "  xattr -cr /Applications/SonarMac.app"

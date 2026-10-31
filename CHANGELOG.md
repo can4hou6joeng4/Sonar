@@ -10,6 +10,7 @@
 - 移除 Mac 端不可达的主窗口/设置/曲库界面（9 个文件、约 1040 行）与未使用的共享依赖，仓库只保留状态栏面板与刘海两套实际启用的界面。
 - 修复 `scripts/package-mac.sh` 复用旧 zip 的问题：已下线的 `source-bundle.js` 会随旧包残留并破坏签名封印，现在打包前先删除旧压缩包。
 - 重新生成 `build/SonarMac.dmg` 与 `SonarMac.zip`（1.0.1 (23)），两个包内的 App 均通过 `codesign --verify --deep --strict`。
+- 新增 `scripts/package-mac.sh --public`：构建后把 `BuildCredentials.json` 清洗为空并重新 ad-hoc 签名，校验通过才打包，产物落在 `build/public-mac/`，本机个人包不受影响。
 
 ## v1.0.0-preview.5 - 2026-10-29
 
