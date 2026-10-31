@@ -9,6 +9,7 @@ final class MacAppModel {
     let runtime: SourceRuntime
     let onlinePlaylistImporter: OnlinePlaylistImportService
     let playback: PlaybackService
+    let sleepTimer = SleepTimer()
     let artworkService: ArtworkService?
     private(set) var library: LibraryStore?
     private(set) var libraryTracks: [Track] = []
@@ -47,11 +48,16 @@ final class MacAppModel {
         let breaker = ChkszCircuitBreaker()
         let api = ChkszAPIClient(credentials: credentials, breaker: breaker)
         let netease = ChkszNetEaseClient(api: api)
-        let runtime = ChkszSourceRuntime(netease: netease)
+        let direct = NetEaseWebClient()
+        let runtime = NetEaseRuntimeDecorator(
+            base: ChkszSourceRuntime(netease: netease),
+            client: direct
+        )
         self.runtime = runtime
         onlinePlaylistImporter = OnlinePlaylistImportService(chkszAPI: api)
         playback = PlaybackService(resolver: PlaybackResolverPipeline.make(
-            primary: PlaybackURLResolver(credentials: credentials, breaker: breaker, chkszAPI: api, netease: netease)
+            primary: PlaybackURLResolver(credentials: credentials, breaker: breaker, chkszAPI: api, netease: netease),
+            custom: NetEasePlaybackResolver(client: direct)
         ))
         artworkService = try? ArtworkService(sourceRuntime: runtime,
             cacheDirectory: URL.cachesDirectory.appendingPathComponent("cn.bobochang.sonar.mac/Artwork"))
@@ -63,8 +69,13 @@ final class MacAppModel {
 
     func start() {
         guard notchController == nil else { return }
+        PerfLog.mark("mac_launch")
         notchController = NotchWindowController(model: self)
         notchController?.setEnabled(notchEnabled)
+        // 冷启动沿用 iOS 的断点续播：恢复为暂停态，由用户决定是否继续。
+        Task { [weak self] in
+            await self?.playback.restoreLastSessionIfNeeded()
+        }
     }
 
     func retryLibrary() {

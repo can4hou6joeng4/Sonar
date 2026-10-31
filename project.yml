@@ -84,9 +84,10 @@ targets:
       - path: SonarMac
       - path: Sonar/Artwork/ArtworkPalette.swift
       - path: Sonar/Artwork/ArtworkService.swift
-      - path: Sonar/Library/BackupDocument.swift
       - path: Sonar/Core/BuildCredentialStore.swift
       - path: Sonar/MusicSource/ChkszSourceRuntime.swift
+      - path: Sonar/MusicSource/NetEase/NetEaseRuntimeDecorator.swift
+      - path: Sonar/MusicSource/NetEase/NetEaseWebClient.swift
       - path: Sonar/Core/CommonCryptoBridge.swift
       - path: Sonar/Playback/FallbackPlaybackURLResolver.swift
       - path: Sonar/Library/LibraryModels.swift
@@ -99,19 +100,17 @@ targets:
       - path: Sonar/Playback/PlaybackService.swift
       - path: Sonar/Playback/PlaybackURLCache.swift
       - path: Sonar/Playback/PlaybackURLResolver.swift
+      - path: Sonar/Playback/SleepTimer.swift
       - path: Sonar/Library/PlaylistBackup.swift
       - path: Sonar/MusicSource/OnlinePlaylistImportService.swift
       - path: Sonar/Components/OnlinePlaylistImportView.swift
       - path: Sonar/Core/SecurityBridge.swift
       - path: Sonar/App/SonarBootstrap.swift
       - path: Sonar/MusicSource/SourceModels.swift
-      - path: Sonar/DesignSystem/ThemeState.swift
       - path: Sonar/Screens/SearchViewModel.swift
       - path: Sonar/Screens/ArtistDetailViewModel.swift
-      - path: Sonar/Screens/DiscoveryViewModel.swift
       - path: Sonar/Components/QualityBadge.swift
       - path: Sonar/DesignSystem/M3Scheme.swift
-      - path: Sonar/DesignSystem/UIPreferences.swift
       - path: Sonar/WidgetShare/WidgetSnapshot.swift
     postBuildScripts:
       - name: Embed local build credentials
@@ -134,7 +133,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: SonarMac/SonarMac.entitlements
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGN_STYLE: Manual
-        CURRENT_PROJECT_VERSION: 22
+        CURRENT_PROJECT_VERSION: 23
         MARKETING_VERSION: "1.0"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_APP_SANDBOX: YES
