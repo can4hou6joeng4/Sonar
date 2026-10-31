@@ -31,6 +31,8 @@ fi
 mkdir -p "${BUILD_DIR}"
 
 echo "==> 正在打包 SonarMac.zip..."
+# 先删除旧包：zip 只增不删，沿用旧文件会把已下线的资源留在新包里并破坏签名封印。
+rm -f "${BUILD_DIR}/SonarMac.zip"
 (cd "${DERIVED_DIR}/Build/Products/Release" && zip -qry "${BUILD_DIR}/SonarMac.zip" "SonarMac.app")
 shasum -a 256 "${BUILD_DIR}/SonarMac.zip" > "${BUILD_DIR}/SonarMac.zip.sha256"
 
