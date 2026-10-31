@@ -652,7 +652,6 @@ public final class PlaybackService {
 
     /// 记下新的音质上限，并让当前曲目按它重新解析。
     /// 解析成功前不碰 `AVPlayer`，失败时旧的流还在播，只回滚状态并把原因交回界面。
-    @discardableResult
     private func recordActualQuality() {
         guard let reporting = resolver as? PlaybackQualityReporting,
               let actual = reporting.consumeLastResolvedQuality() else { return }

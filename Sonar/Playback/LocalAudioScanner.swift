@@ -24,7 +24,7 @@ public enum LocalAudioScanner {
                         includingPropertiesForKeys: [.isRegularFileKey],
                         options: [.skipsHiddenFiles, .skipsPackageDescendants]
                     ) {
-                        for case let file as URL in enumerator {
+                        while let file = enumerator.nextObject() as? URL {
                             if isAudioFile(file) {
                                 fileURLs.append(file)
                             }
