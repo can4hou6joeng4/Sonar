@@ -1,0 +1,78 @@
+# Sonar
+
+> Sonar 是原生 SwiftUI 音乐播放器，支持 iOS 17+ 与 macOS 14+（GPL-3.0）。本文件写给 AI 助手：按用户平台选一条路径执行，不要编造步骤；遇到凭据缺失如实说明，不要索要或代填用户密钥。
+
+## 任务判定
+
+- 用户说「安装 / 试试 Sonar」且本机是 macOS：走路径 A（预编译 DMG）。
+- 用户想改代码、要最新提交、或本机是 Linux/Windows：走路径 B（源码构建，仅 macOS 可用），否则说明无法在本机构建。
+- 用户要装到 iPhone：只能走路径 C（未签名 IPA + 用户自有签名）。
+
+## 路径 A：macOS 预编译安装
+
+1. 从 https://github.com/can4hou6joeng4/Sonar/releases/latest 下载 `SonarMac.dmg`（同名 `.sha256` 可用 `shasum -a 256 -c` 校验）。
+2. 安装：
+
+```sh
+hdiutil attach ~/Downloads/SonarMac.dmg
+cp -R "/Volumes/Sonar/SonarMac.app" /Applications/
+hdiutil detach "/Volumes/Sonar"
+xattr -cr /Applications/SonarMac.app   # 包为 ad-hoc 签名、未公证，避免 Gatekeeper 拦截
+open -a SonarMac
+```
+
+3. 成功标准：菜单栏出现 Sonar 图标，点击可打开选歌面板。无刘海屏使用顶部胶囊。
+4. 该包不含任何凭据，在线搜索与在线播放需要用户自己的凭据（见「凭据」），本地音乐播放无需网络。
+
+## 路径 B：源码构建
+
+前提：macOS + Xcode（含 iOS/macOS SDK）、命令行工具；凭据生成脚本需要 Node.js 18+。仓库已含 `Sonar.xcodeproj` 与共享 Scheme，**不需要** npm、JavaScript 音源打包或任何 Agent 框架；只有修改 `project.yml` 后才需要 XcodeGen。
+
+```sh
+git clone https://github.com/can4hou6joeng4/Sonar.git
+cd Sonar
+./scripts/build-and-run.sh --verify    # 构建并启动 macOS 版
+```
+
+- 产物：`build/macOS/Build/Products/Debug/SonarMac.app`
+- 其他模式：`--debug`（LLDB）、`--logs`（日志）、`--telemetry`（播放切换阶段耗时）
+- iOS：Xcode 打开 `Sonar.xcodeproj`，Scheme 选 `Sonar`，目标选 iPhone 模拟器后运行。真机需自备 Team、唯一 Bundle ID 与 App Group；App 与 Widget 的组、版本必须保持一致（见 `README.md`「运行 iOS App」）。
+
+## 路径 C：iOS 未签名 IPA
+
+```sh
+./scripts/package-ios.sh --out=build/Sonar-local.ipa
+# 规避 WidgetKit 崩溃的环境可加 --no-widget
+```
+
+产物未签名，需用用户自己的签名工具处理 App 与内嵌 Widget；不要声称已能直接安装。也可直接取 Releases 中现成的未签名 IPA。
+
+## 验收
+
+- `./scripts/build-and-run.sh --verify` 退出码 0 且 App 已启动 = 构建可用。
+- 编译通过 ≠ 在线播放可用：无凭据时在线搜索/播放失败属预期，本地音乐播放仍应正常。
+- 排查建议：先看 `--logs` 输出，再确认 `perf.log` 中的 `url_ready` / `playback_failed` 记录。
+
+## 凭据（不要代填、不要提交）
+
+公开仓库与发行包均不含凭据，也不提供会员权益。
+
+| 凭据 | 配置方式 |
+| --- | --- |
+| ChKSz Key | 源码构建时通过环境变量 `SONAR_CHKSZ_KEY` 注入，脚本生成 `BuildCredentials.json`（已被 Git 忽略） |
+| 网易云登录 Cookie | App 设置内粘贴用户自己的 Cookie，存入本机钥匙串 |
+
+需要用户自行申请；不要代为注册、索要密码或把密钥写进仓库。
+
+## 贡献约定（改动前必读）
+
+- 主线 `main`，提交信息格式 `type(scope): 中文描述`，仅一行，无 body 与 trailer。
+- 不要提交 `SonarTests/`、`Sonar.local.xcodeproj/`、`build/`、`docs/`、`design/`、`scripts/run-local-tests.sh` 及任何含真实凭据的文件。
+- 播放链路只有一份根 `PlaybackService`；资料库变更统一走 `LibraryStore`；App 与 Widget 构建号保持一致。
+
+## 链接
+
+- 源码：https://github.com/can4hou6joeng4/Sonar
+- 发行包：https://github.com/can4hou6joeng4/Sonar/releases
+- 开发约定：https://raw.githubusercontent.com/can4hou6joeng4/Sonar/main/AGENTS.md
+- 更新记录：https://raw.githubusercontent.com/can4hou6joeng4/Sonar/main/CHANGELOG.md

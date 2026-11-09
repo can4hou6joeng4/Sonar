@@ -78,6 +78,8 @@ Source code is available under **GPL-3.0**, with separate notices for third-part
 
 ## 运行与安装
 
+> **交给 AI 安装**：最省事的办法，是把这句话发给你的 AI ——「请阅读 https://raw.githubusercontent.com/can4hou6joeng4/Sonar/main/llms.txt 为我安装 Sonar」。该文件写明 macOS 安装、源码构建与验收步骤。
+
 两端均可从同一个 Xcode 工程构建。[v1.0.0](https://github.com/can4hou6joeng4/Sonar/releases/tag/v1.0.0) 正式发布 macOS 安装包（提供精致拖拽安装界面 DMG 与 ZIP）、SHA-256 校验值及本地音乐离线播放支持；iOS 未签名 IPA 见 [v1.0.0-preview.5](https://github.com/can4hou6joeng4/Sonar/releases/tag/v1.0.0-preview.5)，App 与 Widget 均为 **1.0 (27)**，包含输入法自动兼容与小组件随机播放。双端最新源码的变化见 [更新记录](CHANGELOG.md)。
 
 Mac 安装包采用本地 ad-hoc 签名，没有 Developer ID 签名或 Apple 公证，首次打开可能被 macOS Gatekeeper 拦截。请先核对下载来源与校验值，首次打开若提示受限，按系统「隐私与安全性」提示允许，或在终端执行 `xattr -cr /Applications/SonarMac.app` 即可流畅运行。也可以按下方步骤直接打包或自行构建。
@@ -213,7 +215,7 @@ ChKSz 默认从母带音质开始，网易云按 `jymaster → hires → lossles
 
 iOS 与 Mac 会按当前播放模式提前解析并缓冲下一首。插歌、删歌、排序和模式切换会更新准备目标；iOS 收到曲终通知时立即申请后台切换时间，并以实际媒体时长补偿遗漏的通知。音源尚未就绪时仍需等待网络。Mac 的 `--telemetry` 记录解析、媒体就绪和开始播放的阶段耗时，不包含歌曲信息、播放地址或凭据，也不等同于音频输出设备的实测静音间隔。
 
-ChKSz 单次请求默认在 8 秒内结束，媒体加载或缓冲持续等待 20 秒会刷新一次播放地址，再次超时则停止并支持手动重试。网络故障不会连续跳过其他歌曲；iOS 后台切换时间耗尽时也会结束等待。开启 Quantumult X 等 VPN 时沿用系统路由，若代理或 DNS 无法连接音源，会提示检查网络或 VPN 分流；应用无法保证不可达的代理线路恢复连通。
+ChKSz 单次请求默认在 15 秒内结束（超时或连接中断会重试一次），媒体加载或缓冲持续等待 20 秒会刷新一次播放地址，再次超时则停止并支持手动重试。网络故障不会连续跳过其他歌曲；iOS 后台切换时间耗尽时也会结束等待。开启 Quantumult X 等 VPN 时沿用系统路由，若代理或 DNS 无法连接音源，会提示检查网络或 VPN 分流；应用无法保证不可达的代理线路恢复连通。
 
 </details>
 
