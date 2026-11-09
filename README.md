@@ -16,6 +16,7 @@
 </p>
 
 <p align="center">
+  <a href="#一句话安装">一句话安装</a> ·
   <a href="#界面预览">界面预览</a> ·
   <a href="#功能">功能</a> ·
   <a href="#运行与安装">运行与安装</a> ·
@@ -23,6 +24,24 @@
   <a href="#数据与音源">数据与音源</a> ·
   <a href="#致谢">致谢</a>
 </p>
+
+## 一句话安装
+
+最省事的办法，是把这句话发给你的 AI：
+
+```text
+请阅读 https://sonar.bobochang.cn/llms.txt 为我安装 Sonar
+```
+
+那份文件写明了 macOS 安装、源码构建、验收与凭据边界，AI 读到后能自己选路径、自己校验，不需要你补步骤。
+
+macOS 不想等 AI，也可以直接执行：
+
+```sh
+curl -fsSL https://sonar.bobochang.cn/install.sh | sh   # 下载 → 校验 SHA-256 → 安装到 /Applications → 启动
+```
+
+安装包为 ad-hoc 签名、未公证，脚本会自动校验并解除 Gatekeeper 隔离。给 AI 的说明书本身也放在仓库里：[llms.txt](llms.txt)。
 
 ## 界面预览
 
@@ -74,11 +93,11 @@ The current iOS source features an artwork-led home, icon navigation, a floating
 
 Public NetEase playlists can be imported from a share link or playlist ID, with a preview and deduplication before merging into the personal library. The native NetEase client provides artist and album browsing, lyrics, and direct playback; ChKSz provides song search and fallback services. Playback starts at master quality and falls back through Hi-Res, lossless, 320K, and 128K for the same song. The repository no longer ships any JavaScript/LX source scripts.
 
-Source code is available under **GPL-3.0**, with separate notices for third-party code. Build both apps from `Sonar.xcodeproj`. [GitHub Releases](https://github.com/can4hou6joeng4/Sonar/releases) provides official pre-built macOS packages (`SonarMac.dmg` & `SonarMac.zip`) and an unsigned iOS preview IPA. The IPA requires your own signing and provisioning; the Mac build is ad-hoc signed and not notarized. Public packages contain no personal API credentials or private LX scripts. ChKSz services require your own key configured during a source build; the native NetEase client accepts your own login cookie in Settings. Public packages include neither credential. Music availability and playback quality depend on third-party services; playlist backups contain metadata, not audio.
+Source code is available under **GPL-3.0**, with separate notices for third-party code. Build both apps from `Sonar.xcodeproj`. Fastest install path: hand your AI assistant this line — "Read https://sonar.bobochang.cn/llms.txt and install Sonar for me" — which points to a machine-readable guide covering the macOS installer, source builds, verification, and credential boundaries. [GitHub Releases](https://github.com/can4hou6joeng4/Sonar/releases) provides official pre-built macOS packages (`SonarMac.dmg` & `SonarMac.zip`) and an unsigned iOS preview IPA. The IPA requires your own signing and provisioning; the Mac build is ad-hoc signed and not notarized. Public packages contain no personal API credentials or private LX scripts. ChKSz services require your own key configured during a source build; the native NetEase client accepts your own login cookie in Settings. Public packages include neither credential. Music availability and playback quality depend on third-party services; playlist backups contain metadata, not audio.
 
 ## 运行与安装
 
-> **交给 AI 安装**：最省事的办法，是把这句话发给你的 AI ——「请阅读 https://sonar.bobochang.cn/llms.txt 为我安装 Sonar」。该文件写明 macOS 安装、源码构建与验收步骤；也可以直接跑 `curl -fsSL https://sonar.bobochang.cn/install.sh | sh`。
+> **交给 AI 安装**：把文首「一句话安装」里的那句话发给你的 AI 即可；也可以直接跑 `curl -fsSL https://sonar.bobochang.cn/install.sh | sh`。
 
 两端均可从同一个 Xcode 工程构建。[v1.0.0](https://github.com/can4hou6joeng4/Sonar/releases/tag/v1.0.0) 正式发布 macOS 安装包（提供精致拖拽安装界面 DMG 与 ZIP）、SHA-256 校验值及本地音乐离线播放支持；iOS 未签名 IPA 见 [v1.0.0-preview.5](https://github.com/can4hou6joeng4/Sonar/releases/tag/v1.0.0-preview.5)，App 与 Widget 均为 **1.0 (27)**，包含输入法自动兼容与小组件随机播放。双端最新源码的变化见 [更新记录](CHANGELOG.md)。
 
