@@ -1,0 +1,10 @@
+{
+  "name": "sonar-install",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "sonar.bobochang.cn", "custom_domain": true }],
+  "r2_buckets": [{ "binding": "MIRROR", "bucket_name": "sonar-mirror" }],
+  "observability": { "enabled": true, "head_sampling_rate": 0.1 }
+}

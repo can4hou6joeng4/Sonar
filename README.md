@@ -78,7 +78,7 @@ Source code is available under **GPL-3.0**, with separate notices for third-part
 
 ## 运行与安装
 
-> **交给 AI 安装**：最省事的办法，是把这句话发给你的 AI ——「请阅读 https://raw.githubusercontent.com/can4hou6joeng4/Sonar/main/llms.txt 为我安装 Sonar」。该文件写明 macOS 安装、源码构建与验收步骤。
+> **交给 AI 安装**：最省事的办法，是把这句话发给你的 AI ——「请阅读 https://sonar.bobochang.cn/llms.txt 为我安装 Sonar」。该文件写明 macOS 安装、源码构建与验收步骤；也可以直接跑 `curl -fsSL https://sonar.bobochang.cn/install.sh | sh`。
 
 两端均可从同一个 Xcode 工程构建。[v1.0.0](https://github.com/can4hou6joeng4/Sonar/releases/tag/v1.0.0) 正式发布 macOS 安装包（提供精致拖拽安装界面 DMG 与 ZIP）、SHA-256 校验值及本地音乐离线播放支持；iOS 未签名 IPA 见 [v1.0.0-preview.5](https://github.com/can4hou6joeng4/Sonar/releases/tag/v1.0.0-preview.5)，App 与 Widget 均为 **1.0 (27)**，包含输入法自动兼容与小组件随机播放。双端最新源码的变化见 [更新记录](CHANGELOG.md)。
 

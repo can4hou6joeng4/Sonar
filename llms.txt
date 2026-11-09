@@ -1,6 +1,6 @@
 # Sonar
 
-> Sonar 是原生 SwiftUI 音乐播放器，支持 iOS 17+ 与 macOS 14+（GPL-3.0）。本文件写给 AI 助手：按用户平台选一条路径执行，不要编造步骤；遇到凭据缺失如实说明，不要索要或代填用户密钥。
+> Sonar 是原生 SwiftUI 音乐播放器，支持 iOS 17+ 与 macOS 14+（GPL-3.0）。本文件写给 AI 助手：按用户平台选一条路径执行，不要编造步骤；遇到凭据缺失如实说明，不要索要或代填用户密钥。稳定入口：https://sonar.bobochang.cn/llms.txt
 
 ## 任务判定
 
@@ -10,16 +10,26 @@
 
 ## 路径 A：macOS 预编译安装
 
-1. 从 https://github.com/can4hou6joeng4/Sonar/releases/latest 下载 `SonarMac.dmg`（同名 `.sha256` 可用 `shasum -a 256 -c` 校验）。
-2. 安装：
+1. 一条命令装完（推荐，脚本会下载 → 校验 SHA-256 → 挂载 → 复制 → 解除隔离 → 启动）：
 
 ```sh
-hdiutil attach ~/Downloads/SonarMac.dmg
+curl -fsSL https://sonar.bobochang.cn/install.sh | sh
+```
+
+2. 或手动安装。安装包走本项目的 R2 镜像（可断点续传，比 GitHub 网页版稳定）：
+
+```sh
+curl -fLO https://sonar.bobochang.cn/SonarMac.dmg
+curl -fLO https://sonar.bobochang.cn/SonarMac.dmg.sha256
+shasum -a 256 -c SonarMac.dmg.sha256
+hdiutil attach SonarMac.dmg
 cp -R "/Volumes/Sonar/SonarMac.app" /Applications/
 hdiutil detach "/Volumes/Sonar"
 xattr -cr /Applications/SonarMac.app   # 包为 ad-hoc 签名、未公证，避免 Gatekeeper 拦截
 open -a SonarMac
 ```
+
+   若镜像不可用，再从 GitHub 取：`gh release download -R can4hou6joeng4/Sonar -p SonarMac.dmg`（比浏览器的 `/releases/download` 链接稳定；遇到 504 属于 GitHub 边缘故障，重试或改用 `gh`）。
 
 3. 成功标准：菜单栏出现 Sonar 图标，点击可打开选歌面板。无刘海屏使用顶部胶囊。
 4. 该包不含任何凭据，在线搜索与在线播放需要用户自己的凭据（见「凭据」），本地音乐播放无需网络。
@@ -72,6 +82,8 @@ cd Sonar
 
 ## 链接
 
+- 安装入口（短地址）：https://sonar.bobochang.cn
+- 本文件（短地址）：https://sonar.bobochang.cn/llms.txt
 - 源码：https://github.com/can4hou6joeng4/Sonar
 - 发行包：https://github.com/can4hou6joeng4/Sonar/releases
 - 开发约定：https://raw.githubusercontent.com/can4hou6joeng4/Sonar/main/AGENTS.md
