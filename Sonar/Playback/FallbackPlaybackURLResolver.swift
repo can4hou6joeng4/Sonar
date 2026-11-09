@@ -1,6 +1,17 @@
 import Foundation
 
 enum PlaybackResolverPipeline {
+    /// 网易云直连主解析、ChKSz 兜底：会员有效时直连延迟更低、不消耗第三方额度，
+    /// 直连试听/失败/额度不足时再回落到 ChKSz 取完整母带。
+    static func make(primary: PlaybackURLResolving, direct: PlaybackURLResolving) -> PlaybackURLResolving {
+        AlternatePlaybackURLResolver(
+            preferred: HighestAvailableQualityPlaybackURLResolver(resolver: direct),
+            fallback: HighestAvailableQualityPlaybackURLResolver(resolver: primary),
+            preferredLabel: "网易云直连",
+            fallbackLabel: "ChKSz 解析"
+        )
+    }
+
     static func make(primary: PlaybackURLResolving, custom: PlaybackURLResolving? = nil, fallbackCustom: PlaybackURLResolving? = nil) -> PlaybackURLResolving {
         let primaryLadder = HighestAvailableQualityPlaybackURLResolver(resolver: primary)
         let backup: PlaybackURLResolving

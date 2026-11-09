@@ -46,7 +46,7 @@ final class MacAppModel {
     init() {
         let credentials = BuildCredentialStore()
         let breaker = ChkszCircuitBreaker()
-        let api = ChkszAPIClient(credentials: credentials, breaker: breaker)
+        let api = ChkszAPIClient(credentials: credentials, breaker: breaker, requestTimeout: 15)
         let netease = ChkszNetEaseClient(api: api)
         let direct = NetEaseWebClient()
         let runtime = NetEaseRuntimeDecorator(
@@ -57,7 +57,7 @@ final class MacAppModel {
         onlinePlaylistImporter = OnlinePlaylistImportService(chkszAPI: api)
         playback = PlaybackService(resolver: PlaybackResolverPipeline.make(
             primary: PlaybackURLResolver(credentials: credentials, breaker: breaker, chkszAPI: api, netease: netease),
-            custom: NetEasePlaybackResolver(client: direct)
+            direct: NetEasePlaybackResolver(client: direct)
         ))
         artworkService = try? ArtworkService(sourceRuntime: runtime,
             cacheDirectory: URL.cachesDirectory.appendingPathComponent("cn.bobochang.sonar.mac/Artwork"))

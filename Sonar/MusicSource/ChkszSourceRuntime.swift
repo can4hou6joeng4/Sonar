@@ -44,7 +44,7 @@ public final class ChkszAPIClient: ChkszAPIRequesting, @unchecked Sendable {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = requestTimeout
-        var response = try await client.send(request)
+        var response = try await sendWithRetry(request)
         if response.statusCode == 429 {
             let retry = Self.retryDelay(from: response)
             if retry <= 10 {
@@ -56,6 +56,24 @@ public final class ChkszAPIClient: ChkszAPIRequesting, @unchecked Sendable {
         try await validateHTTP(response, path: path, parameters: parameters)
         try await validateEnvelope(response.body)
         return response.body
+    }
+
+    /// 母带解析偶发 9 秒以上，传输超时/连接中断时重试一次，避免直接判定失败。
+    private func sendWithRetry(_ request: URLRequest) async throws -> PlaybackHTTPResponse {
+        do {
+            return try await client.send(request)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as SourceError {
+            guard case .network = error else { throw error }
+            try await Task.sleep(for: .milliseconds(250))
+            try Task.checkCancellation()
+            return try await client.send(request)
+        } catch let error as URLError where error.code == .timedOut || error.code == .networkConnectionLost {
+            try await Task.sleep(for: .milliseconds(250))
+            try Task.checkCancellation()
+            return try await client.send(request)
+        }
     }
 
     private func validateHTTP(_ response: PlaybackHTTPResponse, path: String, parameters: [String: String]) async throws {

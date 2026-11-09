@@ -372,10 +372,14 @@ public actor NetEaseWebClient {
             .init(name: "encodeType", value: encodeType),
         ])
         let list = object["data"] as? [[String: Any]] ?? []
-        guard let item = list.first,
-              let raw = item["url"] as? String,
+        guard let item = list.first else { throw Failure.malformed("播放地址为空") }
+        // 会员到期后付费曲目只下发 30 秒试听，必须让上层判定失败并回退到 ChKSz。
+        if let trial = item["freeTrialInfo"], !(trial is NSNull) {
+            throw SourceError.source(message: "仅返回试听片段")
+        }
+        guard let raw = item["url"] as? String,
               let url = Self.mediaURL(raw) else {
-            let code = list.first.flatMap { Self.intValue($0["code"]) } ?? 0
+            let code = Self.intValue(item["code"]) ?? 0
             throw Failure.api(code, "没有可用播放地址")
         }
         let quality = TrackQuality(

@@ -50,7 +50,7 @@ private final class SonarServices {
     init() {
         let credentials = BuildCredentialStore()
         let breaker = ChkszCircuitBreaker()
-        let chkszAPI = ChkszAPIClient(credentials: credentials, breaker: breaker)
+        let chkszAPI = ChkszAPIClient(credentials: credentials, breaker: breaker, requestTimeout: 15)
         let netease = ChkszNetEaseClient(api: chkszAPI)
         let direct = NetEaseWebClient()
         let runtime = NetEaseRuntimeDecorator(
@@ -66,7 +66,7 @@ private final class SonarServices {
                 chkszAPI: chkszAPI,
                 netease: netease
             ),
-            custom: NetEasePlaybackResolver(client: direct)
+            direct: NetEasePlaybackResolver(client: direct)
         )
         playbackService = PlaybackService(
             resolver: resolver

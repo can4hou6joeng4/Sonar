@@ -70,6 +70,12 @@ struct PlaybackRecoveryGate: Sendable {
         return true
     }
 
+    /// 单曲循环不经过 loadCurrent，必须在新一轮播放前重新授予一次恢复机会，
+    /// 否则第一次失败用完额度后，后续任何中断都会直接暂停。
+    mutating func rearmRecovery() {
+        recoveryConsumed = false
+    }
+
     func isCurrent(_ generation: Int) -> Bool {
         self.generation == generation
     }
@@ -157,6 +163,9 @@ public final class PlaybackService {
 
     /// 最近一次真正拿到的音质（服务端可能降级），用于界面展示与排查。
     public private(set) var lastActualQuality: Quality?
+    /// 当前播放项所用签名 URL 的解析时间；签名链接过期是不可恢复失败，
+    /// 单曲循环必须在下一轮开始前主动换新链接。
+    private var currentURLResolvedAt: Date?
 
     /// 播放速度（0.5x–2x），持久化。
     public private(set) var playbackRate: Float = 1.0
@@ -847,6 +856,7 @@ public final class PlaybackService {
 
     private func completeCurrentLoad(item: AVPlayerItem, url: URL, generation: Int, prepared: Bool) throws {
         PerfLog.mark("url_ready", queue.current?.musicID ?? "")
+        currentURLResolvedAt = Date()
         currentMediaHost = url.host
         measuredItem = item
         lastTransitionTiming?.reusedPreparedItem = prepared
@@ -1044,13 +1054,30 @@ public final class PlaybackService {
     }
 
     private func restartCurrent() async {
+        // 签名链接通常在 20 分钟内有效；单曲循环若沿用同一链接，
+        // 后者会在某一轮中途失效，表现为自动暂停并提示重试。
+        if shouldRefreshCurrentURLBeforeRestart() {
+            await loadCurrent(autoplay: true, refreshing: true)
+            endTransitionBackgroundTask()
+            return
+        }
         let generation = recoveryGate.generation
         let revision = intentRevision
+        recoveryGate.rearmRecovery()
         await player.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
         guard !Task.isCancelled, recoveryGate.isCurrent(generation), intentRevision == revision else { return }
         elapsed = 0
         await play()
         endTransitionBackgroundTask()
+    }
+
+    /// 下一轮播放结束前链接就会过期时，提前重新解析，避免循环中途中断。
+    private func shouldRefreshCurrentURLBeforeRestart() -> Bool {
+        guard let resolvedAt = currentURLResolvedAt else { return false }
+        let age = Date().timeIntervalSince(resolvedAt)
+        let remaining = max(duration, queue.current?.durationSeconds ?? 0)
+        // 17 分钟阈值给 20 分钟签名留 3 分钟余量。
+        return age + remaining > 17 * 60
     }
 
     private func configureAudioSession() throws {
@@ -1306,7 +1333,10 @@ public final class PlaybackService {
             let revision = intentRevision
             playbackRequested = false
             player.pause()
-            state = .failed(playbackFailureDescription(for: item, fallback: fallback))
+            let description = playbackFailureDescription(for: item, fallback: fallback)
+            PerfLog.mark("playback_failed", "\(queue.current?.musicID ?? "")|\(description)")
+            logger.error("playback_failed \(description, privacy: .public)")
+            state = .failed(description)
             updateNowPlaying()
             if shouldSkip {
                 await handleAutoplayFailureAndSkip(generation: generation, revision: revision)
@@ -1360,6 +1390,7 @@ public final class PlaybackService {
                   queue.current?.musicID == trackID else { return }
 
             PerfLog.mark("url_ready", track.musicID)
+            currentURLResolvedAt = Date()
             currentMediaHost = url.host
             let replacement = AVPlayerItem(url: url)
             replacement.preferredForwardBufferDuration = 10
