@@ -46,6 +46,8 @@ private final class SonarServices {
     let toastCenter: ToastCenter
     let confirmationCenter: ConfirmationCenter
     let sleepTimer: SleepTimer
+    let networkStatus: NetworkStatusMonitor
+    let audioCache: AudioCacheController
 
     init() {
         let credentials = BuildCredentialStore()
@@ -68,8 +70,36 @@ private final class SonarServices {
             ),
             direct: NetEasePlaybackResolver(client: direct)
         )
+        let networkStatus = NetworkStatusMonitor()
+        self.networkStatus = networkStatus
+        let cacheStore = AudioCacheStore()
+        // 缓存下载使用独立的解析器，避免与正在播放的曲目争抢
+        // `PlaybackQualityReporting` 的最近一次音质记录。
+        let cacheResolver = PlaybackResolverPipeline.make(
+            primary: PlaybackURLResolver(
+                credentials: credentials,
+                breaker: breaker,
+                chkszAPI: chkszAPI,
+                netease: netease
+            ),
+            direct: NetEasePlaybackResolver(client: direct)
+        )
+        let cacheDownloader = AudioCacheDownloader(
+            store: cacheStore,
+            resolver: cacheResolver,
+            isExpensive: { networkStatus.isExpensiveSnapshot },
+            allowsDownloads: { networkStatus.allowsDownloadsSnapshot }
+        )
+        let audioCache = AudioCacheController(
+            store: cacheStore,
+            downloader: cacheDownloader,
+            network: networkStatus
+        )
+        self.audioCache = audioCache
         playbackService = PlaybackService(
-            resolver: resolver
+            resolver: resolver,
+            audioCache: audioCache,
+            networkStatus: networkStatus
         )
         artworkService = try? ArtworkService(sourceRuntime: runtime)
         trackDetailRefreshCoordinator = TrackDetailRefreshCoordinator(sourceRuntime: runtime)
@@ -94,6 +124,7 @@ private struct ReadySonarView: View {
             .environment(services.toastCenter)
             .environment(services.confirmationCenter)
             .environment(services.sleepTimer)
+            .environment(services.audioCache)
             .environment(\.artworkService, services.artworkService)
             .environment(\.sourceRuntime, services.sourceRuntime)
             .environment(\.trackDetailRefreshCoordinator, services.trackDetailRefreshCoordinator)

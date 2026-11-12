@@ -9,6 +9,33 @@ import AppKit
 import UIKit
 #endif
 
+/// 播放服务对离线缓存的最小依赖。具体实现由 iOS 端注入，macOS 不启用时传 nil。
+@MainActor
+public protocol PlaybackAudioCaching: AnyObject {
+    var autoCacheEnabled: Bool { get }
+    var cellularOnlyCached: Bool { get }
+    func cachedURL(
+        for track: Track,
+        preferred: Quality,
+        allowLowerQuality: Bool
+    ) async -> (url: URL, quality: Quality)?
+    func cacheTracks(_ tracks: [Track], quality: Quality, priorityFirst: Bool) async
+    func handleNetworkChange(isExpensive: Bool) async
+    func invalidateCachedAudio(for track: Track, url: URL) async
+}
+
+/// 播放服务只需要同步读取当前网络是否按流量计费。
+@MainActor
+public protocol PlaybackNetworkStatus: AnyObject {
+    var isExpensive: Bool { get }
+    var isConnected: Bool { get }
+}
+
+public extension Notification.Name {
+    static let sonarNetworkStatusDidChange = Notification.Name("sonar.network.statusDidChange")
+    static let sonarPlaybackDataPolicyDidChange = Notification.Name("sonar.playback.dataPolicyDidChange")
+}
+
 enum PlaybackFailureDiagnostics {
     static func sanitizedDetail(_ value: String?) -> String? {
         guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -107,6 +134,13 @@ public final class PlaybackService {
         case failed(String)
     }
 
+    /// 需要用户知道、但不应改变播放状态的成功/提示信息。
+    /// RootView 监听 id 变化并用全局 Toast 呈现。
+    public struct Notice: Identifiable, Equatable, Sendable {
+        public let id = UUID()
+        public let message: String
+    }
+
     private static let preferredQualityKey = "preferredPlaybackQuality"
     private static let sessionKey = "sonar.playback.session"
     private static let playbackRateKey = "sonar.playback.rate"
@@ -163,9 +197,17 @@ public final class PlaybackService {
 
     /// 最近一次真正拿到的音质（服务端可能降级），用于界面展示与排查。
     public private(set) var lastActualQuality: Quality?
+    /// 需要提示给用户的非错误信息（例如蜂窝网络下未缓存歌曲）。
+    public private(set) var notice: Notice?
     /// 当前播放项所用签名 URL 的解析时间；签名链接过期是不可恢复失败，
     /// 单曲循环必须在下一轮开始前主动换新链接。
     private var currentURLResolvedAt: Date?
+    /// 缓存播放与手动导入的本地音频都无需网络。
+    private var currentItemIsLocal = false
+    public var isUsingCachedAudio: Bool { currentItemIsLocal && queue.current?.source != .local }
+    private let audioCache: (any PlaybackAudioCaching)?
+    private let networkStatus: (any PlaybackNetworkStatus)?
+    private var networkObservers: [NSObjectProtocol] = []
 
     /// 播放速度（0.5x–2x），持久化。
     public private(set) var playbackRate: Float = 1.0
@@ -197,14 +239,23 @@ public final class PlaybackService {
     private var consecutiveAutoplayFailures = 0
     private let maxConsecutiveAutoplaySkips = 3
     private var hasPrefetchedUpcomingForCurrentTrack = false
+    private struct PlaybackLocation: Sendable {
+        let url: URL
+        let quality: Quality?
+    }
+
+    private enum DataAccessError: Error {
+        case requiresWiFi
+    }
+
     private struct UpcomingResolution {
         let id = UUID()
         let musicID: String
         let quality: Quality
-        let task: Task<URL, Error>
+        let task: Task<PlaybackLocation, Error>
     }
     private var upcomingResolution: UpcomingResolution?
-    private var activeURLResolutionTask: Task<URL, Error>?
+    private var activeURLResolutionTask: Task<PlaybackLocation, Error>?
     private var mediaPreparationTask: Task<Void, Never>?
     private var preparedNext: (id: UUID, item: AVPlayerItem)?
     private var preparedStatusObservation: NSKeyValueObservation?
@@ -237,7 +288,9 @@ public final class PlaybackService {
         recoveryDelay: @escaping @Sendable () async throws -> Void = {
             try await Task.sleep(for: .milliseconds(400))
         },
-        bufferingTimeout: Duration = .seconds(20)
+        bufferingTimeout: Duration = .seconds(20),
+        audioCache: (any PlaybackAudioCaching)? = nil,
+        networkStatus: (any PlaybackNetworkStatus)? = nil
     ) {
         self.player = player ?? Self.makePlayer()
         let player = self.player
@@ -258,6 +311,8 @@ public final class PlaybackService {
         self.bufferingTimeout = bufferingTimeout
         self.autoplaySkipDelay = autoplaySkipDelay
         self.randomIndex = randomIndex
+        self.audioCache = audioCache
+        self.networkStatus = networkStatus
         let restoredMode = defaults.string(forKey: Self.playbackModeKey)
             .flatMap(PlaybackMode.init(rawValue:)) ?? .sequence
         playbackMode = restoredMode
@@ -280,6 +335,7 @@ public final class PlaybackService {
         installRemoteCommands()
         installWidgetNotifications()
         installAudioSessionObservers()
+        installNetworkObserver()
     }
 
     deinit {
@@ -292,6 +348,7 @@ public final class PlaybackService {
             preparedBufferObservation?.invalidate()
             endTransitionBackgroundTask()
             removeWidgetNotifications()
+            for observer in networkObservers { NotificationCenter.default.removeObserver(observer) }
             if let timeObserver { player.removeTimeObserver(timeObserver) }
             timeControlObservation?.invalidate()
             itemStatusObservation?.invalidate()
@@ -449,8 +506,14 @@ public final class PlaybackService {
         shouldResumeAfterInterruption = false
         consecutiveAutoplayFailures = 0
         playbackRequested = true
-        if player.currentItem == nil || player.currentItem?.status == .failed {
-            await loadCurrent(autoplay: true, refreshing: player.currentItem?.status == .failed)
+        let needsLocalItem = requiresLocalPlayback && !currentItemIsLocal
+            && queue.current?.source != .local
+        if player.currentItem == nil || player.currentItem?.status == .failed || needsLocalItem {
+            await loadCurrent(
+                autoplay: true,
+                refreshing: player.currentItem?.status == .failed,
+                resumeAt: elapsed
+            )
             return
         }
         do {
@@ -537,6 +600,11 @@ public final class PlaybackService {
         let generation = recoveryGate.generation
         let item = player.currentItem
         let target = CMTime(seconds: max(0, min(seconds, duration)), preferredTimescale: 600)
+        guard item != nil else {
+            elapsed = target.seconds
+            updateNowPlaying()
+            return
+        }
         await player.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero)
         guard !Task.isCancelled, recoveryGate.isCurrent(generation), item === player.currentItem else { return }
         elapsed = target.seconds
@@ -659,13 +727,162 @@ public final class PlaybackService {
         updateNowPlaying()
     }
 
-    /// 记下新的音质上限，并让当前曲目按它重新解析。
-    /// 解析成功前不碰 `AVPlayer`，失败时旧的流还在播，只回滚状态并把原因交回界面。
-    private func recordActualQuality() {
-        guard let reporting = resolver as? PlaybackQualityReporting,
-              let actual = reporting.consumeLastResolvedQuality() else { return }
-        lastActualQuality = actual
-        defaults.set(actual.rawValue, forKey: Self.lastPlayedQualityKey)
+    private var isExpensiveNetwork: Bool { networkStatus?.isExpensive ?? false }
+    private var cellularOnlyCached: Bool { audioCache?.cellularOnlyCached ?? false }
+    private var unmeteredNetworkAvailable: Bool {
+        (networkStatus?.isConnected ?? true) && !isExpensiveNetwork
+    }
+    private var requiresLocalPlayback: Bool { cellularOnlyCached && !unmeteredNetworkAvailable }
+
+    private func resolvePlaybackLocation(
+        for track: Track,
+        quality: Quality,
+        refreshing: Bool = false,
+        prefetched: UpcomingResolution? = nil
+    ) async throws -> PlaybackLocation {
+        try Task.checkCancellation()
+        try resolver.requirePlaybackSupport(for: track.source)
+        let cached = await audioCache?.cachedURL(
+            for: track,
+            preferred: quality,
+            allowLowerQuality: !unmeteredNetworkAvailable
+        )
+        try Task.checkCancellation()
+        if let cached {
+            prefetched?.task.cancel()
+            return PlaybackLocation(url: cached.url, quality: cached.quality)
+        }
+        guard track.source == .local || !requiresLocalPlayback else {
+            throw DataAccessError.requiresWiFi
+        }
+        if let prefetched {
+            do {
+                return try await withTaskCancellationHandler {
+                    let location = try await prefetched.task.value
+                    try Task.checkCancellation()
+                    guard location.url.isFileURL || !requiresLocalPlayback else {
+                        throw DataAccessError.requiresWiFi
+                    }
+                    return location
+                } onCancel: {
+                    prefetched.task.cancel()
+                }
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch is DataAccessError {
+                throw DataAccessError.requiresWiFi
+            } catch {
+                try Task.checkCancellation()
+            }
+        }
+        let resolved = try await resolver.resolvedMusicURL(for: track, quality: quality, refreshing: refreshing)
+        try Task.checkCancellation()
+        guard resolved.url.isFileURL || !requiresLocalPlayback else { throw DataAccessError.requiresWiFi }
+        return PlaybackLocation(url: resolved.url, quality: track.source == .local ? nil : resolved.quality)
+    }
+
+    private func makePlaybackItem(url: URL, bufferDuration: TimeInterval = 10) -> AVPlayerItem {
+        var options: [String: Any] = [:]
+        if !url.isFileURL, cellularOnlyCached {
+            options[AVURLAssetAllowsCellularAccessKey] = false
+            options[AVURLAssetAllowsExpensiveNetworkAccessKey] = false
+        }
+        let item = AVPlayerItem(asset: AVURLAsset(url: url, options: options))
+        if !url.isFileURL { item.preferredForwardBufferDuration = bufferDuration }
+        return item
+    }
+
+    /// Wi-Fi 下把当前曲目与队列后 3 首交给缓存服务。重复调用由缓存端去重。
+    private func scheduleCacheDownloads() {
+        guard let audioCache,
+              let current = queue.current,
+              playbackRequested,
+              unmeteredNetworkAvailable,
+              audioCache.autoCacheEnabled else { return }
+        let tracks = [current] + (playbackMode == .repeatOne ? [] : queue.upcoming(
+            limit: 3,
+            wrapping: playbackMode != .playInOrder
+        ))
+        let quality = preferredQuality
+        Task { [audioCache, tracks, quality] in
+            await audioCache.cacheTracks(tracks, quality: quality, priorityFirst: true)
+        }
+    }
+
+    private func installNetworkObserver() {
+        guard networkStatus != nil else { return }
+        let names: [Notification.Name] = [
+            .sonarNetworkStatusDidChange,
+            .sonarPlaybackDataPolicyDidChange,
+        ]
+        for name in names {
+            networkObservers.append(
+                NotificationCenter.default.addObserver(
+                    forName: name,
+                    object: nil,
+                    queue: .main
+                ) { [weak self] _ in
+                    Task { @MainActor [weak self] in
+                        await self?.handleNetworkStatusChange()
+                    }
+                }
+            )
+        }
+    }
+
+    private func handleNetworkStatusChange() async {
+        guard networkStatus != nil else { return }
+        if let audioCache {
+            Task { await audioCache.handleNetworkChange(isExpensive: !unmeteredNetworkAvailable) }
+        }
+        guard requiresLocalPlayback else {
+            scheduleCacheDownloads()
+            return
+        }
+        // 无论当前是否暂停，都移除下一首的网络缓冲项。
+        discardUpcoming()
+        guard !currentItemIsLocal, let track = queue.current, track.source != .local else { return }
+        let resumeAt = currentPosition()
+        let wasRequested = playbackRequested
+        _ = recoveryGate.beginLoad()
+        activeURLResolutionTask?.cancel()
+        activeURLResolutionTask = nil
+        itemStatusObservation?.invalidate()
+        player.pause()
+        replacePlayerItem(with: nil)
+        elapsed = resumeAt
+        // 先拆除网络资源，再查询缓存；已完成的缓存可以接着播放。
+        await loadCurrent(autoplay: wasRequested, resumeAt: resumeAt)
+    }
+
+    private func currentPosition() -> TimeInterval {
+        let position = player.currentItem?.currentTime().seconds ?? elapsed
+        return position.isFinite ? max(elapsed, position) : elapsed
+    }
+
+    /// 蜂窝网络下没有缓存可用时统一走这里：停掉网络播放，但保留曲目与进度。
+    private func handleCellularPlaybackBlocked() {
+        _ = recoveryGate.beginLoad()
+        activeURLResolutionTask?.cancel()
+        activeURLResolutionTask = nil
+        discardUpcoming()
+        cancelBufferingTimeout()
+        intentRevision += 1
+        playbackRequested = false
+        shouldResumeAfterInterruption = false
+        player.pause()
+        replacePlayerItem(with: nil)
+        currentItemIsLocal = false
+        currentURLResolvedAt = nil
+        currentMediaHost = nil
+        state = .paused
+        updateNowPlaying()
+        endTransitionBackgroundTask()
+        postNotice("蜂窝网络下仅播放已缓存歌曲，请在 Wi-Fi 下播放以自动缓存")
+    }
+
+    private func postNotice(_ message: String) {
+        notice = Notice(message: message)
     }
 
     public func setPreferredQuality(_ quality: Quality) async -> QualityChange {
@@ -682,39 +899,30 @@ public final class PlaybackService {
         let previousState = state
         let revision = intentRevision
         state = .loading
+        let resolutionTask = Task { try await resolvePlaybackLocation(for: track, quality: quality) }
+        activeURLResolutionTask = resolutionTask
+        defer {
+            if recoveryGate.isCurrent(generation) { activeURLResolutionTask = nil }
+        }
         do {
-            try resolver.requirePlaybackSupport(for: track.source)
-            let url = try await resolver.musicURL(for: track, quality: quality)
-            recordActualQuality()
+            let location = try await withTaskCancellationHandler {
+                try await resolutionTask.value
+            } onCancel: {
+                resolutionTask.cancel()
+            }
             try Task.checkCancellation()
             guard recoveryGate.isCurrent(generation), queue.current?.musicID == track.musicID else {
                 return .deferred
             }
-            currentMediaHost = url.host
-            PerfLog.mark("url_ready", track.musicID)
-            let item = AVPlayerItem(url: url)
-            item.preferredForwardBufferDuration = 10
-            replacePlayerItem(with: item)
-            observeStatus(of: item, generation: generation)
-            if resumeAt > 0 {
-                // 用回调版而不是 await 版：新 item 还没 ready 时 await 会一直挂着，
-                // 而我们只需要把起播点排进队列。
-                player.seek(to: CMTime(seconds: resumeAt, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero) { _ in }
-                elapsed = resumeAt
-            } else {
-                elapsed = 0
-            }
-            if playbackRequested {
-                try configureAudioSession()
-                player.play()
-                synchronizePlaybackState()
-            } else {
-                playbackRequested = false
-                state = .paused
-            }
-            prefetchUpcomingTrackIfNeeded()
-            updateNowPlaying()
-            return .reloaded(quality)
+            try completeCurrentLoad(
+                item: makePlaybackItem(url: location.url),
+                url: location.url,
+                generation: generation,
+                prepared: false,
+                actualQuality: location.quality,
+                resumeAt: resumeAt
+            )
+            return .reloaded(location.quality ?? quality)
         } catch {
             guard recoveryGate.isCurrent(generation), queue.current?.musicID == track.musicID else {
                 return .deferred
@@ -723,6 +931,10 @@ public final class PlaybackService {
             if let item = player.currentItem { observeStatus(of: item, generation: generation) }
             synchronizePlaybackState()
             updateNowPlaying()
+            if error is DataAccessError {
+                postNotice("蜂窝网络下仅播放已缓存歌曲，音质偏好将在 Wi-Fi 下生效")
+                return .deferred
+            }
             if error is CancellationError || (error as? URLError)?.code == .cancelled || Task.isCancelled { return .deferred }
             return .failed(
                 PlaybackFailureDiagnostics.message(for: error, fallback: "无法切换音质")
@@ -730,7 +942,11 @@ public final class PlaybackService {
         }
     }
 
-    private func loadCurrent(autoplay: Bool, refreshing: Bool = false) async {
+    private func loadCurrent(
+        autoplay: Bool,
+        refreshing: Bool = false,
+        resumeAt: TimeInterval = 0
+    ) async {
         PerfLog.mark("load_start", refreshing ? "refresh" : "normal")
         cancelBufferingTimeout()
         let generation = recoveryGate.beginLoad()
@@ -773,59 +989,49 @@ public final class PlaybackService {
         }
         itemStatusObservation?.invalidate()
         itemStatusObservation = nil
-        elapsed = 0
+        elapsed = resumeAt
         duration = track.durationSeconds ?? 0
         state = .loading
         hasPrefetchedUpcomingForCurrentTrack = false
         updateNowPlaying()
+        let resolutionTask = Task {
+            try await resolvePlaybackLocation(
+                for: track,
+                quality: quality,
+                refreshing: refreshing,
+                prefetched: prefetched
+            )
+        }
+        activeURLResolutionTask = resolutionTask
+        defer {
+            if recoveryGate.isCurrent(generation) { activeURLResolutionTask = nil }
+        }
         do {
-            try resolver.requirePlaybackSupport(for: track.source)
-            if let preparedItem, let asset = preparedItem.asset as? AVURLAsset {
-                // No suspension between adopting the queued item and advancing:
-                // a mode or queue edit cannot insert a different item ahead of it.
-                try completeCurrentLoad(item: preparedItem, url: asset.url, generation: generation, prepared: true)
-                return
-            }
-            // A next-track lookup can still be running when the user skips or
-            // the current item ends. Transfer that work instead of duplicating it.
-            let resolutionTask = Task { [resolver, prefetched] in
-                if let prefetched {
-                    do {
-                        let url = try await withTaskCancellationHandler {
-                            try await prefetched.task.value
-                        } onCancel: {
-                            prefetched.task.cancel()
-                        }
-                        try Task.checkCancellation()
-                        return url
-                    } catch {
-                        // A speculative failure gets one ordinary on-demand
-                        // attempt; a superseded load must not start more work.
-                        try Task.checkCancellation()
-                    }
-                }
-                try Task.checkCancellation()
-                if refreshing, let refreshable = resolver as? PlaybackURLRefreshing {
-                    return try await refreshable.refreshMusicURL(for: track, quality: quality)
-                }
-                let url = try await resolver.musicURL(for: track, quality: quality)
-                recordActualQuality()
-                return url
-            }
-            activeURLResolutionTask = resolutionTask
-            defer {
-                if recoveryGate.isCurrent(generation) { activeURLResolutionTask = nil }
-            }
-            let url = try await withTaskCancellationHandler {
+            let location = try await withTaskCancellationHandler {
                 try await resolutionTask.value
             } onCancel: {
                 resolutionTask.cancel()
             }
             try Task.checkCancellation()
-            guard recoveryGate.isCurrent(generation), queue.current?.musicID == track.musicID else {
-                return
+            guard recoveryGate.isCurrent(generation), queue.current?.musicID == track.musicID else { return }
+            let canReusePrepared = preparedItem.flatMap { item -> AVPlayerItem? in
+                guard let asset = item.asset as? AVURLAsset, asset.url == location.url,
+                      item.status != .failed,
+                      let queuePlayer = player as? AVQueuePlayer,
+                      queuePlayer.items().dropFirst().first === item else { return nil }
+                return item
             }
-            try completeCurrentLoad(item: AVPlayerItem(url: url), url: url, generation: generation, prepared: false)
+            try completeCurrentLoad(
+                item: canReusePrepared ?? makePlaybackItem(url: location.url),
+                url: location.url,
+                generation: generation,
+                prepared: canReusePrepared != nil,
+                actualQuality: location.quality,
+                resumeAt: resumeAt
+            )
+        } catch is DataAccessError {
+            guard recoveryGate.isCurrent(generation), queue.current?.musicID == track.musicID else { return }
+            handleCellularPlaybackBlocked()
         } catch {
             guard recoveryGate.isCurrent(generation), queue.current?.musicID == track.musicID else {
                 return
@@ -854,10 +1060,29 @@ public final class PlaybackService {
         }
     }
 
-    private func completeCurrentLoad(item: AVPlayerItem, url: URL, generation: Int, prepared: Bool) throws {
-        PerfLog.mark("url_ready", queue.current?.musicID ?? "")
-        currentURLResolvedAt = Date()
-        currentMediaHost = url.host
+    private func completeCurrentLoad(
+        item: AVPlayerItem,
+        url: URL,
+        generation: Int,
+        prepared: Bool,
+        actualQuality: Quality? = nil,
+        resumeAt: TimeInterval = 0
+    ) throws {
+        guard url.isFileURL || !requiresLocalPlayback else { throw DataAccessError.requiresWiFi }
+        let isLocal = url.isFileURL
+        PerfLog.mark(isLocal ? "cache_hit" : "url_ready", queue.current?.musicID ?? "")
+        currentItemIsLocal = isLocal
+        if isLocal {
+            currentURLResolvedAt = nil
+            currentMediaHost = nil
+        } else {
+            currentURLResolvedAt = Date()
+            currentMediaHost = url.host
+        }
+        if let actualQuality {
+            lastActualQuality = actualQuality
+            defaults.set(actualQuality.rawValue, forKey: Self.lastPlayedQualityKey)
+        }
         measuredItem = item
         lastTransitionTiming?.reusedPreparedItem = prepared
         recordTransitionStage("resolved")
@@ -867,6 +1092,14 @@ public final class PlaybackService {
             replacePlayerItem(with: item)
         }
         observeStatus(of: item, generation: generation)
+        if resumeAt > 0 {
+            player.seek(
+                to: CMTime(seconds: resumeAt, preferredTimescale: 600),
+                toleranceBefore: .zero,
+                toleranceAfter: .zero
+            ) { _ in }
+            elapsed = resumeAt
+        }
         if playbackRequested {
             try configureAudioSession()
             player.play()
@@ -920,6 +1153,11 @@ public final class PlaybackService {
     }
 
     private func replacePlayerItem(with item: AVPlayerItem?) {
+        if item == nil {
+            currentItemIsLocal = false
+            currentURLResolvedAt = nil
+            currentMediaHost = nil
+        }
         if let queuePlayer = player as? AVQueuePlayer {
             queuePlayer.removeAllItems()
             if let item { queuePlayer.insert(item, after: nil) }
@@ -929,6 +1167,7 @@ public final class PlaybackService {
     }
 
     private func prefetchUpcomingTrackIfNeeded() {
+        defer { scheduleCacheDownloads() }
         guard playbackMode != .repeatOne,
               let nextTrack = queue.peekNext(wrapping: playbackMode != .playInOrder),
               nextTrack.source.isEnabled,
@@ -936,25 +1175,28 @@ public final class PlaybackService {
             discardUpcoming()
             return
         }
+        // 蜂窝或断网时不做音频预缓冲，切歌时直接查询本地缓存。
+        guard unmeteredNetworkAvailable else {
+            discardUpcoming()
+            return
+        }
         let quality = preferredQuality
         if upcomingResolution?.musicID == nextTrack.musicID, upcomingResolution?.quality == quality { return }
         discardUpcoming()
         guard playbackRequested, player.currentItem != nil else { return }
-        let task = Task(priority: .userInitiated) { [resolver, nextTrack, quality] in
-            try await resolver.musicURL(for: nextTrack, quality: quality)
-        }
+        let task = Task { try await resolvePlaybackLocation(for: nextTrack, quality: quality) }
         let request = UpcomingResolution(musicID: nextTrack.musicID, quality: quality, task: task)
         upcomingResolution = request
         guard player is AVQueuePlayer else { return }
         mediaPreparationTask = Task { [weak self] in
             do {
-                let url = try await task.value
+                let location = try await task.value
                 try Task.checkCancellation()
                 guard let self, self.upcomingResolution?.id == request.id,
+                      self.unmeteredNetworkAvailable,
                       let queuePlayer = self.player as? AVQueuePlayer,
                       let currentItem = queuePlayer.currentItem else { return }
-                let item = AVPlayerItem(url: url)
-                item.preferredForwardBufferDuration = 5
+                let item = self.makePlaybackItem(url: location.url, bufferDuration: 5)
                 guard queuePlayer.canInsert(item, after: currentItem) else { return }
                 self.preparedNext = (request.id, item)
                 queuePlayer.insert(item, after: currentItem)
@@ -1243,7 +1485,9 @@ public final class PlaybackService {
         shouldResumeAfterInterruption = false
 
         playbackRequested = true
-        if let currentItem = player.currentItem, currentItem.status == .readyToPlay {
+        if requiresLocalPlayback, !currentItemIsLocal, queue.current?.source != .local {
+            await play()
+        } else if let currentItem = player.currentItem, currentItem.status == .readyToPlay {
             state = .playing
             player.playImmediately(atRate: 1.0)
             synchronizePlaybackState()
@@ -1352,6 +1596,7 @@ public final class PlaybackService {
         // Capture the item's position before removing it so recovery cannot rewind.
         let position = item.currentTime().seconds
         let resumeAt = position.isFinite ? max(elapsed, position) : elapsed
+        let failedCacheURL = (item.asset as? AVURLAsset)?.url
         state = .loading
         discardUpcoming()
         player.pause()
@@ -1361,6 +1606,9 @@ public final class PlaybackService {
         itemStatusObservation = nil
         elapsed = resumeAt
         updateNowPlaying()
+        if let failedCacheURL, failedCacheURL.isFileURL, track.source != .local {
+            await audioCache?.invalidateCachedAudio(for: track, url: failedCacheURL)
+        }
 
         do {
             try await recoveryDelay()
@@ -1377,42 +1625,34 @@ public final class PlaybackService {
               queue.currentIndex == queueIndex,
               queue.current?.musicID == trackID else { return }
 
+        let resolutionTask = Task {
+            try await resolvePlaybackLocation(for: track, quality: preferredQuality, refreshing: true)
+        }
+        activeURLResolutionTask = resolutionTask
+        defer {
+            if recoveryGate.isCurrent(generation) { activeURLResolutionTask = nil }
+        }
         do {
-            let url: URL
-            if let refreshable = resolver as? PlaybackURLRefreshing {
-                url = try await refreshable.refreshMusicURL(for: track, quality: preferredQuality)
-            } else {
-                url = try await resolver.musicURL(for: track, quality: preferredQuality)
+            let location = try await withTaskCancellationHandler {
+                try await resolutionTask.value
+            } onCancel: {
+                resolutionTask.cancel()
             }
             try Task.checkCancellation()
             guard recoveryGate.isCurrent(generation),
                   queue.currentIndex == queueIndex,
                   queue.current?.musicID == trackID else { return }
-
-            PerfLog.mark("url_ready", track.musicID)
-            currentURLResolvedAt = Date()
-            currentMediaHost = url.host
-            let replacement = AVPlayerItem(url: url)
-            replacement.preferredForwardBufferDuration = 10
-            replacePlayerItem(with: replacement)
-            observeStatus(of: replacement, generation: generation)
-            if resumeAt > 0 {
-                player.seek(
-                    to: CMTime(seconds: resumeAt, preferredTimescale: 600),
-                    toleranceBefore: .zero,
-                    toleranceAfter: .zero
-                ) { _ in }
-                elapsed = resumeAt
-            }
-            if playbackRequested {
-                try configureAudioSession()
-                player.play()
-                synchronizePlaybackState()
-            } else {
-                state = .paused
-            }
-            prefetchUpcomingTrackIfNeeded()
-            updateNowPlaying()
+            try completeCurrentLoad(
+                item: makePlaybackItem(url: location.url),
+                url: location.url,
+                generation: generation,
+                prepared: false,
+                actualQuality: location.quality,
+                resumeAt: resumeAt
+            )
+        } catch is DataAccessError {
+            guard recoveryGate.isCurrent(generation), queue.current?.musicID == trackID else { return }
+            handleCellularPlaybackBlocked()
         } catch {
             guard recoveryGate.isCurrent(generation),
                   queue.currentIndex == queueIndex,

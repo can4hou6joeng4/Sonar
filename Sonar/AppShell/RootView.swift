@@ -337,6 +337,11 @@ struct RootView: View {
                 closeSettingsDrawer()
             }
         }
+        .onChange(of: playbackService.notice?.id) { _, _ in
+            if let notice = playbackService.notice {
+                toastCenter.show(notice.message)
+            }
+        }
         .overlay(alignment: .bottom) {
             ToastOverlay()
                 .padding(.bottom, 96)

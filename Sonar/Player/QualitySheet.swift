@@ -39,7 +39,7 @@ struct QualitySheet: View {
                             Image(systemName: "waveform.badge.checkmark")
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(scheme.primary)
-                            Text("上次实际播放音质：\(actual.title)")
+                            Text("\(playbackService.isUsingCachedAudio ? "当前缓存音质" : "上次实际播放音质")：\(actual.title)")
                                 .font(.system(size: 12))
                                 .foregroundStyle(scheme.onSurfaceVariant)
                             Spacer(minLength: 0)
@@ -119,7 +119,7 @@ struct QualitySheet: View {
             case let .reloaded(applied):
                 toastCenter.show("已切换到 \(applied.title)")
             case .deferred:
-                toastCenter.show("下一首将从 \(quality.title) 开始")
+                toastCenter.show("音质偏好已保存：\(quality.title)")
             case let .failed(message):
                 toastCenter.show("切换失败：\(message)")
             }

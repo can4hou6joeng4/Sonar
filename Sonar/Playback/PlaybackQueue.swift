@@ -98,6 +98,20 @@ public struct PlaybackQueue: Sendable, Equatable {
 
     public var shuffleEnabled: Bool { isShuffled }
 
+    /// 用队列副本预测后续歌曲，不改变真实播放进度或历史。
+    public func upcoming(limit: Int, wrapping: Bool = false) -> [Track] {
+        guard limit > 0, let current else { return [] }
+        var probe = self
+        var result: [Track] = []
+        var seen: Set<String> = [current.musicID]
+        for _ in 0..<limit {
+            guard let next = probe.advance(wrapping: wrapping) else { break }
+            guard seen.insert(next.musicID).inserted else { break }
+            result.append(next)
+        }
+        return result
+    }
+
     public var shuffledPlayedMusicIDs: Set<String> { playedMusicIDs }
 
     public func hasSameTracks(as tracks: [Track]) -> Bool {
