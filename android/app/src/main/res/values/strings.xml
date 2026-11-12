@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Sonar</string>
+    <string name="notification_channel_playback">正在播放</string>
+    <string name="notification_channel_playback_description">显示当前歌曲与播放控制</string>
+</resources>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#0D0D11</color>
+    <color name="sonar_background">#0D0D11</color>
+    <color name="sonar_accent">#FF3A39</color>
+</resources>

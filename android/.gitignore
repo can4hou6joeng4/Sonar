@@ -1,0 +1,14 @@
+.gradle/
+build/
+local.properties
+keystore.properties
+keystore/
+*.jks
+*.keystore
+captures/
+.externalNativeBuild/
+.cxx/
+app/src/main/assets/build_credentials.json
+app/schemas/
+app/src/test/
+app/src/androidTest/
