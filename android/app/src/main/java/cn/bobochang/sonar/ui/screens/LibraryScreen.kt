@@ -102,12 +102,20 @@ fun LibraryScreen(
             .background(palette.background)
             .padding(top = statusTop),
     ) {
-        LibraryHeader(onOpenSettings = onOpenSettings)
-        ScopePicker(
-            selected = selectedScope,
-            onSelect = { selectedScope = it },
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp)
+                .padding(top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            LibrarySettingsButton(onOpenSettings = onOpenSettings)
+            ScopePicker(
+                selected = selectedScope,
+                onSelect = { selectedScope = it },
+                modifier = Modifier.weight(1f).padding(start = 4.dp),
+            )
+        }
 
         when (selectedScope) {
             LibraryScope.FAVORITES -> TrackList(
@@ -284,27 +292,17 @@ fun LibraryScreen(
 }
 
 @Composable
-private fun LibraryHeader(onOpenSettings: () -> Unit) {
+private fun LibrarySettingsButton(onOpenSettings: () -> Unit) {
     val palette = LocalSonarPalette.current
-    Row(
+    val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    Box(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 22.dp)
-            .padding(top = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .size(44.dp)
+            .then(circleIconPress(interaction, 38.dp))
+            .clickable(interactionSource = interaction, indication = null, onClick = onOpenSettings),
+        contentAlignment = Alignment.Center,
     ) {
-        Text("资料库", color = palette.ink, fontSize = 23.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.weight(1f))
-        val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .then(circleIconPress(interaction, 38.dp))
-                .clickable(interactionSource = interaction, indication = null, onClick = onOpenSettings),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.Rounded.Settings, contentDescription = "设置", tint = palette.ink, modifier = Modifier.size(20.dp))
-        }
+        Icon(Icons.Rounded.Settings, contentDescription = "设置", tint = palette.ink, modifier = Modifier.size(20.dp))
     }
 }
 
