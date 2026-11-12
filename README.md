@@ -5,12 +5,14 @@
 <h1 align="center">Sonar</h1>
 
 <p align="center"><strong>🐋 在深水里靠声音辨路。</strong></p>
-<p align="center">原生 iOS 与 macOS 音乐播放器，让搜索、收藏与聆听回归纯粹。</p>
+<p align="center">原生 iOS、macOS 与 Android 音乐播放器，让搜索、收藏与聆听回归纯粹。</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/iOS-17%2B-000000?style=for-the-badge&logo=apple&logoColor=white" alt="iOS 17+" />
   <img src="https://img.shields.io/badge/macOS-14%2B-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS 14+" />
+  <img src="https://img.shields.io/badge/Android-8.0%2B-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android 8.0+" />
   <img src="https://img.shields.io/badge/SwiftUI-FA7343?style=for-the-badge&logo=swift&logoColor=white" alt="SwiftUI" />
+  <img src="https://img.shields.io/badge/Kotlin-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Kotlin" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-34C759?style=for-the-badge" alt="GPL-3.0" /></a>
   <a href="https://linux.do/"><img src="https://img.shields.io/badge/LINUX_DO-Community-1A1A1A?style=for-the-badge" alt="LINUX DO 社区" /></a>
 </p>
@@ -82,13 +84,14 @@ curl -fsSL https://sonar.bobochang.cn/install.sh | sh   # 下载 → 校验 SHA-
 - **Mac 随手播控**：状态栏选歌面板与顶部播放器共享播放、收藏状态，支持悬停展开、封面、歌词、进度和音量控制；取消收藏提供确认高亮与收起动画。
 - **最高音质优先**：网易云直连优先、ChKSz 兜底，从母带音质开始，缺少可用结果时逐级尝试 Hi-Res、无损、320K、128K，保持同一歌曲 ID。
 - **iOS 离线缓存**：Wi-Fi 下自动缓存正在播放与后续歌曲，蜂窝网络默认只播放已缓存歌曲；保留最高音质偏好，不设缓存容量上限，设置中可查看占用和清除缓存。
+- **Android 原生客户端**：Kotlin + Jetpack Compose + Media3，提供首页、搜索、资料库、全屏播放页、同步歌词、待播队列、定时关闭、音质选择与离线缓存；歌单备份与 iOS 使用同一格式，可跨端迁移。构建与签名见 [android/README.md](android/README.md)。
 - **歌单迁移**：粘贴网易云音乐的公开歌单链接或 ID，预览后按原顺序合并，自动跳过已收藏歌曲。
 
 Sonar 没有开屏广告或内置社交页面。本地音乐完全离线读取；在线歌曲、封面和歌词来自第三方服务，可用性与实际播放音质取决于歌曲和音源；歌单备份保存歌曲信息，不包含音频文件。
 
 ## English overview
 
-Sonar is a native SwiftUI music player for **iOS 17+ and macOS 14+**. It supports offline local music playback (MP3, FLAC, M4A, WAV) with automatic ID3 metadata and synchronized LRC lyrics, as well as online querying through NetEase via ChKSz. QQ Music, Kugou, and other sources are temporarily hidden and disabled. Existing favorites and backups are preserved; tracks from disabled sources are marked unavailable and excluded from playback. It provides local playlists, JSON backup, synchronized lyrics, and playback queues. The Mac app combines a menu bar library with a notch player; displays without a notch use a top capsule. Both surfaces share playback and library state.
+Sonar is a native music player for **iOS 17+, macOS 14+, and Android 8.0+**. It supports offline local music playback (MP3, FLAC, M4A, WAV) with automatic ID3 metadata and synchronized LRC lyrics, as well as online querying through NetEase via ChKSz. QQ Music, Kugou, and other sources are temporarily hidden and disabled. Existing favorites and backups are preserved; tracks from disabled sources are marked unavailable and excluded from playback. It provides local playlists, JSON backup, synchronized lyrics, and playback queues. The Mac app combines a menu bar library with a notch player; displays without a notch use a top capsule. Both surfaces share playback and library state. The Android client is a separate native Kotlin/Compose implementation built around Media3, with its own library database and a backup format compatible with iOS.
 
 The current iOS source features an artwork-led home, icon navigation, a floating mini-player, and a cover-tinted player with a glass control card. Circular glass controls and their original press feedback have been restored. The welcome sequence stages the cover, vinyl, and branding before entering the home; the full player slides up from the bottom, and track changes crossfade artwork and transition the background color. Lyrics, queue management, quality selection, and the in-place search overlay remain accessible. Search automatically refocuses once after the keyboard first appears, with no compatibility setting required, and protects marked-text composition from automatic searches. Third-party keyboards must be enabled in iOS Settings. The medium iOS Now Playing widget includes a shuffle button synchronized with the app. The screenshots were captured on the iPhone 17 Pro Simulator before the latest navigation and keyboard changes. These changes are included in the build 27 iOS preview IPA.
 
@@ -108,6 +111,7 @@ Mac 安装包采用本地 ad-hoc 签名，没有 Developer ID 签名或 Apple �
 | --- | --- | --- |
 | iPhone | iOS 17.0+ | 下载未签名 IPA 后自行签名，或在 Xcode 中选择 `Sonar` 并配置个人签名后安装 |
 | Mac | macOS 14.0+ | 直接下载 `SonarMac.dmg` 拖入 Applications，或运行 `./scripts/package-mac.sh` 一键打包 |
+| Android | Android 8.0+（API 26） | 在 `android/` 目录执行 `./gradlew :app:assembleDebug` 构建 APK，详见 [Android 构建说明](android/README.md) |
 
 自行打包的 iOS App 可通过适用的个人签名工具安装。TrollStore 仅适用于其支持的系统与设备，请先核对兼容性。
 
@@ -184,6 +188,17 @@ Mac 启动后显示状态栏图标及已启用的顶部播放器。点击状态�
 
 取消收藏后，歌曲行会短暂显示“已移除”，再淡出收起；提示带上歌名，便于确认操作结果。
 
+### 运行 Android App
+
+Android 客户端位于 `android/`，使用原生 Kotlin、Jetpack Compose 与 Media3，不依赖 Xcode 或本地 Agent 框架。需要 JDK 17+（推荐 21）以及 Android SDK Platform 35、Build-Tools 35.0.0：
+
+```sh
+cd android
+./gradlew :app:assembleDebug
+```
+
+调试 APK 输出到 `android/app/build/outputs/apk/debug/app-debug.apk`。正式签名、AAB 打包、凭据注入与发布说明见 [android/README.md](android/README.md)。Android 端与 iOS/macOS 使用同一套网易云直连与 ChKSz 解析语义，可在设置页加密保存自己的凭据，也可通过构建环境变量注入。
+
 ### 自行打包 IPA
 
 使用仓库脚本生成未签名 IPA；通过 Xcode 安装到真机的签名配置见[运行 iOS App](#运行-ios-app)。
@@ -204,7 +219,7 @@ Mac 启动后显示状态栏图标及已启用的顶部播放器。点击状态�
 
 ### 本地资料库
 
-歌单与歌曲元数据保存在本机。iOS 设置中的「歌单备份」和 Mac 面板设置支持 JSON 导入、导出；导入会追加新歌曲并跳过重复项。两端资料库独立，可用备份手动迁移。
+歌单与歌曲元数据保存在本机。iOS 设置中的「歌单备份」、Mac 面板设置和 Android 资料库支持 JSON 导入、导出；导入会追加新歌曲并跳过重复项。三端资料库独立，可用同一份 `sonar.personal-playlist` v1 备份手动迁移。
 
 当前仅启用网易云音乐，不显示音源筛选控件。网易云直连层提供歌手、专辑、歌词、歌单详情与播放地址，ChKSz 提供歌曲搜索及部分回退服务；播放与收藏保留所选歌曲 ID。QQ、酷狗及其他音源的入口和网络调用暂时停用；已有收藏和备份完整保留，相关歌曲标记为「不可用」，无法播放或加入待播队列，仍可管理与备份。播放全部及随机播放会跳过停用音源，不会跨平台替换歌曲。
 
@@ -227,6 +242,8 @@ iOS 默认开启「自动缓存」和「蜂窝网络下仅播放已缓存歌曲�
 | `SONAR_CHKSZ_KEY` | ChKSz 的网易云歌曲与歌单接口凭据 |
 
 构建脚本生成 `BuildCredentials.json` 并打包到 App。该文件已被 Git 忽略；使用凭据应遵循相应服务的授权范围和使用条款。
+
+Android 端还支持通过 `SONAR_NETEASE_COOKIE`、`SONAR_WY_TOKEN` 注入网易云登录态，生成仅存在于 `android/app/build/` 的 `build_credentials.json`。更推荐在应用内「设置 → 账号与音源」保存凭据：Android 会使用系统 Keystore 加密，且不会进入备份或日志。
 
 <details>
 <summary>播放解析与切歌</summary>
@@ -255,7 +272,7 @@ ChKSz 单次请求默认在 15 秒内结束（超时或连接中断会重试一�
 
 > **请在阅读并理解以下条款后再使用或参与本项目：**
 
-1. **项目目的与代码许可**：Sonar 起源于个人兴趣和原生 iOS/macOS 架构实践。自有代码按 GPL-3.0 授权，使用、修改和再分发的权利与义务以许可证为准，包括许可证允许的商业使用；第三方代码遵循各自的许可。项目目的不构成额外的代码用途限制。
+1. **项目目的与代码许可**：Sonar 起源于个人兴趣和原生 Apple 平台、Android 架构实践。自有代码按 GPL-3.0 授权，使用、修改和再分发的权利与义务以许可证为准，包括许可证允许的商业使用；第三方代码遵循各自的许可。项目目的不构成额外的代码用途限制。
 2. **客户端与本地数据**：本项目不运营音乐后端或音频托管服务，不随仓库或安装包分发受版权保护的音视频文件。歌单与歌曲元数据保存在本机；播放涉及的音频流、封面与歌词由客户端按用户操作向第三方服务请求。
 3. **知识产权归属**：所有由音源返回的歌曲、歌词、专辑图文及商标等合法知识产权均归属于其各自的原始版权方、歌手、唱片公司或对应在线音乐服务平台。
 4. **服务与内容的使用**：代码许可证不授予音乐内容、第三方服务接口或商标的使用权。使用者应遵守相应服务的授权范围、使用条款与所在地法律法规，尊重音乐版权，支持正版音乐服务。
@@ -268,6 +285,7 @@ ChKSz 单次请求默认在 15 秒内结束（超时或连接中断会重试一�
 - [lx-music-mobile](https://github.com/lyswhut/lx-music-mobile)：早期版本的 JavaScript 音源适配曾参考其实现，相关脚本已在当前版本移除，历史来源保留在许可材料中。
 - [Atoll](https://github.com/Ebullioscopic/Atoll)：Mac 顶部播放器的交互参考；Sonar 使用自己的窗口、界面与播放实现，未引入其源代码或素材。
 - [Spun 演示视频](https://xhslink.cn/o/9wrbFwvMx18)：iOS 大图主页、悬浮播放条与播放控制卡片的视觉参考，由 Sonar 使用 SwiftUI 实现。
+- [OuterTune](https://github.com/OuterTune/OuterTune)、[InnerTune](https://github.com/z-huang/InnerTune)、[Metrolist](https://github.com/mostafaalagamy/Metrolist) 与 [Auxio](https://github.com/OxygenCobalt/Auxio)：Android 端的媒体库、队列与界面架构参考；Sonar 使用自己的 Kotlin/Compose 实现，未复制其源码。
 
 第三方代码、依赖与许可说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 和 [LICENSES/](LICENSES/)。
 
