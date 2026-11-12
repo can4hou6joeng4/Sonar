@@ -20,6 +20,7 @@ struct SettingsView: View {
     @Environment(SonarThemeState.self) private var themeState
     @Environment(UIPlaybackPreferences.self) private var preferences
     @Environment(PlaybackService.self) private var playbackService
+    @Environment(AudioCacheController.self) private var audioCache
     @Environment(\.m3Scheme) private var scheme
     @Environment(\.modelContext) private var modelContext
     @Environment(\.onlinePlaylistImporter) private var onlinePlaylistImporter
@@ -32,6 +33,7 @@ struct SettingsView: View {
     @State private var backupMessage: String?
     @State private var cookieInput = ""
     @State private var cookieStatus: String?
+    @State private var showClearCacheConfirmation = false
     @AppStorage(NetEaseCookieStore.preferBundledKey) private var preferBundledCookie = false
     @State private var isValidatingCookie = false
     private let cookieStore = NetEaseCookieStore()
@@ -39,6 +41,7 @@ struct SettingsView: View {
     var body: some View {
         @Bindable var themeState = themeState
         @Bindable var preferences = preferences
+        @Bindable var audioCache = audioCache
 
         VStack(spacing: 0) {
             header
@@ -134,6 +137,68 @@ struct SettingsView: View {
                     .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
                     .accessibilityIdentifier("settings-quality-button")
 
+                    sectionTitle("离线缓存")
+                    VStack(spacing: 0) {
+                        settingRow(
+                            icon: "arrow.down.circle",
+                            title: "自动缓存",
+                            subtitle: audioCache.downloadsText
+                        ) {
+                            Toggle("自动缓存", isOn: $audioCache.autoCacheEnabled)
+                                .labelsHidden()
+                                .accessibilityIdentifier("settings-audio-cache-auto")
+                        }
+
+                        settingRow(
+                            icon: "antenna.radiowaves.left.and.right.slash",
+                            title: "蜂窝网络下仅播放已缓存歌曲",
+                            subtitle: "当前网络：\(audioCache.networkDescription)"
+                        ) {
+                            Toggle(
+                                "蜂窝网络下仅播放已缓存歌曲",
+                                isOn: $audioCache.cellularOnlyCached
+                            )
+                            .labelsHidden()
+                            .accessibilityIdentifier("settings-audio-cache-cellular-only")
+                        }
+
+                        Button {
+                            showClearCacheConfirmation = true
+                        } label: {
+                            settingRow(
+                                icon: "trash",
+                                title: "清除缓存",
+                                subtitle: audioCache.usageText
+                            ) {
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(scheme.outline)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("settings-audio-cache-clear")
+                        // 抽屉内 confirmationDialog 的取消失败，用 alert 做删除确认。
+                        .alert(
+                            "清除全部缓存？",
+                            isPresented: $showClearCacheConfirmation
+                        ) {
+                            Button("清除缓存", role: .destructive) {
+                                Task { await audioCache.clearCache() }
+                            }
+                            Button("取消", role: .cancel) {}
+                        } message: {
+                            Text("已缓存的歌曲会从本机删除，再次播放时需要重新下载。")
+                        }
+                    }
+                    .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
+                    Text("按所选音质缓存，不设容量上限。空间不足时暂停新增下载，已缓存歌曲保留。")
+                        .font(.system(size: 12))
+                        .foregroundStyle(scheme.onSurfaceVariant)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, NCMDesignTokens.Layout.horizontalPadding)
+                        .padding(.top, 8)
+
                     sectionTitle("歌单")
                     VStack(spacing: 0) {
                         backupButton(icon: "music.note.list", title: "从其他播放器导入",
@@ -174,6 +239,7 @@ struct SettingsView: View {
                 }
             }
             .scrollIndicators(.hidden)
+            .accessibilityIdentifier("settings-scroll")
         }
         .background(scheme.appSurface.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
@@ -325,6 +391,8 @@ struct SettingsView: View {
             trailing()
         }
         .frame(minHeight: 58)
+        // 整行可点：否则命中区域只覆盖文字，行内空白（尤其元素 frame 中心）点击会落空。
+        .contentShape(Rectangle())
         .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(scheme.outlineVariant)
