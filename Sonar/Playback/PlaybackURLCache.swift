@@ -32,12 +32,16 @@ public actor PlaybackURLCache {
     }
 
     public func value(for key: Key) -> URL? {
+        resolvedValue(for: key)?.url
+    }
+
+    public func resolvedValue(for key: Key) -> ResolvedPlaybackURL? {
         guard let entry = entries[key] else { return nil }
         guard entry.expiresAt > now(), entry.actualQuality.rank >= key.quality.rank else {
             entries[key] = nil
             return nil
         }
-        return entry.url
+        return ResolvedPlaybackURL(url: entry.url, quality: entry.actualQuality)
     }
 
     public func insert(_ url: URL, actualQuality: Quality, for key: Key) {

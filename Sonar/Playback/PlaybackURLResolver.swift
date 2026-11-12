@@ -379,12 +379,34 @@ enum PlaybackRedirectPolicy {
     }
 }
 
+/// 地址与实际音质必须随同一次请求返回，避免并发预取或下载串用音质记录。
+public struct ResolvedPlaybackURL: Sendable {
+    public let url: URL
+    public let quality: Quality
+
+    public init(url: URL, quality: Quality) {
+        self.url = url
+        self.quality = quality
+    }
+}
+
 public protocol PlaybackURLResolving: Sendable {
     func musicURL(for track: Track, quality: Quality) async throws -> URL
+    func resolvedMusicURL(for track: Track, quality: Quality, refreshing: Bool) async throws -> ResolvedPlaybackURL
     func supportsPlayback(of source: MusicSource) -> Bool
 }
 
 public extension PlaybackURLResolving {
+    func resolvedMusicURL(for track: Track, quality: Quality, refreshing: Bool = false) async throws -> ResolvedPlaybackURL {
+        let url: URL
+        if refreshing, let refreshable = self as? PlaybackURLRefreshing {
+            url = try await refreshable.refreshMusicURL(for: track, quality: quality)
+        } else {
+            url = try await musicURL(for: track, quality: quality)
+        }
+        return ResolvedPlaybackURL(url: url, quality: quality)
+    }
+
     func supportsPlayback(of source: MusicSource) -> Bool { source.isEnabled }
 
     func requirePlaybackSupport(for source: MusicSource) throws {
@@ -456,22 +478,24 @@ public final class PlaybackURLResolver: PlaybackURLRefreshing, @unchecked Sendab
     }
 
     public func musicURL(for track: Track, quality: Quality) async throws -> URL {
-        if track.source == .local {
-            return try Self.resolveLocalURL(track: track)
-        }
-        try track.source.requireEnabled()
-        let key = PlaybackURLCache.Key(track: track, quality: quality)
-        if let cached = await cache.value(for: key) { return cached }
-        return try await resolveAndCache(track: track, quality: quality, key: key)
+        try await resolvedMusicURL(for: track, quality: quality, refreshing: false).url
     }
 
     public func refreshMusicURL(for track: Track, quality: Quality) async throws -> URL {
+        try await resolvedMusicURL(for: track, quality: quality, refreshing: true).url
+    }
+
+    public func resolvedMusicURL(for track: Track, quality: Quality, refreshing: Bool) async throws -> ResolvedPlaybackURL {
         if track.source == .local {
-            return try Self.resolveLocalURL(track: track)
+            return ResolvedPlaybackURL(url: try Self.resolveLocalURL(track: track), quality: quality)
         }
         try track.source.requireEnabled()
         let key = PlaybackURLCache.Key(track: track, quality: quality)
-        await cache.removeValue(for: key)
+        if refreshing {
+            await cache.removeValue(for: key)
+        } else if let cached = await cache.resolvedValue(for: key) {
+            return cached
+        }
         return try await resolveAndCache(track: track, quality: quality, key: key)
     }
 
@@ -502,7 +526,7 @@ public final class PlaybackURLResolver: PlaybackURLRefreshing, @unchecked Sendab
         return url
     }
 
-    private func resolveAndCache(track: Track, quality: Quality, key: PlaybackURLCache.Key) async throws -> URL {
+    private func resolveAndCache(track: Track, quality: Quality, key: PlaybackURLCache.Key) async throws -> ResolvedPlaybackURL {
         let result: ChkszPlaybackResult
         switch track.source {
         case .tx, .kg, .local:
@@ -518,7 +542,7 @@ public final class PlaybackURLResolver: PlaybackURLRefreshing, @unchecked Sendab
         guard result.actualQuality.rank >= quality.rank else {
             throw SourceError.source(message: "该音质不可用，实际返回 \(result.actualQuality.rawValue)")
         }
-        return mediaURL
+        return ResolvedPlaybackURL(url: mediaURL, quality: result.actualQuality)
     }
 
     static func chkszQuality(from object: [String: Any]) -> Quality {

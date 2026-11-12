@@ -53,14 +53,14 @@ public final class AlternatePlaybackURLResolver: PlaybackURLRefreshing, Playback
     }
 
     public func musicURL(for track: Track, quality: Quality) async throws -> URL {
-        try await resolve(track, quality: quality, refreshing: false)
+        try await resolvedMusicURL(for: track, quality: quality, refreshing: false).url
     }
 
     public func refreshMusicURL(for track: Track, quality: Quality) async throws -> URL {
-        try await resolve(track, quality: quality, refreshing: true)
+        try await resolvedMusicURL(for: track, quality: quality, refreshing: true).url
     }
 
-    private func resolve(_ track: Track, quality: Quality, refreshing: Bool) async throws -> URL {
+    public func resolvedMusicURL(for track: Track, quality: Quality, refreshing: Bool) async throws -> ResolvedPlaybackURL {
         try requirePlaybackSupport(for: track.source)
         var firstFailure: Error?
         if preferred.supportsPlayback(of: track.source) {
@@ -83,11 +83,8 @@ public final class AlternatePlaybackURLResolver: PlaybackURLRefreshing, Playback
         }
     }
 
-    private func candidate(_ resolver: PlaybackURLResolving, track: Track, quality: Quality, refreshing: Bool) async throws -> URL {
-        if refreshing, let resolver = resolver as? PlaybackURLRefreshing {
-            return try await resolver.refreshMusicURL(for: track, quality: quality)
-        }
-        return try await resolver.musicURL(for: track, quality: quality)
+    private func candidate(_ resolver: PlaybackURLResolving, track: Track, quality: Quality, refreshing: Bool) async throws -> ResolvedPlaybackURL {
+        try await resolver.resolvedMusicURL(for: track, quality: quality, refreshing: refreshing)
     }
 }
 
@@ -107,14 +104,14 @@ public final class HighestAvailableQualityPlaybackURLResolver: PlaybackURLRefres
     }
 
     public func musicURL(for track: Track, quality: Quality) async throws -> URL {
-        try await resolve(track: track, quality: quality, refreshing: false)
+        try await resolvedMusicURL(for: track, quality: quality, refreshing: false).url
     }
 
     public func refreshMusicURL(for track: Track, quality: Quality) async throws -> URL {
-        try await resolve(track: track, quality: quality, refreshing: true)
+        try await resolvedMusicURL(for: track, quality: quality, refreshing: true).url
     }
 
-    private func resolve(track: Track, quality: Quality, refreshing: Bool) async throws -> URL {
+    public func resolvedMusicURL(for track: Track, quality: Quality, refreshing: Bool) async throws -> ResolvedPlaybackURL {
         try resolver.requirePlaybackSupport(for: track.source)
         guard let startingIndex = Self.qualityOrder.firstIndex(of: quality) else {
             return try await resolveCandidate(track: track, quality: quality, refreshing: refreshing)
@@ -146,11 +143,8 @@ public final class HighestAvailableQualityPlaybackURLResolver: PlaybackURLRefres
         throw SourceError.source(message: "没有可用的播放音质")
     }
 
-    private func resolveCandidate(track: Track, quality: Quality, refreshing: Bool) async throws -> URL {
-        if refreshing, let refreshable = resolver as? PlaybackURLRefreshing {
-            return try await refreshable.refreshMusicURL(for: track, quality: quality)
-        }
-        return try await resolver.musicURL(for: track, quality: quality)
+    private func resolveCandidate(track: Track, quality: Quality, refreshing: Bool) async throws -> ResolvedPlaybackURL {
+        try await resolver.resolvedMusicURL(for: track, quality: quality, refreshing: refreshing)
     }
 
 }

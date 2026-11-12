@@ -173,14 +173,14 @@ public final class NetEasePlaybackResolver: PlaybackURLRefreshing, PlaybackQuali
     public func supportsPlayback(of source: MusicSource) -> Bool { source == .wy }
 
     public func musicURL(for track: Track, quality: Quality) async throws -> URL {
-        try await resolve(track: track, quality: quality)
+        try await resolvedMusicURL(for: track, quality: quality, refreshing: false).url
     }
 
     public func refreshMusicURL(for track: Track, quality: Quality) async throws -> URL {
-        try await resolve(track: track, quality: quality)
+        try await resolvedMusicURL(for: track, quality: quality, refreshing: true).url
     }
 
-    private func resolve(track: Track, quality: Quality) async throws -> URL {
+    public func resolvedMusicURL(for track: Track, quality: Quality, refreshing: Bool) async throws -> ResolvedPlaybackURL {
         guard track.source == .wy else {
             throw SourceError.source(message: "当前解析器只支持网易云音源")
         }
@@ -191,7 +191,7 @@ public final class NetEasePlaybackResolver: PlaybackURLRefreshing, PlaybackQuali
             throw SourceError.source(message: "该音质不可用，实际返回 \(actualQuality.title)")
         }
         record(actualQuality)
-        return url
+        return ResolvedPlaybackURL(url: url, quality: actualQuality)
     }
 
     static func request(for quality: Quality) -> (level: String, encodeType: String) {
