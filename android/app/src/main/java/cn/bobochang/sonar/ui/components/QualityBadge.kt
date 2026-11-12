@@ -1,67 +1,73 @@
 package cn.bobochang.sonar.ui.components
 
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import cn.bobochang.sonar.data.model.MusicSource
+import cn.bobochang.sonar.data.model.Quality
 import cn.bobochang.sonar.data.model.Track
-import cn.bobochang.sonar.data.model.string
+import cn.bobochang.sonar.data.model.badgeTitle
+import cn.bobochang.sonar.data.model.highestKnownQuality
 import cn.bobochang.sonar.ui.theme.LocalSonarPalette
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
+
+/** iOS `QualityBadge`，8.75pt semibold，最小 27×16。 */
+@Composable
+fun QualityBadge(quality: Quality, modifier: Modifier = Modifier) {
+    val palette = LocalSonarPalette.current
+    val background = when (quality) {
+        Quality.MASTER, Quality.HI_RES -> palette.accentContainer
+        Quality.LOSSLESS -> palette.accentContainer.copy(alpha = 0.72f)
+        else -> palette.elevated
+    }
+    val foreground = when (quality) {
+        Quality.MASTER, Quality.HI_RES, Quality.LOSSLESS -> palette.onAccentContainer
+        else -> palette.secondaryInk
+    }
+    Text(
+        text = quality.badgeTitle,
+        modifier = modifier
+            .background(background, RoundedCornerShape(6.dp))
+            .padding(horizontal = 5.dp)
+            .widthIn(min = 27.dp)
+            .heightIn(min = 16.dp),
+        color = foreground,
+        fontSize = 8.75.sp,
+        lineHeight = 16.sp,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 0.08.sp,
+    )
+}
 
 @Composable
 fun QualityBadge(track: Track, modifier: Modifier = Modifier) {
-    val palette = LocalSonarPalette.current
-    val label = remember(track.payload) { qualityLabel(track) } ?: return
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(4.dp),
-        color = palette.accent.copy(alpha = 0.16f),
-    ) {
-        Text(
-            text = label,
-            color = palette.accent,
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-        )
-    }
+    QualityBadge(track.highestKnownQuality, modifier)
 }
 
 @Composable
 fun SourceBadge(track: Track, modifier: Modifier = Modifier) {
+    if (track.source == MusicSource.WY) return
     val palette = LocalSonarPalette.current
-    if (track.source == cn.bobochang.sonar.data.model.MusicSource.WY) return
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(4.dp),
-        color = palette.elevated,
-    ) {
-        Text(
-            text = track.source.displayName,
-            color = palette.secondaryInk,
-            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-        )
-    }
+    Text(
+        text = track.source.displayName,
+        modifier = modifier
+            .background(palette.elevated, RoundedCornerShape(6.dp))
+            .padding(horizontal = 5.dp)
+            .heightIn(min = 16.dp),
+        color = palette.secondaryInk,
+        fontSize = 8.75.sp,
+        lineHeight = 16.sp,
+        fontWeight = FontWeight.SemiBold,
+    )
 }
 
-private fun qualityLabel(track: Track): String? {
-    val types = track.payload["types"] as? JsonArray ?: return null
-    val values = types.mapNotNull { (it as? JsonObject)?.string("type") }.toSet()
-    return when {
-        "master" in values -> "母带"
-        "flac24bit" in values -> "Hi-Res"
-        "flac" in values -> "无损"
-        "320k" in values -> "320K"
-        "128k" in values -> "128K"
-        else -> null
-    }
-}
+fun qualityLabelColor(track: Track, palette: cn.bobochang.sonar.ui.theme.SonarPalette): Color =
+    if (track.isPlayable) palette.secondaryInk else palette.tertiaryInk

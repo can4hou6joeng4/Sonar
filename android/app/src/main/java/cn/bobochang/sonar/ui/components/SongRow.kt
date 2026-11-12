@@ -1,157 +1,268 @@
+@file:OptIn(
+    androidx.compose.foundation.ExperimentalFoundationApi::class,
+)
+
 package cn.bobochang.sonar.ui.components
 
-import androidx.compose.foundation.clickable
+import android.view.HapticFeedbackConstants
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.FavoriteBorder
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.MoreHoriz
-import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
-import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
-import androidx.compose.material.icons.rounded.RemoveCircleOutline
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import cn.bobochang.sonar.data.model.Track
+import cn.bobochang.sonar.data.model.highestKnownQuality
 import cn.bobochang.sonar.ui.theme.LocalSonarPalette
+import cn.bobochang.sonar.ui.theme.cellHighlight
 
+sealed interface SongLeading {
+    data object Cover : SongLeading
+    data class Index(val value: Int) : SongLeading
+}
+
+sealed interface SongTrailing {
+    data object Play : SongTrailing
+    data object More : SongTrailing
+    data class CollectionStatus(val isCollected: Boolean) : SongTrailing
+}
+
+/** 对应 iOS `SongRow`。 */
 @Composable
 fun SongRow(
     track: Track,
-    isFavorite: Boolean,
-    onClick: () -> Unit,
-    onFavorite: () -> Unit,
-    onPlayNext: () -> Unit,
-    onEnqueue: () -> Unit,
-    onRemove: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
+    leading: SongLeading = SongLeading.Cover,
+    trailing: SongTrailing = SongTrailing.More,
+    showAlbum: Boolean = true,
+    showDivider: Boolean = true,
+    isCurrent: Boolean = false,
+    isSelected: Boolean = false,
+    isPlaying: Boolean = false,
+    onPlay: (() -> Unit)? = null,
+    onAction: (() -> Unit)? = null,
 ) {
     val palette = LocalSonarPalette.current
-    val addToPlaylist = LocalAddToPlaylist.current
-    var menuOpen by remember { mutableStateOf(false) }
+    val isUnavailable = !track.source.isEnabled || !track.isPlayable
+    val interaction = remember { MutableInteractionSource() }
+    val view = LocalView.current
+
+    val primary = when {
+        isUnavailable -> palette.secondaryInk
+        isSelected -> palette.onAccentContainer
+        isCurrent -> palette.accent
+        else -> palette.ink
+    }
+    val secondary = when {
+        isUnavailable -> palette.secondaryInk.copy(alpha = 0.72f)
+        isSelected -> palette.onAccentContainer.copy(alpha = 0.86f)
+        isCurrent -> palette.accent.copy(alpha = 0.86f)
+        else -> palette.secondaryInk
+    }
+    val background = when {
+        isSelected -> palette.accentContainer.copy(alpha = 0.56f)
+        isCurrent -> palette.accentContainer.copy(alpha = 0.12f)
+        else -> androidx.compose.ui.graphics.Color.Transparent
+    }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 64.dp)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(vertical = 2.dp)
+            .cellHighlight(interaction)
+            .background(background, RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(10.dp))
+            .combinedClickable(
+                enabled = true,
+                interactionSource = interaction,
+                indication = null,
+                onClick = {
+                    if (onPlay != null && !isUnavailable) onPlay()
+                    else if (onAction != null) onAction()
+                },
+                onLongClick = {
+                    if (onAction != null) {
+                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                        onAction()
+                    }
+                },
+            )
+            .padding(horizontal = 16.dp)
+            .defaultMinSize(minHeight = 60.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Artwork(url = track.coverUrl, size = 48.dp, corner = 10.dp)
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    text = track.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (track.isPlayable) palette.ink else palette.tertiaryInk,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                QualityBadge(track)
-                SourceBadge(track)
-                if (!track.isPlayable) {
-                    Text("不可用", style = MaterialTheme.typography.labelSmall, color = palette.secondaryInk)
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            when (leading) {
+                SongLeading.Cover -> {
+                    Box {
+                        PlayerArtwork(track = track, size = 44.dp, cornerRadius = 7.dp)
+                    }
+                }
+
+                is SongLeading.Index -> Box(
+                    Modifier
+                        .width(26.dp)
+                        .height(44.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (isCurrent) {
+                        PlayingEqualizer(isAnimating = isPlaying, color = palette.accent)
+                    } else {
+                        Text("${leading.value}", color = palette.tertiaryInk, fontSize = 14.sp)
+                    }
                 }
             }
-            Text(
-                text = listOf(track.artist, track.album).filter { it.isNotBlank() }.joinToString(" · "),
-                style = MaterialTheme.typography.bodySmall,
-                color = palette.secondaryInk,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        IconButton(onClick = onFavorite, modifier = Modifier.size(40.dp)) {
-            Icon(
-                imageVector = if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                contentDescription = if (isFavorite) "取消收藏" else "收藏",
-                tint = if (isFavorite) palette.accent else palette.secondaryInk,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-        Box {
-            IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(40.dp)) {
-                Icon(
-                    imageVector = Icons.Rounded.MoreHoriz,
-                    contentDescription = "更多操作",
-                    tint = palette.secondaryInk,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                DropdownMenuItem(
-                    text = { Text("下一首播放") },
-                    leadingIcon = { Icon(Icons.AutoMirrored.Rounded.PlaylistPlay, contentDescription = null) },
-                    onClick = {
-                        menuOpen = false
-                        onPlayNext()
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text("加入待播") },
-                    leadingIcon = { Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, contentDescription = null) },
-                    onClick = {
-                        menuOpen = false
-                        onEnqueue()
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text(if (isFavorite) "取消收藏" else "收藏") },
-                    leadingIcon = {
-                        Icon(
-                            if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                            contentDescription = null,
-                        )
-                    },
-                    onClick = {
-                        menuOpen = false
-                        onFavorite()
-                    },
-                )
-                if (addToPlaylist != null) {
-                    DropdownMenuItem(
-                        text = { Text("添加到歌单") },
-                        leadingIcon = { Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, contentDescription = null) },
-                        onClick = {
-                            menuOpen = false
-                            addToPlaylist(track)
-                        },
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    if (isCurrent && leading == SongLeading.Cover) {
+                        PlayingEqualizer(isAnimating = isPlaying, color = primary)
+                    }
+                    Text(
+                        text = track.title,
+                        color = primary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
-                if (onRemove != null) {
-                    DropdownMenuItem(
-                        text = { Text("从歌单移除") },
-                        leadingIcon = { Icon(Icons.Rounded.RemoveCircleOutline, contentDescription = null) },
-                        onClick = {
-                            menuOpen = false
-                            onRemove()
-                        },
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    if (!track.source.isEnabled) {
+                        Text("不可用", color = palette.secondaryInk, fontSize = 12.sp)
+                    } else if (!track.isPlayable) {
+                        Text("已下架", color = palette.secondaryInk, fontSize = 12.sp)
+                    } else {
+                        QualityBadge(track.highestKnownQuality)
+                    }
+                    Text(
+                        text = subtitle(track, showAlbum),
+                        color = secondary,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
+                }
+            }
+        }
+
+        when (trailing) {
+            SongTrailing.Play -> {
+                if (onPlay != null) {
+                    CircleGlyphButton(
+                        icon = Icons.Rounded.PlayArrow,
+                        size = 19.dp,
+                        tint = if (isUnavailable) palette.tertiaryInk else palette.ink,
+                        onClick = { if (!isUnavailable) onPlay() },
+                        enabled = !isUnavailable,
+                    )
+                }
+            }
+
+            SongTrailing.More -> {
+                if (onAction != null) {
+                    CircleGlyphButton(
+                        icon = Icons.Rounded.MoreHoriz,
+                        size = 18.dp,
+                        tint = palette.secondaryInk,
+                        onClick = onAction,
+                    )
+                } else {
+                    Spacer(Modifier.size(44.dp))
+                }
+            }
+
+            is SongTrailing.CollectionStatus -> {
+                if (trailing.isCollected) {
+                    Icon(
+                        imageVector = Icons.Rounded.Check,
+                        contentDescription = "已收藏，导入时跳过",
+                        tint = palette.secondaryInk,
+                        modifier = Modifier.size(44.dp).padding(14.dp),
+                    )
+                } else {
+                    Spacer(Modifier.size(44.dp))
                 }
             }
         }
     }
+}
+
+@Composable
+private fun CircleGlyphButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    size: androidx.compose.ui.unit.Dp,
+    tint: androidx.compose.ui.graphics.Color,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .combinedClickable(
+                interactionSource = interaction,
+                indication = null,
+                onClick = onClick,
+                enabled = enabled,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(size))
+    }
+}
+
+private fun subtitle(track: Track, showAlbum: Boolean): String {
+    val album = track.album.trim()
+    val values = if (showAlbum && album.isNotEmpty() && album != track.title) {
+        listOf(track.artist, album)
+    } else {
+        listOf(track.artist)
+    }
+    val displayed = if (track.source.isEnabled) values else listOf(track.source.displayName) + values
+    return displayed.filter { it.isNotBlank() }.joinToString(" · ")
 }

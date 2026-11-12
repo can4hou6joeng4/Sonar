@@ -171,6 +171,54 @@ val Quality.wire: String
         Quality.MASTER -> "master"
     }
 
+val Quality.title: String
+    get() = when (this) {
+        Quality.MASTER -> "最高音质优先"
+        Quality.HI_RES -> "Hi-Res"
+        Quality.LOSSLESS -> "无损 FLAC"
+        Quality.HIGH -> "高品质 320K"
+        Quality.STANDARD -> "标准品质 128K"
+    }
+
+val Quality.badgeTitle: String
+    get() = when (this) {
+        Quality.MASTER -> "母带"
+        Quality.HI_RES -> "Hi-Res"
+        Quality.LOSSLESS -> "无损"
+        Quality.HIGH -> "320K"
+        Quality.STANDARD -> "128K"
+    }
+
+/** 与 iOS `Track.highestKnownQuality` 对齐：只依赖曲目元数据里声明的可播档位。 */
+val Track.highestKnownQuality: Quality
+    get() {
+        val types = payload.arr("types") ?: return Quality.STANDARD
+        val values = types.mapNotNull { (it as? JsonObject)?.string("type") }.toSet()
+        return when {
+            "master" in values -> Quality.MASTER
+            "flac24bit" in values -> Quality.HI_RES
+            "flac" in values -> Quality.LOSSLESS
+            "320k" in values -> Quality.HIGH
+            else -> Quality.STANDARD
+        }
+    }
+
+data class TrackQualityOption(val quality: Quality, val sizeText: String) {
+    companion object {
+        fun available(track: Track): List<TrackQualityOption> {
+            val types = track.payload.arr("types") ?: return emptyList()
+            val values = types.mapNotNull { element ->
+                val obj = element as? JsonObject ?: return@mapNotNull null
+                val quality = Quality.fromWire(obj.string("type")) ?: return@mapNotNull null
+                TrackQualityOption(quality, obj.string("size").orEmpty())
+            }
+            return Quality.descending.mapNotNull { quality ->
+                values.firstOrNull { it.quality == quality }
+            }
+        }
+    }
+}
+
 @Serializable
 data class ArtistSummary(
     val id: String,

@@ -61,6 +61,8 @@ class LyricsRepository(
         return LrcParser.parse(info).map { it.copy(timeMs = (it.timeMs + offset).coerceAtLeast(0)) }
     }
 
+    fun parseKaraoke(info: LyricInfo): KaraokeLyrics = KaraokeLyrics(info)
+
     private fun readLocal(track: Track): LyricInfo {
         val lrcUri = track.payload.string("lrcUri")
         if (!lrcUri.isNullOrBlank()) {

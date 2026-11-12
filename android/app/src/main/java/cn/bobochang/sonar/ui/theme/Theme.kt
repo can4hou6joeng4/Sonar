@@ -12,11 +12,16 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.bobochang.sonar.data.prefs.ThemeMode
 
+/**
+ * iOS `M3Scheme.spotlight` 的 Compose 映射。
+ * background = appSurface，card = surfaceContainer，elevated = surfaceContainerHigh。
+ */
 data class SonarPalette(
     val background: Color,
     val card: Color,
@@ -26,39 +31,65 @@ data class SonarPalette(
     val tertiaryInk: Color,
     val divider: Color,
     val accent: Color,
+    val onAccent: Color,
+    val accentContainer: Color,
+    val onAccentContainer: Color,
+    val outline: Color,
+    val error: Color,
+    val inputFill: Color,
+    val isDark: Boolean,
 )
 
 val DarkPalette = SonarPalette(
-    background = Color(0xFF0D0D11),
-    card = Color(0xFF1B1B1F),
-    elevated = Color(0xFF202025),
-    ink = Color(0xFFF3F3F3),
-    secondaryInk = Color(0xFF858587),
-    tertiaryInk = Color(0xFF55555E),
-    divider = Color(0xFF232327),
-    accent = Color(0xFFFF3A39),
+    background = Color(0xFF242529),
+    card = Color(0xFF303136),
+    elevated = Color(0xFF303136),
+    ink = Color(0xFFF8F6F2),
+    secondaryInk = Color(0xFFB9B8BE),
+    tertiaryInk = Color(0xFF77767C),
+    divider = Color(0xFF3A3B40),
+    accent = Color(0xFFF1E9DF),
+    onAccent = Color(0xFF292725),
+    accentContainer = Color(0xFF454044),
+    onAccentContainer = Color(0xFFF8F6F2),
+    outline = Color(0xFF77767C),
+    error = Color(0xFFED8B82),
+    inputFill = Color(0xFF303136),
+    isDark = true,
 )
 
 val LightPalette = SonarPalette(
-    background = Color(0xFFF5F7FB),
+    background = Color(0xFFF4F1EC),
     card = Color(0xFFFFFFFF),
-    elevated = Color(0xFFF0F1F5),
-    ink = Color(0xFF0C0C23),
-    secondaryInk = Color(0xFF838190),
-    tertiaryInk = Color(0xFFB6B6C0),
-    divider = Color(0xFFE8E8EE),
-    accent = Color(0xFFFF3738),
+    elevated = Color(0xFFFFFFFF),
+    ink = Color(0xFF292725),
+    secondaryInk = Color(0xFF73706E),
+    tertiaryInk = Color(0xFF9B9793),
+    divider = Color(0xFFE0DCD7),
+    accent = Color(0xFF51443B),
+    onAccent = Color(0xFFFFFFFF),
+    accentContainer = Color(0xFFE6DCD1),
+    onAccentContainer = Color(0xFF292725),
+    outline = Color(0xFF9B9793),
+    error = Color(0xFFED8B82),
+    inputFill = Color(0xFFFFFFFF),
+    isDark = false,
 )
 
-val LocalSonarPalette = staticCompositionLocalOf { DarkPalette }
+val LocalSonarPalette = staticCompositionLocalOf { LightPalette }
+
+/** 跟随系统“移除动画”偏好；与 iOS `sonarReduceMotion` 对应。 */
+val LocalReduceMotion = staticCompositionLocalOf { false }
 
 private val DarkColors = darkColorScheme(
     primary = DarkPalette.accent,
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFF5A1F20),
-    onPrimaryContainer = Color.White,
+    onPrimary = DarkPalette.onAccent,
+    primaryContainer = DarkPalette.accentContainer,
+    onPrimaryContainer = DarkPalette.onAccentContainer,
     secondary = DarkPalette.accent,
-    onSecondary = Color.White,
+    onSecondary = DarkPalette.onAccent,
+    secondaryContainer = DarkPalette.accentContainer,
+    onSecondaryContainer = DarkPalette.onAccentContainer,
     background = DarkPalette.background,
     onBackground = DarkPalette.ink,
     surface = DarkPalette.background,
@@ -68,19 +99,21 @@ private val DarkColors = darkColorScheme(
     surfaceContainer = DarkPalette.card,
     surfaceContainerHigh = DarkPalette.elevated,
     surfaceContainerHighest = DarkPalette.elevated,
-    outline = DarkPalette.tertiaryInk,
+    outline = DarkPalette.outline,
     outlineVariant = DarkPalette.divider,
-    error = DarkPalette.accent,
+    error = DarkPalette.error,
     onError = Color.White,
 )
 
 private val LightColors = lightColorScheme(
     primary = LightPalette.accent,
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFFFE3E3),
-    onPrimaryContainer = LightPalette.ink,
+    onPrimary = LightPalette.onAccent,
+    primaryContainer = LightPalette.accentContainer,
+    onPrimaryContainer = LightPalette.onAccentContainer,
     secondary = LightPalette.accent,
-    onSecondary = Color.White,
+    onSecondary = LightPalette.onAccent,
+    secondaryContainer = LightPalette.accentContainer,
+    onSecondaryContainer = LightPalette.onAccentContainer,
     background = LightPalette.background,
     onBackground = LightPalette.ink,
     surface = LightPalette.background,
@@ -90,18 +123,19 @@ private val LightColors = lightColorScheme(
     surfaceContainer = LightPalette.card,
     surfaceContainerHigh = LightPalette.elevated,
     surfaceContainerHighest = LightPalette.elevated,
-    outline = LightPalette.tertiaryInk,
+    outline = LightPalette.outline,
     outlineVariant = LightPalette.divider,
-    error = LightPalette.accent,
+    error = LightPalette.error,
     onError = Color.White,
 )
 
 private val SonarTypography = Typography(
     headlineLarge = TextStyle(fontSize = 30.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp),
-    headlineMedium = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.3).sp),
-    titleLarge = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold),
+    headlineMedium = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.3).sp),
+    headlineSmall = TextStyle(fontSize = 19.sp, fontWeight = FontWeight.SemiBold),
+    titleLarge = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.2).sp),
     titleMedium = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-    titleSmall = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+    titleSmall = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
     bodyLarge = TextStyle(fontSize = 16.sp),
     bodyMedium = TextStyle(fontSize = 14.sp),
     bodySmall = TextStyle(fontSize = 12.sp),
@@ -114,7 +148,7 @@ private val SonarShapes = Shapes(
     extraSmall = RoundedCornerShape(6.dp),
     small = RoundedCornerShape(10.dp),
     medium = RoundedCornerShape(14.dp),
-    large = RoundedCornerShape(20.dp),
+    large = RoundedCornerShape(22.dp),
     extraLarge = RoundedCornerShape(28.dp),
 )
 

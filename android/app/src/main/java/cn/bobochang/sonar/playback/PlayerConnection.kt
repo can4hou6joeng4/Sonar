@@ -15,6 +15,8 @@ import cn.bobochang.sonar.data.model.Quality
 import cn.bobochang.sonar.data.model.Track
 import cn.bobochang.sonar.data.model.wire
 import cn.bobochang.sonar.data.net.SourceException
+import cn.bobochang.sonar.data.playback.PlaybackResolution
+import cn.bobochang.sonar.data.playback.PlaybackRepository
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,21 +31,45 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+enum class PlaybackMode(val title: String) {
+    SEQUENCE("列表循环"),
+    PLAY_IN_ORDER("顺序播放"),
+    SHUFFLE("随机播放"),
+    REPEAT_ONE("单曲循环");
+
+    val next: PlaybackMode
+        get() = when (this) {
+            SHUFFLE -> REPEAT_ONE
+            REPEAT_ONE -> PLAY_IN_ORDER
+            PLAY_IN_ORDER -> SEQUENCE
+            SEQUENCE -> SHUFFLE
+        }
+}
+
 data class PlayerUiState(
     val connected: Boolean = false,
     val isPlaying: Boolean = false,
     val isLoading: Boolean = false,
+    val playWhenReady: Boolean = false,
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
     val track: Track? = null,
     val index: Int = -1,
     val count: Int = 0,
-    val shuffle: Boolean = false,
-    val repeatMode: Int = Player.REPEAT_MODE_ALL,
+    val queue: List<Track> = emptyList(),
+    val playbackMode: PlaybackMode = PlaybackMode.SEQUENCE,
+    val playbackRate: Float = 1f,
+    val actualQuality: Quality? = null,
+    val usingCache: Boolean = false,
     val error: String? = null,
-)
+) {
+    val hasTrack: Boolean get() = track != null
+}
 
-class PlayerConnection(context: Context) {
+class PlayerConnection(
+    context: Context,
+    private val playback: PlaybackRepository,
+) {
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val _state = MutableStateFlow(PlayerUiState())
@@ -52,11 +78,18 @@ class PlayerConnection(context: Context) {
     private val _sleepMinutes = MutableStateFlow<Int?>(null)
     val sleepMinutes: StateFlow<Int?> = _sleepMinutes.asStateFlow()
 
+    private val _sleepRemainingMs = MutableStateFlow<Long?>(null)
+    val sleepRemainingMs: StateFlow<Long?> = _sleepRemainingMs.asStateFlow()
+
     private var controller: MediaController? = null
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var connecting = false
     private var ticker: Job? = null
     private var sleepJob: Job? = null
+    private var lastResolution: PlaybackResolution? = null
+    private var playbackMode = PlaybackMode.SEQUENCE
+    private var playbackRate = 1f
+    private var sleepDeadline: Long? = null
 
     private val controllerListener = object : MediaController.Listener {
         override fun onDisconnected(controller: MediaController) {
@@ -90,6 +123,21 @@ class PlayerConnection(context: Context) {
     }
 
     init {
+        scope.launch {
+            playback.lastResolution.collect { resolution ->
+                lastResolution = resolution
+                _state.update { state ->
+                    state.copy(
+                        actualQuality = resolution
+                            ?.takeIf { it.musicId == state.track?.musicId }
+                            ?.quality,
+                        usingCache = resolution
+                            ?.takeIf { it.musicId == state.track?.musicId }
+                            ?.cached == true,
+                    )
+                }
+            }
+        }
         connect()
     }
 
@@ -111,6 +159,8 @@ class PlayerConnection(context: Context) {
                     .onSuccess { connected ->
                         controller = connected
                         connected.addListener(listener)
+                        connected.setPlaybackSpeed(playbackRate)
+                        applyPlaybackMode(connected, playbackMode)
                         publish(connected)
                         startTicker()
                     }
@@ -141,6 +191,8 @@ class PlayerConnection(context: Context) {
         }
     }
 
+    fun selectQueueItem(index: Int) = playAt(index)
+
     fun toggle() {
         val player = controller ?: return
         if (player.isPlaying) {
@@ -167,18 +219,38 @@ class PlayerConnection(context: Context) {
         controller?.pause()
     }
 
+    fun retry() {
+        val player = controller ?: return
+        _state.update { it.copy(error = null) }
+        player.prepare()
+        player.play()
+    }
+
     fun setSleepTimer(minutes: Int?) {
         sleepJob?.cancel()
         sleepJob = null
         if (minutes == null) {
+            sleepDeadline = null
             _sleepMinutes.value = null
+            _sleepRemainingMs.value = null
             return
         }
         _sleepMinutes.value = minutes
+        val totalMs = minutes.coerceAtLeast(1) * 60_000L
+        val deadline = System.currentTimeMillis() + totalMs
+        sleepDeadline = deadline
+        _sleepRemainingMs.value = totalMs
         sleepJob = scope.launch {
-            delay(minutes.coerceAtLeast(1) * 60_000L)
+            while (isActive) {
+                val remaining = deadline - System.currentTimeMillis()
+                if (remaining <= 0) break
+                _sleepRemainingMs.value = remaining
+                delay(1_000)
+            }
             controller?.pause()
+            sleepDeadline = null
             _sleepMinutes.value = null
+            _sleepRemainingMs.value = null
         }
     }
 
@@ -210,26 +282,76 @@ class PlayerConnection(context: Context) {
         if (index in 0 until player.mediaItemCount) player.removeMediaItem(index)
     }
 
+    fun removeQueueItem(index: Int) = removeAt(index)
+
+    fun clearUpcoming() {
+        val player = controller ?: return
+        val index = player.currentMediaItemIndex
+        if (index >= 0 && index < player.mediaItemCount - 1) {
+            player.removeMediaItems(index + 1, player.mediaItemCount)
+        }
+    }
+
     fun move(from: Int, to: Int) {
         controller?.moveMediaItem(from, to)
     }
 
-    fun toggleShuffle() {
+    /** iOS `moveMediaItems(fromOffsets:toOffset:)` 的插入语义。 */
+    fun moveQueueItems(fromIndex: Int, insertionOffset: Int) {
         val player = controller ?: return
-        player.shuffleModeEnabled = !player.shuffleModeEnabled
+        val count = player.mediaItemCount
+        if (fromIndex !in 0 until count) return
+        val target = insertionOffset.coerceIn(0, count)
+        val destination = if (target > fromIndex) target - 1 else target
+        player.moveMediaItem(fromIndex, destination.coerceIn(0, count - 1))
+    }
+
+    fun setPlaybackMode(mode: PlaybackMode) {
+        playbackMode = mode
+        _state.update { it.copy(playbackMode = mode) }
+        controller?.let { applyPlaybackMode(it, mode) }
+    }
+
+    fun cyclePlaybackMode() = setPlaybackMode(playbackMode.next)
+
+    fun setPlaybackRate(rate: Float) {
+        playbackRate = rate
+        _state.update { it.copy(playbackRate = rate) }
+        controller?.setPlaybackSpeed(rate)
+    }
+
+    fun toggleShuffle() {
+        setPlaybackMode(if (playbackMode == PlaybackMode.SHUFFLE) PlaybackMode.SEQUENCE else PlaybackMode.SHUFFLE)
     }
 
     fun setShuffle(enabled: Boolean) {
-        controller?.shuffleModeEnabled = enabled
+        if (enabled) setPlaybackMode(PlaybackMode.SHUFFLE) else setPlaybackMode(PlaybackMode.SEQUENCE)
     }
 
     fun cycleRepeat() {
+        setPlaybackMode(
+            when (playbackMode) {
+                PlaybackMode.SEQUENCE, PlaybackMode.SHUFFLE -> PlaybackMode.REPEAT_ONE
+                PlaybackMode.REPEAT_ONE -> PlaybackMode.PLAY_IN_ORDER
+                PlaybackMode.PLAY_IN_ORDER -> PlaybackMode.SEQUENCE
+            },
+        )
+    }
+
+    /** 切换音质后就地重新解析当前曲目，保留播放进度。 */
+    fun reloadAtQuality(track: Track, quality: Quality) {
         val player = controller ?: return
-        player.repeatMode = when (player.repeatMode) {
-            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
-            Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
-            else -> Player.REPEAT_MODE_OFF
+        val index = player.currentMediaItemIndex
+        if (index !in 0 until player.mediaItemCount) {
+            playTracks(listOf(track), 0, quality)
+            return
         }
+        val position = player.currentPosition.coerceAtLeast(0)
+        val shouldPlay = player.playWhenReady
+        player.replaceMediaItem(index, itemFor(track, quality))
+        player.prepare()
+        player.seekTo(index, position)
+        if (shouldPlay) player.play()
     }
 
     fun queue(): List<Track> {
@@ -249,6 +371,7 @@ class PlayerConnection(context: Context) {
 
     fun release() {
         ticker?.cancel()
+        sleepJob?.cancel()
         controller?.removeListener(listener)
         controller = null
         controllerFuture?.let { MediaController.releaseFuture(it) }
@@ -256,23 +379,57 @@ class PlayerConnection(context: Context) {
         scope.cancel()
     }
 
+    private fun applyPlaybackMode(player: Player, mode: PlaybackMode) {
+        when (mode) {
+            PlaybackMode.SEQUENCE -> {
+                player.shuffleModeEnabled = false
+                player.repeatMode = Player.REPEAT_MODE_ALL
+            }
+
+            PlaybackMode.PLAY_IN_ORDER -> {
+                player.shuffleModeEnabled = false
+                player.repeatMode = Player.REPEAT_MODE_OFF
+            }
+
+            PlaybackMode.SHUFFLE -> {
+                player.shuffleModeEnabled = true
+                player.repeatMode = Player.REPEAT_MODE_ALL
+            }
+
+            PlaybackMode.REPEAT_ONE -> {
+                player.shuffleModeEnabled = false
+                player.repeatMode = Player.REPEAT_MODE_ONE
+            }
+        }
+    }
+
     private fun publish(player: Player) {
-        val hasItem = player.mediaItemCount > 0 &&
-            player.currentMediaItemIndex in 0 until player.mediaItemCount
+        val count = player.mediaItemCount
+        val hasItem = count > 0 && player.currentMediaItemIndex in 0 until count
         val item = if (hasItem) player.getMediaItemAt(player.currentMediaItemIndex) else null
         val track = item?.let(::trackOf)
+        val queue = if (count > 0) {
+            (0 until count).mapNotNull { index -> trackOf(player.getMediaItemAt(index)) }
+        } else {
+            emptyList()
+        }
+        val resolution = lastResolution?.takeIf { it.musicId == track?.musicId }
         _state.update { state ->
             state.copy(
                 connected = true,
                 isPlaying = player.isPlaying,
                 isLoading = player.playbackState == Player.STATE_BUFFERING,
+                playWhenReady = player.playWhenReady,
                 positionMs = player.currentPosition.coerceAtLeast(0),
                 durationMs = player.duration.takeIf { it > 0 } ?: track?.durationMs ?: 0L,
                 track = track,
                 index = if (hasItem) player.currentMediaItemIndex else -1,
-                count = player.mediaItemCount,
-                shuffle = player.shuffleModeEnabled,
-                repeatMode = player.repeatMode,
+                count = count,
+                queue = queue,
+                playbackMode = playbackMode,
+                playbackRate = playbackRate,
+                actualQuality = resolution?.quality,
+                usingCache = resolution?.cached == true,
             )
         }
     }
@@ -287,6 +444,9 @@ class PlayerConnection(context: Context) {
                         state.copy(
                             positionMs = player.currentPosition.coerceAtLeast(0),
                             durationMs = player.duration.takeIf { it > 0 } ?: state.durationMs,
+                            isPlaying = player.isPlaying,
+                            isLoading = player.playbackState == Player.STATE_BUFFERING,
+                            playWhenReady = player.playWhenReady,
                         )
                     }
                 }

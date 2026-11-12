@@ -17,6 +17,9 @@ import cn.bobochang.sonar.data.prefs.SettingsRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -29,6 +32,12 @@ data class ResolvedSource(
     val quality: Quality,
     val cached: Boolean,
     val networkUrl: String? = null,
+)
+
+data class PlaybackResolution(
+    val musicId: String,
+    val quality: Quality,
+    val cached: Boolean,
 )
 
 /**
@@ -46,9 +55,15 @@ class PlaybackRepository(
     private data class CachedUrl(val url: String, val quality: Quality, val expiresAt: Long)
 
     private val urlCache = ConcurrentHashMap<String, CachedUrl>()
+    private val _lastResolution = MutableStateFlow<PlaybackResolution?>(null)
+
+    /** 最近一次真正返回给播放器的音质与缓存标记，供播放页音质面板展示。 */
+    val lastResolution: StateFlow<PlaybackResolution?> = _lastResolution.asStateFlow()
 
     suspend fun resolve(track: Track, requested: Quality): ResolvedSource {
-        if (track.source == MusicSource.LOCAL) return resolveLocal(track)
+        if (track.source == MusicSource.LOCAL) {
+            return recordResolution(track, resolveLocal(track))
+        }
         if (!track.source.isEnabled) {
             throw SourceException.Unavailable("${track.source.displayName}音源暂不可用，歌曲仍保留在资料库")
         }
@@ -59,7 +74,7 @@ class PlaybackRepository(
         val cellularRestricted = snapshot.cellularWifiOnly && connectivity.isCellular()
 
         if (cached != null && (!online || cellularRestricted || cached.quality.rank >= requested.rank)) {
-            return ResolvedSource(Uri.fromFile(cached.file), cached.quality, cached = true)
+            return recordResolution(track, ResolvedSource(Uri.fromFile(cached.file), cached.quality, cached = true))
         }
         if (cellularRestricted) {
             throw SourceException.Unavailable("蜂窝网络下仅播放已缓存歌曲，可在设置中关闭此限制")
@@ -71,7 +86,9 @@ class PlaybackRepository(
         val network = try {
             resolveNetwork(track, requested)
         } catch (error: SourceException) {
-            if (cached != null) return ResolvedSource(Uri.fromFile(cached.file), cached.quality, cached = true)
+            if (cached != null) {
+                return recordResolution(track, ResolvedSource(Uri.fromFile(cached.file), cached.quality, cached = true))
+            }
             throw error
         }
 
@@ -80,7 +97,16 @@ class PlaybackRepository(
                 cache.enqueue(appScope, track, url, network.quality)
             }
         }
-        return network
+        return recordResolution(track, network)
+    }
+
+    private fun recordResolution(track: Track, source: ResolvedSource): ResolvedSource {
+        _lastResolution.value = PlaybackResolution(
+            musicId = track.musicId,
+            quality = source.quality,
+            cached = source.cached,
+        )
+        return source
     }
 
     suspend fun prefetch(tracks: List<Track>, requested: Quality) = supervisorScope {

@@ -82,7 +82,7 @@ class NetEaseWebClient(
             throw SourceException.Message("搜索结果缺少曲目信息")
         }
         return SearchPage(
-            items = tracks,
+            items = fillMissingCovers(tracks),
             total = result.int("songCount") ?: tracks.size,
             page = offset / limit.coerceAtLeast(1) + 1,
             limit = limit,
@@ -167,6 +167,36 @@ class NetEaseWebClient(
         return obj.arr("songs")?.mapNotNull { it.asObject()?.let(::trackFrom) } ?: emptyList()
     }
 
+    /**
+     * legacy 搜索/歌单接口返回旧版歌曲结构，只有 `album.picId` 而没有 `picUrl`。
+     * 统一用 `/api/song/detail` 补齐封面；补全失败时保留原始数据，不影响列表展示。
+     */
+    private suspend fun fillMissingCovers(tracks: List<Track>): List<Track> {
+        if (tracks.isEmpty() || tracks.none { it.coverUrl == null }) return tracks
+        val details = try {
+            songDetail(tracks.map { it.songmid }.distinct())
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Throwable) {
+            return tracks
+        }
+        val covers = details.mapNotNull { track ->
+            track.coverUrl?.let { track.songmid to it }
+        }.toMap()
+        if (covers.isEmpty()) return tracks
+        return tracks.map { track ->
+            val cover = covers[track.songmid]
+            if (track.coverUrl != null || cover == null) {
+                track
+            } else {
+                track.copy(payload = buildJsonObject {
+                    track.payload.forEach { (key, value) -> put(key, value) }
+                    put("picUrl", cover)
+                })
+            }
+        }
+    }
+
     suspend fun lyric(id: String): LyricInfo {
         val obj = get(
             "/api/song/lyric",
@@ -208,11 +238,28 @@ class NetEaseWebClient(
         return NativePlayback(url, actual, item.string("type"))
     }
 
+    /** 账号在这首歌上的实际可播上限，用于音质面板置灰超出权限的档位。 */
+    suspend fun privileges(ids: List<String>): Map<String, String> {
+        if (ids.isEmpty()) return emptyMap()
+        val obj = get("/api/song/enhance/privilege", mapOf("ids" to ids.joinToString(",", "[", "]")))
+        return buildMap {
+            obj.arr("data")?.forEach { element ->
+                val entry = element.asObject() ?: return@forEach
+                val id = entry.long("id")?.toString() ?: entry.string("id") ?: return@forEach
+                val level = entry.string("playMaxBrLevel")
+                    ?: entry.string("maxBrLevel")
+                    ?: return@forEach
+                put(id, level)
+            }
+        }
+    }
+
     suspend fun playlistDetail(id: String, limit: Int = 1000): RemotePlaylist {
         val obj = get("/api/v6/playlist/detail", mapOf("id" to id, "n" to limit.toString()))
         val raw = obj.obj("playlist") ?: throw SourceException.Message("歌单信息缺失")
         val name = raw.string("name") ?: throw SourceException.Message("歌单信息缺失")
-        val tracks = raw.arr("tracks")?.mapNotNull { it.asObject()?.let(::trackFrom) } ?: emptyList()
+        val parsed = raw.arr("tracks")?.mapNotNull { it.asObject()?.let(::trackFrom) } ?: emptyList()
+        val tracks = fillMissingCovers(parsed)
         return RemotePlaylist(
             name = name,
             tracks = tracks,
@@ -280,7 +327,7 @@ class NetEaseWebClient(
             put("name", title)
             put("singer", artists.joinToString("/"))
             put("albumName", album.string("name") ?: "")
-            (album.string("picUrl") ?: raw.string("picUrl"))?.let { put("picUrl", it) }
+            (album.string("picUrl") ?: raw.string("picUrl"))?.let { put("picUrl", normalizeHttps(it) ?: it) }
             album.long("id")?.let { put("albumID", it) }
             artistArray?.firstOrNull()?.asObject()?.let { first ->
                 first.long("id")?.let { put("artistID", it) }

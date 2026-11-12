@@ -1,54 +1,42 @@
 package cn.bobochang.sonar.ui.screens
 
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.DeleteOutline
-import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.FavoriteBorder
-import androidx.compose.material.icons.rounded.FileDownload
-import androidx.compose.material.icons.rounded.FileUpload
-import androidx.compose.material.icons.rounded.FolderOpen
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.LibraryMusic
-import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Shuffle
+import androidx.compose.material.icons.rounded.UploadFile
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,525 +44,515 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
-import cn.bobochang.sonar.data.library.BackupTarget
-import cn.bobochang.sonar.data.library.PlaylistBackupCodec
+import androidx.compose.ui.unit.sp
 import cn.bobochang.sonar.data.library.UserPlaylist
 import cn.bobochang.sonar.data.model.Track
 import cn.bobochang.sonar.di.AppContainer
-import cn.bobochang.sonar.ui.components.Artwork
-import cn.bobochang.sonar.ui.components.EmptyState
+import cn.bobochang.sonar.playback.PlaybackMode
+import cn.bobochang.sonar.playback.PlayerUiState
+import cn.bobochang.sonar.ui.components.LocalToast
+import cn.bobochang.sonar.ui.components.SongLeading
 import cn.bobochang.sonar.ui.components.SongRow
+import cn.bobochang.sonar.ui.components.SongTrailing
+import cn.bobochang.sonar.ui.theme.bouncePress
+import cn.bobochang.sonar.ui.theme.circleIconPress
 import cn.bobochang.sonar.ui.theme.LocalSonarPalette
-import cn.bobochang.sonar.ui.viewmodel.LibraryViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
 
-private enum class LibraryTab(val label: String) {
-    FAVORITES("收藏"),
-    PLAYLISTS("歌单"),
-    LOCAL("本地"),
-    RECENT("最近"),
+private enum class LibraryScope(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
+    FAVORITES("收藏", Icons.Rounded.LibraryMusic),
+    PLAYLISTS("歌单", Icons.Rounded.MusicNote),
+    LOCAL("本地", Icons.Rounded.Folder),
+    RECENT("最近", Icons.Rounded.PlayArrow),
 }
 
+/** 资料库 Tab：沿用 iOS 视觉语言，同时保留 Android 的收藏 / 歌单 / 本地 / 最近四种入口。 */
 @Composable
 fun LibraryScreen(
     container: AppContainer,
-    snackbarHostState: SnackbarHostState,
-    onOpenPlayer: () -> Unit,
-    onOpenFavorites: () -> Unit,
+    playerState: PlayerUiState,
+    bottomPadding: Dp,
+    onOpenSettings: () -> Unit,
     onOpenPlaylist: (String) -> Unit,
-    onOpenLocal: () -> Unit,
+    onImportFiles: () -> Unit,
+    onImportFolder: () -> Unit,
+    onSongAction: (Track) -> Unit,
 ) {
-    val vm: LibraryViewModel = viewModel(
-        factory = viewModelFactory { initializer { LibraryViewModel(container) } },
-    )
-    val favorites by vm.favorites.collectAsStateWithLifecycle()
-    val playlists by vm.playlists.collectAsStateWithLifecycle()
-    val recent by vm.recent.collectAsStateWithLifecycle()
-    val localTracks by vm.localTracks.collectAsStateWithLifecycle()
     val palette = LocalSonarPalette.current
-    val context = LocalContext.current
+    val toast = LocalToast.current
     val scope = rememberCoroutineScope()
-    var tab by remember { mutableStateOf(LibraryTab.FAVORITES) }
-    var showCreate by remember { mutableStateOf(false) }
-    var pendingImport by remember { mutableStateOf<ByteArray?>(null) }
-    var renameTarget by remember { mutableStateOf<UserPlaylist?>(null) }
-    var deleteTarget by remember { mutableStateOf<UserPlaylist?>(null) }
-
-    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        if (uris.isNotEmpty()) vm.importLocalUris(uris)
-    }
-    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null) vm.importLocalTree(uri)
-    }
-    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-        if (uri != null) {
-            scope.launch {
-                val json = vm.exportFavorites() ?: return@launch
-                withContext(Dispatchers.IO) {
-                    context.contentResolver.openOutputStream(uri)?.use { output ->
-                        output.write(json.toByteArray(Charsets.UTF_8))
-                    }
-                }
-                snackbarHostState.showSnackbar("已导出收藏备份")
-            }
-        }
-    }
-    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            scope.launch {
-                val bytes = withContext(Dispatchers.IO) {
-                    runCatching {
-                        context.contentResolver.openInputStream(uri)?.use { input ->
-                            val output = ByteArrayOutputStream()
-                            val buffer = ByteArray(8 * 1024)
-                            while (true) {
-                                val read = input.read(buffer)
-                                if (read < 0) break
-                                output.write(buffer, 0, read)
-                                if (output.size() > PlaylistBackupCodec.MAX_BYTES) {
-                                    throw IllegalArgumentException("备份文件超过 10 MB")
-                                }
-                            }
-                            output.toByteArray()
-                        }
-                    }.getOrNull()
-                }
-                if (bytes == null) {
-                    snackbarHostState.showSnackbar("无法读取备份文件")
-                } else {
-                    pendingImport = bytes
-                }
-            }
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        vm.messages.collect { message -> snackbarHostState.showSnackbar(message) }
-    }
+    var selectedScope by remember { mutableStateOf(LibraryScope.FAVORITES) }
+    var showCreateDialog by remember { mutableStateOf(false) }
+    var newName by remember { mutableStateOf("") }
+    val favorites by container.library.observeFavorites().collectAsState(initial = emptyList())
+    val playlists by container.library.observePlaylists().collectAsState(initial = emptyList())
+    val localTracks by container.library.observeLocalTracks().collectAsState(initial = emptyList())
+    val recent by container.library.observeRecent().collectAsState(initial = emptyList())
+    val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(palette.background),
+            .background(palette.background)
+            .padding(top = statusTop),
+    ) {
+        LibraryHeader(onOpenSettings = onOpenSettings)
+        ScopePicker(
+            selected = selectedScope,
+            onSelect = { selectedScope = it },
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+
+        when (selectedScope) {
+            LibraryScope.FAVORITES -> TrackList(
+                tracks = favorites,
+                playerState = playerState,
+                bottomPadding = bottomPadding,
+                emptyTitle = "这个歌单还没有歌曲",
+                emptySubtitle = "在搜索结果或歌手页面选择“收藏到歌单”，歌曲会保存在这里",
+                showHeader = true,
+                onPlayAll = { shuffled ->
+                    if (favorites.isNotEmpty()) {
+                        scope.launch {
+                            val quality = container.settings.snapshot().quality
+                            container.playerConnection.setPlaybackMode(
+                                if (shuffled) PlaybackMode.SHUFFLE else PlaybackMode.SEQUENCE,
+                            )
+                            container.playerConnection.playTracks(
+                                if (shuffled) favorites.shuffled() else favorites,
+                                0,
+                                quality,
+                            )
+                        }
+                    }
+                },
+                onPlay = { index ->
+                    scope.launch {
+                        val quality = container.settings.snapshot().quality
+                        container.playerConnection.setPlaybackMode(PlaybackMode.SEQUENCE)
+                        container.playerConnection.playTracks(favorites, index, quality)
+                    }
+                },
+                onSongAction = onSongAction,
+            )
+
+            LibraryScope.PLAYLISTS -> LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    start = 16.dp,
+                    end = 16.dp,
+                    bottom = bottomPadding + 20.dp,
+                ),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                item(key = "create") {
+                    PlaylistRow(
+                        title = "新建歌单",
+                        subtitle = "创建一个新的个人歌单",
+                        icon = Icons.Rounded.Add,
+                        onClick = { showCreateDialog = true },
+                    )
+                }
+                items(playlists, key = { it.id }) { playlist ->
+                    PlaylistRow(
+                        title = playlist.name,
+                        subtitle = if (playlist.system) "系统歌单" else "个人歌单",
+                        icon = Icons.Rounded.LibraryMusic,
+                        onClick = { onOpenPlaylist(playlist.id) },
+                    )
+                }
+                if (playlists.isEmpty()) {
+                    item(key = "empty") {
+                        EmptyPane("还没有歌单", "新建一个歌单，把喜欢的歌分组收藏")
+                    }
+                }
+            }
+
+            LibraryScope.LOCAL -> Column(Modifier.fillMaxSize()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    ImportButton("导入文件", Icons.Rounded.UploadFile, Modifier.weight(1f), onImportFiles)
+                    ImportButton("导入文件夹", Icons.Rounded.Folder, Modifier.weight(1f), onImportFolder)
+                }
+                TrackList(
+                    tracks = localTracks,
+                    playerState = playerState,
+                    bottomPadding = bottomPadding,
+                    emptyTitle = "还没有本地歌曲",
+                    emptySubtitle = "从设备中选择音频或整个文件夹导入",
+                    showHeader = false,
+                    onPlayAll = { shuffled ->
+                        if (localTracks.isNotEmpty()) {
+                            scope.launch {
+                                val quality = container.settings.snapshot().quality
+                                container.playerConnection.setPlaybackMode(
+                                    if (shuffled) PlaybackMode.SHUFFLE else PlaybackMode.SEQUENCE,
+                                )
+                                container.playerConnection.playTracks(
+                                    if (shuffled) localTracks.shuffled() else localTracks,
+                                    0,
+                                    quality,
+                                )
+                            }
+                        }
+                    },
+                    onPlay = { index ->
+                        scope.launch {
+                            val quality = container.settings.snapshot().quality
+                            container.playerConnection.playTracks(localTracks, index, quality)
+                        }
+                    },
+                    onSongAction = onSongAction,
+                )
+            }
+
+            LibraryScope.RECENT -> TrackList(
+                tracks = recent,
+                playerState = playerState,
+                bottomPadding = bottomPadding,
+                emptyTitle = "还没有播放记录",
+                emptySubtitle = "播放过的歌曲会出现在这里",
+                showHeader = false,
+                onPlayAll = { shuffled ->
+                    if (recent.isNotEmpty()) {
+                        scope.launch {
+                            val quality = container.settings.snapshot().quality
+                            container.playerConnection.setPlaybackMode(
+                                if (shuffled) PlaybackMode.SHUFFLE else PlaybackMode.SEQUENCE,
+                            )
+                            container.playerConnection.playTracks(
+                                if (shuffled) recent.shuffled() else recent,
+                                0,
+                                quality,
+                            )
+                        }
+                    }
+                },
+                onPlay = { index ->
+                    scope.launch {
+                        val quality = container.settings.snapshot().quality
+                        container.playerConnection.playTracks(recent, index, quality)
+                    }
+                },
+                onSongAction = onSongAction,
+            )
+        }
+    }
+
+    if (showCreateDialog) {
+        AlertDialog(
+            onDismissRequest = { showCreateDialog = false },
+            title = { Text("新建歌单") },
+            text = {
+                OutlinedTextField(
+                    value = newName,
+                    onValueChange = { newName = it },
+                    placeholder = { Text("歌单名称") },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val name = newName.trim()
+                        if (name.isNotEmpty()) {
+                            scope.launch {
+                                container.library.createPlaylist(name)
+                                toast.show("已创建歌单")
+                            }
+                        }
+                        newName = ""
+                        showCreateDialog = false
+                    },
+                ) { Text("创建") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateDialog = false }) { Text("取消") }
+            },
+        )
+    }
+}
+
+@Composable
+private fun LibraryHeader(onOpenSettings: () -> Unit) {
+    val palette = LocalSonarPalette.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 22.dp)
+            .padding(top = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("资料库", color = palette.ink, fontSize = 23.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.weight(1f))
+        val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .then(circleIconPress(interaction, 38.dp))
+                .clickable(interactionSource = interaction, indication = null, onClick = onOpenSettings),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Rounded.Settings, contentDescription = "设置", tint = palette.ink, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+@Composable
+private fun ScopePicker(
+    selected: LibraryScope,
+    onSelect: (LibraryScope) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val palette = LocalSonarPalette.current
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(palette.inputFill, CircleShape)
+            .padding(3.dp),
+    ) {
+        LibraryScope.entries.forEach { scope ->
+            val isSelected = scope == selected
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn44()
+                    .clip(CircleShape)
+                    .background(if (isSelected) palette.background else Color.Transparent)
+                    .clickable { onSelect(scope) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                ) {
+                    Icon(
+                        scope.icon,
+                        contentDescription = null,
+                        tint = if (isSelected) palette.ink else palette.secondaryInk,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Text(
+                        text = scope.label,
+                        color = if (isSelected) palette.ink else palette.secondaryInk,
+                        fontSize = 14.sp,
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun Modifier.heightIn44(): Modifier = this.height(38.dp)
+
+@Composable
+private fun TrackList(
+    tracks: List<Track>,
+    playerState: PlayerUiState,
+    bottomPadding: Dp,
+    emptyTitle: String,
+    emptySubtitle: String,
+    showHeader: Boolean,
+    onPlayAll: (shuffled: Boolean) -> Unit,
+    onPlay: (Int) -> Unit,
+    onSongAction: (Track) -> Unit,
+) {
+    val palette = LocalSonarPalette.current
+    val durationText = remember(tracks) {
+        val total = tracks.sumOf { it.durationMs ?: 0L }
+        if (total <= 0L) null else {
+            val minutes = total / 60_000L
+            if (minutes >= 60) "约 ${minutes / 60} 小时 ${minutes % 60} 分钟" else "约 $minutes 分钟"
+        }
+    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = bottomPadding + 20.dp),
+    ) {
+        if (showHeader) {
+            item(key = "header") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .padding(top = 4.dp, bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text("我的收藏", color = palette.ink, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("${tracks.size} 首歌曲", color = palette.secondaryInk, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        if (durationText != null) {
+                            Text("·", color = palette.secondaryInk, fontSize = 14.sp)
+                            Text(durationText, color = palette.secondaryInk, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        }
+                    }
+                }
+            }
+            item(key = "actions") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    HomePlayButton(
+                        title = "播放全部 (${tracks.size})",
+                        icon = Icons.Rounded.PlayArrow,
+                        primary = true,
+                        enabled = tracks.isNotEmpty(),
+                        modifier = Modifier.weight(1f),
+                    ) { onPlayAll(false) }
+                    HomePlayButton(
+                        "随机播放",
+                        Icons.Rounded.Shuffle,
+                        primary = false,
+                        enabled = tracks.isNotEmpty(),
+                        modifier = Modifier.weight(1f),
+                    ) { onPlayAll(true) }
+                }
+            }
+        }
+        if (tracks.isEmpty()) {
+            item(key = "empty") { EmptyPane(emptyTitle, emptySubtitle) }
+        } else {
+            itemsIndexed(tracks, key = { _, track -> track.musicId }) { index, track ->
+                SongRow(
+                    track = track,
+                    leading = SongLeading.Index(index + 1),
+                    trailing = SongTrailing.More,
+                    showAlbum = false,
+                    showDivider = index < tracks.lastIndex,
+                    isCurrent = playerState.track?.musicId == track.musicId,
+                    isPlaying = playerState.isPlaying,
+                    onPlay = { onPlay(index) },
+                    onAction = { onSongAction(track) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomePlayButton(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    primary: Boolean,
+    modifier: Modifier,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    val palette = LocalSonarPalette.current
+    val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    Box(
+        modifier = modifier
+            .height(44.dp)
+            .then(bouncePress(interaction, 0.96f, 0.9f, haptic = false))
+            .clickable(interactionSource = interaction, indication = null, enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 14.dp),
+                .height(40.dp)
+                .background(if (primary) palette.accent else palette.elevated, RoundedCornerShape(8.dp)),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("资料库", style = MaterialTheme.typography.headlineLarge, color = palette.ink)
-                Text(
-                    "留住喜欢的声音",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = palette.secondaryInk,
-                )
-            }
-            IconButton(onClick = { importLauncher.launch(arrayOf("application/json")) }) {
-                Icon(Icons.Rounded.FileUpload, contentDescription = "导入备份", tint = palette.ink)
-            }
-            IconButton(onClick = { exportLauncher.launch("Sonar-收藏备份.json") }) {
-                Icon(Icons.Rounded.FileDownload, contentDescription = "导出收藏", tint = palette.ink)
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            LibraryTab.entries.forEach { item ->
-                FilterChip(
-                    selected = tab == item,
-                    onClick = { tab = item },
-                    label = { Text(item.label) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = palette.accent.copy(alpha = 0.16f),
-                        selectedLabelColor = palette.accent,
-                        labelColor = palette.secondaryInk,
-                    ),
-                )
-            }
-        }
-
-        Box(modifier = Modifier.weight(1f)) {
-            when (tab) {
-                LibraryTab.FAVORITES -> FavoritesPane(
-                    tracks = favorites,
-                    onPlay = { index -> vm.play(favorites, index); onOpenPlayer() },
-                    onShuffle = { vm.play(favorites, 0, shuffle = true); onOpenPlayer() },
-                    onFavorite = vm::toggleFavorite,
-                    onPlayNext = vm::playNext,
-                    onEnqueue = vm::enqueue,
-                    onOpenFavorites = onOpenFavorites,
-                )
-
-                LibraryTab.PLAYLISTS -> PlaylistsPane(
-                    playlists = playlists,
-                    onCreate = { showCreate = true },
-                    onOpen = onOpenPlaylist,
-                    onRename = { renameTarget = it },
-                    onDelete = { deleteTarget = it },
-                )
-
-                LibraryTab.LOCAL -> LocalPane(
-                    tracks = localTracks,
-                    onPlay = { index -> vm.play(localTracks, index); onOpenPlayer() },
-                    onFavorite = vm::toggleFavorite,
-                    onPlayNext = vm::playNext,
-                    onEnqueue = vm::enqueue,
-                    onPickFiles = {
-                        filePicker.launch(arrayOf("audio/*"))
-                    },
-                    onPickFolder = { folderPicker.launch(null) },
-                )
-
-                LibraryTab.RECENT -> RecentPane(
-                    tracks = recent,
-                    favoriteIds = favorites.mapTo(mutableSetOf()) { it.musicId },
-                    onPlay = { index -> vm.play(recent, index); onOpenPlayer() },
-                    onFavorite = vm::toggleFavorite,
-                    onPlayNext = vm::playNext,
-                    onEnqueue = vm::enqueue,
-                )
-            }
-        }
-    }
-
-    if (showCreate) {
-        NameDialog(
-            title = "新建歌单",
-            confirmLabel = "创建",
-            initial = "",
-            onDismiss = { showCreate = false },
-            onConfirm = { name ->
-                showCreate = false
-                vm.createPlaylist(name)
-            },
-        )
-    }
-    renameTarget?.let { target ->
-        NameDialog(
-            title = "重命名歌单",
-            confirmLabel = "保存",
-            initial = target.name,
-            onDismiss = { renameTarget = null },
-            onConfirm = { name ->
-                vm.renamePlaylist(target.id, name)
-                renameTarget = null
-            },
-        )
-    }
-    deleteTarget?.let { target ->
-        AlertDialog(
-            onDismissRequest = { deleteTarget = null },
-            title = { Text("删除歌单") },
-            text = { Text("确定删除「${target.name}」？歌曲仍会保留在资料库与收藏中。") },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.deletePlaylist(target.id)
-                    deleteTarget = null
-                }) { Text("删除") }
-            },
-            dismissButton = {
-                TextButton(onClick = { deleteTarget = null }) { Text("取消") }
-            },
-        )
-    }
-    pendingImport?.let { bytes ->
-        AlertDialog(
-            onDismissRequest = { pendingImport = null },
-            title = { Text("导入歌单备份") },
-            text = { Text("备份将按歌曲去重后合并。可以选择导入到收藏，或创建一个新歌单。") },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.importBackup(bytes, BackupTarget.Favorites)
-                    pendingImport = null
-                }) { Text("导入到收藏") }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    vm.importBackup(bytes, BackupTarget.NewPlaylist)
-                    pendingImport = null
-                }) { Text("新建歌单") }
-            },
-        )
-    }
-}
-
-@Composable
-private fun FavoritesPane(
-    tracks: List<Track>,
-    onPlay: (Int) -> Unit,
-    onShuffle: () -> Unit,
-    onFavorite: (Track) -> Unit,
-    onPlayNext: (Track) -> Unit,
-    onEnqueue: (Track) -> Unit,
-    onOpenFavorites: () -> Unit,
-) {
-    val palette = LocalSonarPalette.current
-    LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "${tracks.size} 首歌曲",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = palette.secondaryInk,
-                    modifier = Modifier.weight(1f),
-                )
-                FilledTonalButton(onClick = { onPlay(0) }, enabled = tracks.isNotEmpty()) {
-                    Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("播放全部")
-                }
-                IconButton(onClick = onShuffle, enabled = tracks.isNotEmpty()) {
-                    Icon(Icons.Rounded.Shuffle, contentDescription = "随机播放", tint = palette.accent)
-                }
-            }
-        }
-        if (tracks.isEmpty()) {
-            item {
-                EmptyState(
-                    icon = Icons.Rounded.FavoriteBorder,
-                    title = "收藏还是空的",
-                    subtitle = "在搜索结果或播放页点亮爱心，歌曲会出现在这里。",
-                )
-            }
-        }
-        itemsIndexed(tracks, key = { _, track -> track.musicId }) { index, track ->
-            SongRow(
-                track = track,
-                isFavorite = true,
-                onClick = { onPlay(index) },
-                onFavorite = { onFavorite(track) },
-                onPlayNext = { onPlayNext(track) },
-                onEnqueue = { onEnqueue(track) },
-            )
-        }
-        if (tracks.isNotEmpty()) {
-            item {
-                TextButton(
-                    onClick = onOpenFavorites,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                ) { Text("打开收藏歌单") }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PlaylistsPane(
-    playlists: List<UserPlaylist>,
-    onCreate: () -> Unit,
-    onOpen: (String) -> Unit,
-    onRename: (UserPlaylist) -> Unit,
-    onDelete: (UserPlaylist) -> Unit,
-) {
-    val palette = LocalSonarPalette.current
-    LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
-        item {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 10.dp)
-                    .clickable(onClick = onCreate),
-                shape = RoundedCornerShape(14.dp),
-                color = palette.card,
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Icon(Icons.Rounded.Add, contentDescription = null, tint = palette.accent)
-                    Text("新建歌单", style = MaterialTheme.typography.titleMedium, color = palette.ink)
-                }
-            }
-        }
-        if (playlists.isEmpty()) {
-            item {
-                EmptyState(
-                    icon = Icons.Rounded.LibraryMusic,
-                    title = "还没有个人歌单",
-                    subtitle = "新建歌单后，可以从搜索结果或收藏中添加歌曲。",
-                )
-            }
-        }
-        items(playlists, key = { it.id }) { playlist ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onOpen(playlist.id) }
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(52.dp)
-                        .background(palette.card, RoundedCornerShape(10.dp)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Rounded.LibraryMusic, contentDescription = null, tint = palette.accent)
-                }
-                Spacer(Modifier.width(12.dp))
-                Text(
-                    text = playlist.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = palette.ink,
-                    modifier = Modifier.weight(1f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                var menuOpen by remember { mutableStateOf(false) }
-                Box {
-                    IconButton(onClick = { menuOpen = true }) {
-                        Icon(Icons.Rounded.MoreVert, contentDescription = "更多", tint = palette.secondaryInk)
-                    }
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        DropdownMenuItem(
-                            text = { Text("重命名") },
-                            leadingIcon = { Icon(Icons.Rounded.Edit, contentDescription = null) },
-                            onClick = { menuOpen = false; onRename(playlist) },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("删除") },
-                            leadingIcon = { Icon(Icons.Rounded.DeleteOutline, contentDescription = null) },
-                            onClick = { menuOpen = false; onDelete(playlist) },
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun LocalPane(
-    tracks: List<Track>,
-    onPlay: (Int) -> Unit,
-    onFavorite: (Track) -> Unit,
-    onPlayNext: (Track) -> Unit,
-    onEnqueue: (Track) -> Unit,
-    onPickFiles: () -> Unit,
-    onPickFolder: () -> Unit,
-) {
-    val palette = LocalSonarPalette.current
-    LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                FilledTonalButton(onClick = onPickFiles, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Rounded.FileUpload, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("选择文件")
-                }
-                FilledTonalButton(onClick = onPickFolder, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Rounded.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("导入文件夹")
-                }
-            }
-        }
-        if (tracks.isEmpty()) {
-            item {
-                EmptyState(
-                    icon = Icons.Rounded.FolderOpen,
-                    title = "还没有本地音乐",
-                    subtitle = "支持 MP3、FLAC、M4A、WAV 等格式；文件夹导入会自动匹配同名 .lrc。",
-                )
-            }
-        }
-        itemsIndexed(tracks, key = { _, track -> track.musicId }) { index, track ->
-            SongRow(
-                track = track,
-                isFavorite = true,
-                onClick = { onPlay(index) },
-                onFavorite = { onFavorite(track) },
-                onPlayNext = { onPlayNext(track) },
-                onEnqueue = { onEnqueue(track) },
+            val tint = (if (primary) palette.onAccent else palette.ink).copy(alpha = if (enabled) 1f else 0.45f)
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.size(6.dp))
+            Text(
+                text = title,
+                color = tint,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
             )
         }
     }
 }
 
 @Composable
-private fun RecentPane(
-    tracks: List<Track>,
-    favoriteIds: Set<String>,
-    onPlay: (Int) -> Unit,
-    onFavorite: (Track) -> Unit,
-    onPlayNext: (Track) -> Unit,
-    onEnqueue: (Track) -> Unit,
-) {
-    LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
-        if (tracks.isEmpty()) {
-            item {
-                EmptyState(
-                    icon = Icons.Rounded.LibraryMusic,
-                    title = "还没有播放记录",
-                    subtitle = "播放过的歌曲会按最近顺序显示在这里。",
-                )
-            }
-        }
-        itemsIndexed(tracks, key = { _, track -> "recent_${track.musicId}" }) { index, track ->
-            SongRow(
-                track = track,
-                isFavorite = track.musicId in favoriteIds,
-                onClick = { onPlay(index) },
-                onFavorite = { onFavorite(track) },
-                onPlayNext = { onPlayNext(track) },
-                onEnqueue = { onEnqueue(track) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun NameDialog(
+private fun PlaylistRow(
     title: String,
-    confirmLabel: String,
-    initial: String,
-    onDismiss: () -> Unit,
-    onConfirm: (String) -> Unit,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
 ) {
-    var value by remember(initial) { mutableStateOf(initial) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            OutlinedTextField(
-                value = value,
-                onValueChange = { value = it.take(200) },
-                singleLine = true,
-                label = { Text("歌单名称") },
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(value.trim()) }, enabled = value.isNotBlank()) {
-                Text(confirmLabel)
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-    )
+    val palette = LocalSonarPalette.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 8.dp)
+            .heightInMin66(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(50.dp)
+                .background(palette.elevated, RoundedCornerShape(8.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = null, tint = palette.accent, modifier = Modifier.size(22.dp))
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(title, color = palette.ink, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(subtitle, color = palette.secondaryInk, fontSize = 12.sp)
+        }
+        Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = palette.tertiaryInk, modifier = Modifier.size(16.dp))
+    }
+}
+
+private fun Modifier.heightInMin66(): Modifier = this.height(66.dp)
+
+@Composable
+private fun ImportButton(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier,
+    onClick: () -> Unit,
+) {
+    val palette = LocalSonarPalette.current
+    Row(
+        modifier = modifier
+            .height(40.dp)
+            .background(palette.card, RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = palette.ink, modifier = Modifier.size(15.dp))
+        Spacer(Modifier.size(6.dp))
+        Text(title, color = palette.ink, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun EmptyPane(title: String, subtitle: String) {
+    val palette = LocalSonarPalette.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 56.dp, horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(Icons.Rounded.MusicNote, contentDescription = null, tint = palette.tertiaryInk, modifier = Modifier.size(34.dp))
+        Text(title, color = palette.ink, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+        Text(subtitle, color = palette.secondaryInk, fontSize = 13.sp)
+    }
 }

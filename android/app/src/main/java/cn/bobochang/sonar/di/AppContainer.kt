@@ -42,5 +42,5 @@ class AppContainer(context: Context) {
     )
     val lyrics = LyricsRepository(appContext, netEase, chksz)
 
-    val playerConnection: PlayerConnection by lazy { PlayerConnection(appContext) }
+    val playerConnection: PlayerConnection by lazy { PlayerConnection(appContext, playback) }
 }
