@@ -26,6 +26,7 @@ Sonar/Resources/BuildCredentials.json
 .agents/
 .codex/
 SonarTests/
+SonarUITests/
 Sonar.local.xcodeproj/
 project.local.yml
 scripts/run-local-tests.sh
@@ -37,3 +38,7 @@ design/
 
 # 本地录制素材（宣传视频/帧序列），不纳入仓库
 assets/promo-capture/
+promo/
+
+# 个人歌单备份，不纳入仓库
+Sonar-歌单备份.json
