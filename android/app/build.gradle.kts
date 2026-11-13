@@ -21,13 +21,24 @@ val generatedCredentialsDir = layout.buildDirectory.dir("generated/credentials")
 
 val generateBuildCredentials by tasks.registering {
     val outputDir = generatedCredentialsDir.get().asFile
+    val localCredFile = rootProject.file("../Sonar/Resources/BuildCredentials.json")
     outputs.dir(outputDir)
+    inputs.file(localCredFile).optional()
     inputs.property("chkszKey", System.getenv("SONAR_CHKSZ_KEY") ?: "")
     inputs.property("neteaseCookie", System.getenv("SONAR_NETEASE_COOKIE") ?: "")
     inputs.property("wyToken", System.getenv("SONAR_WY_TOKEN") ?: "")
     outputs.upToDateWhen { false }
     doLast {
         val values = mutableMapOf<String, String>()
+        if (localCredFile.exists()) {
+            runCatching {
+                val json = groovy.json.JsonSlurper().parse(localCredFile) as? Map<*, *>
+                json?.forEach { (k, v) ->
+                    val str = v?.toString()?.trim().orEmpty()
+                    if (str.isNotEmpty()) values[k.toString()] = str
+                }
+            }
+        }
         fun put(env: String, key: String) {
             System.getenv(env)?.trim()?.takeIf { it.isNotEmpty() }?.let { values[key] = it }
         }
