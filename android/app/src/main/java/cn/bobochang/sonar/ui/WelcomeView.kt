@@ -39,6 +39,8 @@ import androidx.compose.ui.unit.sp
 import cn.bobochang.sonar.di.AppContainer
 import cn.bobochang.sonar.ui.components.PlayerArtwork
 import cn.bobochang.sonar.ui.theme.LocalReduceMotion
+import cn.bobochang.sonar.ui.theme.SonarBaseTextStyle
+import cn.bobochang.sonar.ui.theme.SonarRoundedFontFamily
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -203,8 +205,9 @@ fun WelcomeView(container: AppContainer, onComplete: () -> Unit) {
                     color = Color.White,
                     fontSize = 52.sp,
                     fontWeight = FontWeight.Black,
-                    fontFamily = FontFamily.SansSerif,
+                    fontFamily = SonarRoundedFontFamily,
                     letterSpacing = (-2.5).sp,
+                    style = SonarBaseTextStyle,
                     modifier = Modifier
                         .graphicsLayer {
                             alpha = brandAlpha.value
@@ -216,6 +219,7 @@ fun WelcomeView(container: AppContainer, onComplete: () -> Unit) {
                     color = Color.White.copy(alpha = 0.70f),
                     fontSize = 14.sp,
                     fontFamily = FontFamily.Serif,
+                    style = SonarBaseTextStyle,
                     modifier = Modifier.graphicsLayer {
                         alpha = taglineAlpha.value
                         translationY = taglineOffset.value.dp.toPx()

@@ -14,11 +14,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import cn.bobochang.sonar.R
 import cn.bobochang.sonar.data.prefs.ThemeMode
 
 /**
@@ -85,6 +87,26 @@ val LocalSonarPalette = staticCompositionLocalOf { LightPalette }
 val LocalReduceMotion = staticCompositionLocalOf { false }
 
 /**
+ * 高级现代几何无衬线字体体系，完美对齐 iOS 端苹果 San Francisco (SF Pro) 的排版骨架与开阔字怀。
+ * 内置 Inter 400/500/600/700，中文字符自动无缝回退至系统现代黑体。
+ */
+val SonarFontFamily = FontFamily(
+    Font(R.font.inter_regular, FontWeight.Normal),
+    Font(R.font.inter_medium, FontWeight.Medium),
+    Font(R.font.inter_semibold, FontWeight.SemiBold),
+    Font(R.font.inter_bold, FontWeight.Bold),
+)
+
+/**
+ * 对应 iOS 的 `design: .rounded`（SF Pro Rounded），用于 Logo "sonar" 与圆角品牌元素。
+ */
+val SonarRoundedFontFamily = FontFamily(
+    Font(R.font.rounded_heavy, FontWeight.Bold),
+    Font(R.font.rounded_heavy, FontWeight.ExtraBold),
+    Font(R.font.rounded_heavy, FontWeight.Black),
+)
+
+/**
  * 彻底消除 Android 默认额外上下内边距（includeFontPadding），
  * 严格对齐 iOS 紧致、精确居中的排版基线。
  */
@@ -98,8 +120,9 @@ val SonarLineHeightStyle = LineHeightStyle(
     trim = LineHeightStyle.Trim.Both,
 )
 
-/** 默认基础 TextStyle：居中、去留白、默认无衬线。 */
+/** 默认基础 TextStyle：居中、去留白、默认 Inter 无衬线。 */
 val SonarBaseTextStyle = TextStyle(
+    fontFamily = SonarFontFamily,
     platformStyle = SonarPlatformTextStyle,
     lineHeightStyle = SonarLineHeightStyle,
 )

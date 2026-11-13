@@ -46,9 +46,9 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.LibraryMusic
+import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.MusicNote
-import androidx.compose.material.icons.rounded.LibraryMusic
+import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.PlaylistPlay
@@ -841,7 +841,7 @@ private fun BottomChrome(
                 onClick = { onSelectTab(RootTab.HOME) },
             )
             TabButton(
-                icon = if (tab == RootTab.LIBRARY) Icons.Rounded.LibraryMusic else Icons.Outlined.LibraryMusic,
+                icon = if (tab == RootTab.LIBRARY) Icons.Rounded.Layers else Icons.Outlined.Layers,
                 label = "资料库",
                 selected = tab == RootTab.LIBRARY,
                 modifier = Modifier.weight(1f),

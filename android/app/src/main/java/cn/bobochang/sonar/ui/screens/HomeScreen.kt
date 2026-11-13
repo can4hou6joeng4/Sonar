@@ -59,6 +59,7 @@ import cn.bobochang.sonar.ui.components.normalizedImageUrl
 import cn.bobochang.sonar.ui.components.PlayerArtwork
 import cn.bobochang.sonar.ui.theme.LocalSonarPalette
 import cn.bobochang.sonar.ui.theme.SonarBaseTextStyle
+import cn.bobochang.sonar.ui.theme.SonarRoundedFontFamily
 import cn.bobochang.sonar.ui.theme.bouncePress
 import cn.bobochang.sonar.ui.theme.circleIconPress
 import cn.bobochang.sonar.ui.theme.withTnum
@@ -329,6 +330,7 @@ private fun HomeHeader(
             color = tint,
             fontSize = 23.sp,
             fontWeight = FontWeight.Bold,
+            fontFamily = SonarRoundedFontFamily,
             letterSpacing = (-0.5).sp,
             style = SonarBaseTextStyle,
         )
