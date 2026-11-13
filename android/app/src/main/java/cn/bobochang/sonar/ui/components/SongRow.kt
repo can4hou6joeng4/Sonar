@@ -41,7 +41,9 @@ import androidx.compose.ui.unit.sp
 import cn.bobochang.sonar.data.model.Track
 import cn.bobochang.sonar.data.model.highestKnownQuality
 import cn.bobochang.sonar.ui.theme.LocalSonarPalette
+import cn.bobochang.sonar.ui.theme.SonarBaseTextStyle
 import cn.bobochang.sonar.ui.theme.cellHighlight
+import cn.bobochang.sonar.ui.theme.withTnum
 
 sealed interface SongLeading {
     data object Cover : SongLeading
@@ -92,141 +94,178 @@ fun SongRow(
         else -> androidx.compose.ui.graphics.Color.Transparent
     }
 
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp)
-            .cellHighlight(interaction)
-            .background(background, RoundedCornerShape(10.dp))
-            .clip(RoundedCornerShape(10.dp))
-            .combinedClickable(
-                enabled = true,
-                interactionSource = interaction,
-                indication = null,
-                onClick = {
-                    if (onPlay != null && !isUnavailable) onPlay()
-                    else if (onAction != null) onAction()
-                },
-                onLongClick = {
-                    if (onAction != null) {
-                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                        onAction()
-                    }
-                },
-            )
-            .padding(horizontal = 16.dp)
-            .defaultMinSize(minHeight = 60.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
+    val dividerInset = when (leading) {
+        SongLeading.Cover -> 70.dp
+        is SongLeading.Index -> 52.dp
+    }
+
+    Box(modifier = modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 2.dp)
+                .cellHighlight(interaction)
+                .background(background, RoundedCornerShape(10.dp))
+                .clip(RoundedCornerShape(10.dp))
+                .combinedClickable(
+                    enabled = true,
+                    interactionSource = interaction,
+                    indication = null,
+                    onClick = {
+                        if (onPlay != null && !isUnavailable) onPlay()
+                        else if (onAction != null) onAction()
+                    },
+                    onLongClick = {
+                        if (onAction != null) {
+                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                            onAction()
+                        }
+                    },
+                )
+                .padding(horizontal = 16.dp)
+                .defaultMinSize(minHeight = 60.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            when (leading) {
-                SongLeading.Cover -> {
-                    Box {
-                        PlayerArtwork(track = track, size = 44.dp, cornerRadius = 7.dp)
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                when (leading) {
+                    SongLeading.Cover -> {
+                        Box {
+                            PlayerArtwork(track = track, size = 44.dp, cornerRadius = 7.dp)
+                        }
+                    }
+
+                    is SongLeading.Index -> Box(
+                        Modifier
+                            .width(26.dp)
+                            .height(44.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (isCurrent) {
+                            PlayingEqualizer(isAnimating = isPlaying, color = palette.accent)
+                        } else {
+                            Text(
+                                text = "${leading.value}",
+                                color = palette.tertiaryInk,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Normal,
+                                style = SonarBaseTextStyle.withTnum(),
+                            )
+                        }
                     }
                 }
 
-                is SongLeading.Index -> Box(
-                    Modifier
-                        .width(26.dp)
-                        .height(44.dp),
-                    contentAlignment = Alignment.Center,
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
                 ) {
-                    if (isCurrent) {
-                        PlayingEqualizer(isAnimating = isPlaying, color = palette.accent)
-                    } else {
-                        Text("${leading.value}", color = palette.tertiaryInk, fontSize = 14.sp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        if (isCurrent && leading == SongLeading.Cover) {
+                            PlayingEqualizer(isAnimating = isPlaying, color = primary)
+                        }
+                        Text(
+                            text = track.title,
+                            color = primary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium,
+                            letterSpacing = (-0.1).sp,
+                            style = SonarBaseTextStyle,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        if (!track.source.isEnabled) {
+                            Text(
+                                text = "不可用",
+                                color = palette.secondaryInk,
+                                fontSize = 11.sp,
+                                style = SonarBaseTextStyle,
+                            )
+                        } else if (!track.isPlayable) {
+                            Text(
+                                text = "已下架",
+                                color = palette.secondaryInk,
+                                fontSize = 11.sp,
+                                style = SonarBaseTextStyle,
+                            )
+                        } else {
+                            QualityBadge(track.highestKnownQuality)
+                        }
+                        Text(
+                            text = subtitle(track, showAlbum),
+                            color = secondary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Normal,
+                            style = SonarBaseTextStyle,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
             }
 
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(3.dp),
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    if (isCurrent && leading == SongLeading.Cover) {
-                        PlayingEqualizer(isAnimating = isPlaying, color = primary)
+            when (trailing) {
+                SongTrailing.Play -> {
+                    if (onPlay != null) {
+                        CircleGlyphButton(
+                            icon = Icons.Rounded.PlayArrow,
+                            size = 19.dp,
+                            tint = if (isUnavailable) palette.tertiaryInk else palette.ink,
+                            onClick = { if (!isUnavailable) onPlay() },
+                            enabled = !isUnavailable,
+                        )
                     }
-                    Text(
-                        text = track.title,
-                        color = primary,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
                 }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                ) {
-                    if (!track.source.isEnabled) {
-                        Text("不可用", color = palette.secondaryInk, fontSize = 12.sp)
-                    } else if (!track.isPlayable) {
-                        Text("已下架", color = palette.secondaryInk, fontSize = 12.sp)
+
+                SongTrailing.More -> {
+                    if (onAction != null) {
+                        CircleGlyphButton(
+                            icon = Icons.Rounded.MoreHoriz,
+                            size = 18.dp,
+                            tint = palette.secondaryInk,
+                            onClick = onAction,
+                        )
                     } else {
-                        QualityBadge(track.highestKnownQuality)
+                        Spacer(Modifier.size(44.dp))
                     }
-                    Text(
-                        text = subtitle(track, showAlbum),
-                        color = secondary,
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                }
+
+                is SongTrailing.CollectionStatus -> {
+                    if (trailing.isCollected) {
+                        Icon(
+                            imageVector = Icons.Rounded.Check,
+                            contentDescription = "已收藏，导入时跳过",
+                            tint = palette.secondaryInk,
+                            modifier = Modifier.size(44.dp).padding(14.dp),
+                        )
+                    } else {
+                        Spacer(Modifier.size(44.dp))
+                    }
                 }
             }
         }
 
-        when (trailing) {
-            SongTrailing.Play -> {
-                if (onPlay != null) {
-                    CircleGlyphButton(
-                        icon = Icons.Rounded.PlayArrow,
-                        size = 19.dp,
-                        tint = if (isUnavailable) palette.tertiaryInk else palette.ink,
-                        onClick = { if (!isUnavailable) onPlay() },
-                        enabled = !isUnavailable,
-                    )
-                }
-            }
-
-            SongTrailing.More -> {
-                if (onAction != null) {
-                    CircleGlyphButton(
-                        icon = Icons.Rounded.MoreHoriz,
-                        size = 18.dp,
-                        tint = palette.secondaryInk,
-                        onClick = onAction,
-                    )
-                } else {
-                    Spacer(Modifier.size(44.dp))
-                }
-            }
-
-            is SongTrailing.CollectionStatus -> {
-                if (trailing.isCollected) {
-                    Icon(
-                        imageVector = Icons.Rounded.Check,
-                        contentDescription = "已收藏，导入时跳过",
-                        tint = palette.secondaryInk,
-                        modifier = Modifier.size(44.dp).padding(14.dp),
-                    )
-                } else {
-                    Spacer(Modifier.size(44.dp))
-                }
-            }
+        if (showDivider) {
+            HorizontalDivider(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(start = dividerInset),
+                thickness = 0.5.dp,
+                color = palette.divider,
+            )
         }
     }
 }

@@ -75,6 +75,7 @@ import cn.bobochang.sonar.playback.PlayerUiState
 import cn.bobochang.sonar.ui.components.LocalToast
 import cn.bobochang.sonar.ui.components.PlayerArtwork
 import cn.bobochang.sonar.ui.theme.LocalReduceMotion
+import cn.bobochang.sonar.ui.theme.SonarBaseTextStyle
 import cn.bobochang.sonar.ui.theme.bouncePress
 import cn.bobochang.sonar.ui.theme.circleIconPress
 import kotlinx.coroutines.delay
@@ -510,7 +511,9 @@ private fun PlayerMetadata(track: Track?, compact: Boolean) {
                 text = track?.title ?: "暂无播放",
                 color = PrimaryInk,
                 fontSize = if (compact) 17.sp else 22.sp,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = if (compact) FontWeight.SemiBold else FontWeight.Bold,
+                letterSpacing = if (compact) (-0.2).sp else (-0.3).sp,
+                style = SonarBaseTextStyle,
                 textAlign = if (compact) TextAlign.Start else TextAlign.Center,
                 maxLines = if (compact) 1 else 2,
                 overflow = TextOverflow.Ellipsis,
@@ -519,6 +522,8 @@ private fun PlayerMetadata(track: Track?, compact: Boolean) {
                 text = track?.artist?.takeIf { it.isNotBlank() } ?: "选择歌曲开始播放",
                 color = SecondaryInk,
                 fontSize = 15.sp,
+                fontWeight = FontWeight.Normal,
+                style = SonarBaseTextStyle,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

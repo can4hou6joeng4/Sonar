@@ -54,7 +54,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.bobochang.sonar.playback.PlaybackMode
 import cn.bobochang.sonar.playback.PlayerUiState
+import cn.bobochang.sonar.ui.theme.SonarBaseTextStyle
 import cn.bobochang.sonar.ui.theme.bouncePress
+import cn.bobochang.sonar.ui.theme.withTnum
 import cn.bobochang.sonar.ui.theme.circleIconPress
 import cn.bobochang.sonar.ui.theme.AppMotion
 import cn.bobochang.sonar.ui.theme.LocalReduceMotion
@@ -212,9 +214,21 @@ fun TransportBar(
                     },
                 )
                 Row(Modifier.fillMaxWidth()) {
-                    Text(format(displayed), color = SecondaryInk, fontSize = 10.5.sp, fontFamily = FontFamily.Monospace)
+                    Text(
+                        text = format(displayed),
+                        color = SecondaryInk,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Normal,
+                        style = SonarBaseTextStyle.withTnum(),
+                    )
                     Spacer(Modifier.weight(1f))
-                    Text(format(state.durationMs), color = SecondaryInk, fontSize = 10.5.sp, fontFamily = FontFamily.Monospace)
+                    Text(
+                        text = format(state.durationMs),
+                        color = SecondaryInk,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Normal,
+                        style = SonarBaseTextStyle.withTnum(),
+                    )
                 }
             }
 

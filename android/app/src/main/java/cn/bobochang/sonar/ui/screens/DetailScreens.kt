@@ -66,7 +66,9 @@ import cn.bobochang.sonar.ui.components.SongLeading
 import cn.bobochang.sonar.ui.components.SongRow
 import cn.bobochang.sonar.ui.components.SongTrailing
 import cn.bobochang.sonar.ui.theme.LocalSonarPalette
+import cn.bobochang.sonar.ui.theme.SonarBaseTextStyle
 import cn.bobochang.sonar.ui.theme.bouncePress
+import cn.bobochang.sonar.ui.theme.withTnum
 import kotlinx.coroutines.launch
 
 /** 本地歌单 / 我的收藏：对应 iOS `PlaylistDetailView`。 */
@@ -773,18 +775,19 @@ private fun DetailActionButton(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(40.dp)
-                .background(if (primary) palette.accent else palette.elevated, RoundedCornerShape(8.dp)),
+                .background(if (primary) palette.accent else palette.elevated, RoundedCornerShape(10.dp)),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
         ) {
             val tint = if (primary) palette.onAccent else palette.ink
-            Icon(icon, contentDescription = null, tint = tint.copy(alpha = if (enabled) 1f else 0.45f), modifier = Modifier.size(14.dp))
+            Icon(icon, contentDescription = null, tint = tint.copy(alpha = if (enabled) 1f else 0.45f), modifier = Modifier.size(13.dp))
             Spacer(Modifier.size(6.dp))
             Text(
                 text = title,
                 color = tint.copy(alpha = if (enabled) 1f else 0.45f),
                 fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
+                fontWeight = if (primary) FontWeight.Bold else FontWeight.SemiBold,
+                style = SonarBaseTextStyle,
             )
             if (badge != null) {
                 Spacer(Modifier.size(4.dp))
@@ -793,6 +796,7 @@ private fun DetailActionButton(
                     color = tint.copy(alpha = if (enabled) 0.85f else 0.45f),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
+                    style = SonarBaseTextStyle.withTnum(),
                 )
             }
         }

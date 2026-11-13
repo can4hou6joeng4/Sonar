@@ -11,9 +11,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.ExperimentalTextApi
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.bobochang.sonar.data.prefs.ThemeMode
@@ -81,6 +84,29 @@ val LocalSonarPalette = staticCompositionLocalOf { LightPalette }
 /** 跟随系统“移除动画”偏好；与 iOS `sonarReduceMotion` 对应。 */
 val LocalReduceMotion = staticCompositionLocalOf { false }
 
+/**
+ * 彻底消除 Android 默认额外上下内边距（includeFontPadding），
+ * 严格对齐 iOS 紧致、精确居中的排版基线。
+ */
+@OptIn(ExperimentalTextApi::class)
+val SonarPlatformTextStyle = PlatformTextStyle(
+    includeFontPadding = false,
+)
+
+val SonarLineHeightStyle = LineHeightStyle(
+    alignment = LineHeightStyle.Alignment.Center,
+    trim = LineHeightStyle.Trim.Both,
+)
+
+/** 默认基础 TextStyle：居中、去留白、默认无衬线。 */
+val SonarBaseTextStyle = TextStyle(
+    platformStyle = SonarPlatformTextStyle,
+    lineHeightStyle = SonarLineHeightStyle,
+)
+
+/** 启用等宽数字（Tabular Figures），对应 iOS 的 `.monospacedDigit()`。 */
+fun TextStyle.withTnum(): TextStyle = this.copy(fontFeatureSettings = "tnum")
+
 private val DarkColors = darkColorScheme(
     primary = DarkPalette.accent,
     onPrimary = DarkPalette.onAccent,
@@ -130,18 +156,78 @@ private val LightColors = lightColorScheme(
 )
 
 private val SonarTypography = Typography(
-    headlineLarge = TextStyle(fontSize = 30.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp),
-    headlineMedium = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.3).sp),
-    headlineSmall = TextStyle(fontSize = 19.sp, fontWeight = FontWeight.SemiBold),
-    titleLarge = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.2).sp),
-    titleMedium = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-    titleSmall = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
-    bodyLarge = TextStyle(fontSize = 16.sp),
-    bodyMedium = TextStyle(fontSize = 14.sp),
-    bodySmall = TextStyle(fontSize = 12.sp),
-    labelLarge = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
-    labelMedium = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium),
-    labelSmall = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Medium),
+    displayLarge = SonarBaseTextStyle.copy(
+        fontSize = 39.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = (-1.4).sp,
+        lineHeight = 44.sp,
+    ),
+    headlineLarge = SonarBaseTextStyle.copy(
+        fontSize = 28.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = (-0.5).sp,
+        lineHeight = 34.sp,
+    ),
+    headlineMedium = SonarBaseTextStyle.copy(
+        fontSize = 22.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = (-0.3).sp,
+        lineHeight = 28.sp,
+    ),
+    headlineSmall = SonarBaseTextStyle.copy(
+        fontSize = 20.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = (-0.2).sp,
+        lineHeight = 26.sp,
+    ),
+    titleLarge = SonarBaseTextStyle.copy(
+        fontSize = 20.sp,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = (-0.2).sp,
+        lineHeight = 26.sp,
+    ),
+    titleMedium = SonarBaseTextStyle.copy(
+        fontSize = 16.sp,
+        fontWeight = FontWeight.SemiBold,
+        lineHeight = 22.sp,
+    ),
+    titleSmall = SonarBaseTextStyle.copy(
+        fontSize = 15.sp,
+        fontWeight = FontWeight.Medium,
+        letterSpacing = (-0.1).sp,
+        lineHeight = 20.sp,
+    ),
+    bodyLarge = SonarBaseTextStyle.copy(
+        fontSize = 14.sp,
+        fontWeight = FontWeight.Medium,
+        lineHeight = 18.sp,
+    ),
+    bodyMedium = SonarBaseTextStyle.copy(
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Normal,
+        lineHeight = 16.sp,
+    ),
+    bodySmall = SonarBaseTextStyle.copy(
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Normal,
+        lineHeight = 15.sp,
+    ),
+    labelLarge = SonarBaseTextStyle.copy(
+        fontSize = 14.sp,
+        fontWeight = FontWeight.SemiBold,
+        lineHeight = 18.sp,
+    ),
+    labelMedium = SonarBaseTextStyle.copy(
+        fontSize = 12.sp,
+        fontWeight = FontWeight.SemiBold,
+        lineHeight = 16.sp,
+    ),
+    labelSmall = SonarBaseTextStyle.copy(
+        fontSize = 8.75.sp,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 0.08.sp,
+        lineHeight = 12.sp,
+    ),
 )
 
 private val SonarShapes = Shapes(

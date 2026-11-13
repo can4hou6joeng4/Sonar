@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import cn.bobochang.sonar.playback.PlayerUiState
 import cn.bobochang.sonar.ui.theme.LocalSonarPalette
+import cn.bobochang.sonar.ui.theme.SonarBaseTextStyle
 import cn.bobochang.sonar.ui.theme.cellHighlight
 import cn.bobochang.sonar.ui.theme.circleIconPress
 import kotlin.math.abs
@@ -136,6 +137,8 @@ fun NcmMiniPlayer(
                         color = palette.ink,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Medium,
+                        letterSpacing = (-0.1).sp,
+                        style = SonarBaseTextStyle,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -143,6 +146,8 @@ fun NcmMiniPlayer(
                         text = subtitle(state),
                         color = palette.secondaryInk,
                         fontSize = 11.sp,
+                        fontWeight = FontWeight.Normal,
+                        style = SonarBaseTextStyle,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )

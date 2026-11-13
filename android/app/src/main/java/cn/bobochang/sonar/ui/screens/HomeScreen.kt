@@ -58,6 +58,10 @@ import cn.bobochang.sonar.ui.theme.circleIconPress
 import cn.bobochang.sonar.ui.components.normalizedImageUrl
 import cn.bobochang.sonar.ui.components.PlayerArtwork
 import cn.bobochang.sonar.ui.theme.LocalSonarPalette
+import cn.bobochang.sonar.ui.theme.SonarBaseTextStyle
+import cn.bobochang.sonar.ui.theme.bouncePress
+import cn.bobochang.sonar.ui.theme.circleIconPress
+import cn.bobochang.sonar.ui.theme.withTnum
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import kotlinx.coroutines.launch
@@ -163,6 +167,7 @@ fun HomeScreen(
                             color = palette.secondaryInk,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
+                            style = SonarBaseTextStyle.withTnum(),
                         )
                         Spacer(Modifier.weight(1f))
                         Icon(Icons.Rounded.ArrowForward, contentDescription = null, tint = palette.secondaryInk, modifier = Modifier.size(13.dp))
@@ -176,8 +181,19 @@ fun HomeScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Text("从一首喜欢的歌开始", color = palette.ink, fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
-                    Text("搜索歌曲，将它们留在你的收藏里", color = palette.secondaryInk, fontSize = 13.sp)
+                    Text(
+                        text = "从一首喜欢的歌开始",
+                        color = palette.ink,
+                        fontSize = 19.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        style = SonarBaseTextStyle,
+                    )
+                    Text(
+                        text = "搜索歌曲，将它们留在你的收藏里",
+                        color = palette.secondaryInk,
+                        fontSize = 13.sp,
+                        style = SonarBaseTextStyle,
+                    )
                     Spacer(Modifier.height(8.dp))
                     PlayAllButton(
                         title = "搜索音乐",
@@ -261,6 +277,7 @@ private fun SpotlightHero(
                 fontSize = 10.sp,
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = 2.sp,
+                style = SonarBaseTextStyle,
             )
             Text(
                 text = track?.artist?.takeIf { it.isNotBlank() } ?: "听见你的音乐",
@@ -269,6 +286,7 @@ private fun SpotlightHero(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = (-1.4).sp,
                 lineHeight = 44.sp,
+                style = SonarBaseTextStyle,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -276,6 +294,7 @@ private fun SpotlightHero(
                 text = track?.album?.takeIf { it.isNotBlank() } ?: track?.title ?: "让每一首歌都有自己的位置",
                 color = palette.secondaryInk,
                 fontSize = 12.sp,
+                style = SonarBaseTextStyle,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -310,7 +329,8 @@ private fun HomeHeader(
             color = tint,
             fontSize = 23.sp,
             fontWeight = FontWeight.Bold,
-            fontFamily = FontFamily.SansSerif,
+            letterSpacing = (-0.5).sp,
+            style = SonarBaseTextStyle,
         )
         Spacer(Modifier.weight(1f))
         HeaderIcon(Icons.Rounded.Search, "搜索", onOpenSearch)
@@ -352,9 +372,22 @@ private fun PlaylistHeader(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("收藏歌曲", color = palette.ink, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(
+                text = "收藏歌曲",
+                color = palette.ink,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = (-0.2).sp,
+                style = SonarBaseTextStyle,
+            )
             Spacer(Modifier.weight(1f))
-            Text("$count 首歌曲", color = palette.secondaryInk, fontSize = 11.sp)
+            Text(
+                text = "$count 首歌曲",
+                color = palette.secondaryInk,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Normal,
+                style = SonarBaseTextStyle.withTnum(),
+            )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             PlayAllButton(
@@ -413,6 +446,7 @@ private fun PlayAllButton(
                 color = foreground.copy(alpha = if (enabled) 1f else 0.45f),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
+                style = SonarBaseTextStyle,
             )
         }
     }
