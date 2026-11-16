@@ -100,7 +100,7 @@ struct QuickShuffleWidget: Widget {
         StaticConfiguration(kind: kind, provider: QuickShuffleTimelineProvider()) { entry in
             QuickShuffleWidgetView(entry: entry)
         }
-        .configurationDisplayName("\(PersonalPlaylistDefaults.name) · 随心听")
+        .configurationDisplayName(Text(verbatim: "\(PersonalPlaylistDefaults.name) · 随心听"))
         .description("一键在桌面开启收藏歌曲的随机播放。")
         .supportedFamilies([.systemSmall])
     }
