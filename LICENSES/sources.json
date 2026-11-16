@@ -93,6 +93,50 @@
       "distribution": "development dependency"
     }
   ],
+  "fonts": [
+    {
+      "name": "Inter",
+      "version": "4.001",
+      "license": "SIL OFL 1.1",
+      "license_file": "LICENSES/inter.txt",
+      "copyright": "Copyright (c) 2016 The Inter Project Authors",
+      "source": "https://github.com/rsms/inter",
+      "files": [
+        {
+          "path": "android/app/src/main/res/font/inter_regular.ttf",
+          "sha256": "15b294b67f2f8bbc04d990023ef4aec66502b87dc9040d84abe5f896ccb693de"
+        },
+        {
+          "path": "android/app/src/main/res/font/inter_medium.ttf",
+          "sha256": "36a36ff7ac46dc2aeceac3a80a87a67e7b844b8fc936699259aac8fba9bcf734"
+        },
+        {
+          "path": "android/app/src/main/res/font/inter_semibold.ttf",
+          "sha256": "334bb2c51aeba5f566abac8d03a7e75ab3234d6926b52e92a85dc704129258b5"
+        },
+        {
+          "path": "android/app/src/main/res/font/inter_bold.ttf",
+          "sha256": "76121a34a606cc8a0e1ef5a47d2b9ba9678c41f5c852d63eb28f62069373bfad"
+        }
+      ],
+      "distribution": "bundled Android font"
+    },
+    {
+      "name": "Nunito",
+      "version": "3.602",
+      "license": "SIL OFL 1.1",
+      "license_file": "LICENSES/nunito.txt",
+      "copyright": "Copyright 2014 The Nunito Project Authors",
+      "source": "https://github.com/googlefonts/nunito",
+      "files": [
+        {
+          "path": "android/app/src/main/res/font/rounded_heavy.ttf",
+          "sha256": "89122aad8fac58cb57e90b1560e0de7bcf458341752f4f1bf7e6c27578e22b1e"
+        }
+      ],
+      "distribution": "bundled Android font"
+    }
+  ],
   "pako_zlib_notice_file": "LICENSES/pako-zlib.txt",
   "note": "The upstream snapshots verify license texts, not an exact provenance pin for the adapted source subset. Source comments identify additional upstream references.",
   "additional_references": {
@@ -148,5 +192,5 @@
       "resolution": "removed unused similar helper"
     }
   },
-  "reviewed_on": "2026-10-06"
+  "reviewed_on": "2026-11-16"
 }

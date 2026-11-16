@@ -1,6 +1,6 @@
 # 第三方代码与许可说明
 
-本文件记录 Sonar 使用的第三方代码及相应许可文本。下列许可证仅覆盖对应的第三方内容；Sonar 自有代码采用根目录的 GPL-3.0 许可证。核对日期：2026-10-06。
+本文件记录 Sonar 使用的第三方代码及相应许可文本。下列许可证仅覆盖对应的第三方内容；Sonar 自有代码采用根目录的 GPL-3.0 许可证。最近核对：2026-11-16。
 
 ## 音源实现
 
@@ -21,6 +21,17 @@
 | pako | 2.2.0 | bundle 运行时 | [MIT](LICENSES/pako.txt) 与 [zlib 源码声明](LICENSES/pako-zlib.txt) |
 | esbuild | 0.28.2 | 构建工具 | [MIT](LICENSES/esbuild.txt) |
 | lrc-file-parser | 1.2.7 | 已声明的开发依赖，当前 bundle 中未检测到对应模块 | [MIT](LICENSES/lrc-file-parser.txt) |
+
+## 内置字体
+
+Android 端在 `android/app/src/main/res/font/` 内置以下字体，均按 SIL Open Font License 1.1 随应用分发，许可正文保存在 `LICENSES/`。字体文件未作字形修改；`rounded_heavy.ttf` 沿用既有资源名，实际字体为 Nunito ExtraBold。
+
+| 文件 | 字体 | 版权 | 许可文本 |
+| --- | --- | --- | --- |
+| `inter_regular.ttf`、`inter_medium.ttf`、`inter_semibold.ttf`、`inter_bold.ttf` | Inter | Copyright (c) 2016 The Inter Project Authors | [SIL OFL 1.1](LICENSES/inter.txt) |
+| `rounded_heavy.ttf` | Nunito ExtraBold | Copyright 2014 The Nunito Project Authors | [SIL OFL 1.1](LICENSES/nunito.txt) |
+
+OFL 允许字体随软件一起再分发或嵌入，但要求保留版权与许可声明；字体本身不得单独售卖，也不得使用原作者名义为衍生作品背书。
 
 ## 已处理的历史辅助代码引用
 
