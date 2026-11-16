@@ -577,9 +577,6 @@ private struct PlayerSurfaceContent: View {
                         )
                         .contentShape(Rectangle())
                         .onTapGesture { onShowArtwork() }
-                        .overlay(alignment: .bottom) {
-                            lyricsOffsetBar.padding(.bottom, 10)
-                        }
                     }
                     .transition(.opacity)
                 }
@@ -597,53 +594,6 @@ private struct PlayerSurfaceContent: View {
         .task(id: currentMusicID) {
             lyricsOffset = LyricsOffsetStore.offset(for: currentMusicID)
         }
-    }
-
-    private var lyricsOffsetBar: some View {
-        HStack(spacing: 12) {
-            Button {
-                lyricsOffset = LyricsOffsetStore.adjust(currentMusicID, by: -LyricsOffsetStore.step)
-            } label: {
-                Image(systemName: "minus")
-                    .frame(width: 30, height: 30)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("歌词提前 0.5 秒")
-
-            Text(offsetText)
-                .font(.system(size: 12, weight: .medium, design: .monospaced))
-                .frame(minWidth: 88)
-
-            Button {
-                lyricsOffset = LyricsOffsetStore.adjust(currentMusicID, by: LyricsOffsetStore.step)
-            } label: {
-                Image(systemName: "plus")
-                    .frame(width: 30, height: 30)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("歌词延后 0.5 秒")
-
-            if abs(lyricsOffset) > 0.001 {
-                Button("复位") {
-                    LyricsOffsetStore.reset(currentMusicID)
-                    lyricsOffset = 0
-                }
-                .font(.system(size: 12, weight: .medium))
-                .buttonStyle(.plain)
-            }
-        }
-        .foregroundStyle(NCMDesignTokens.Player.secondaryInk)
-        .padding(.horizontal, 14)
-        .frame(height: 32)
-        .background(.ultraThinMaterial, in: Capsule())
-        .padding(.bottom, 6)
-        .accessibilityIdentifier("player-lyrics-offset-bar")
-    }
-
-    private var offsetText: String {
-        let value = lyricsOffset
-        if abs(value) < 0.001 { return "歌词偏移 0.0s" }
-        return String(format: "歌词偏移 %+.1fs", value)
     }
 }
 

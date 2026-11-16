@@ -2,6 +2,11 @@ import Observation
 import SwiftUI
 import UIKit
 
+/// 当前句在视口中的纵向位置：0.25 表示居中偏上，下方露出更多即将到来的歌词。
+private enum KaraokeLyricsAnchor {
+    static let fraction: CGFloat = 0.25
+}
+
 struct KaraokeLyricsView: View {
     let lyrics: KaraokeLyrics
     let errorMessage: String?
@@ -43,11 +48,11 @@ struct KaraokeLyricsView: View {
             ZStack {
                 ScrollView(.vertical, showsIndicators: false) {
                     LazyVStack(alignment: .center, spacing: 0) {
-                        Color.clear.frame(height: geometry.size.height * 0.40)
+                        Color.clear.frame(height: geometry.size.height * KaraokeLyricsAnchor.fraction)
                         ForEach(lyrics.lines) { line in
                             measuredLine(line)
                         }
-                        Color.clear.frame(height: geometry.size.height * 0.60)
+                        Color.clear.frame(height: geometry.size.height * (1 - KaraokeLyricsAnchor.fraction))
                     }
                     .coordinateSpace(name: KaraokeCoordinateSpace.content)
                     .background {
@@ -151,7 +156,7 @@ struct KaraokeLyricsView: View {
 @MainActor
 @Observable
 private final class KaraokeLyricsViewState {
-    private static let scrollAnchor = 0.40
+    private static let scrollAnchor = KaraokeLyricsAnchor.fraction
     private static let springStiffness = 210.0
     private static let springDamping = 27.0
     private static let waveStiffness = 200.0
