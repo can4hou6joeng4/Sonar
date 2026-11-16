@@ -27,11 +27,7 @@ enum PersonalPlaylistCollectionFeedback {
 }
 
 struct PlaylistDetailView: View {
-    private struct Entry: Identifiable {
-        let id: String
-        let track: Track
-        let playlistIndex: Int?
-    }
+    private typealias Entry = PlaylistTrackEntry
 
     private let playlist: Playlist?
     private let fallbackTitle: String
@@ -52,7 +48,9 @@ struct PlaylistDetailView: View {
     @State private var selectedEntry: Entry?
     @State private var errorMessage: String?
     @State private var isSelecting = false
-    @State private var selectedIDs: Set<String> = []
+    @State private var selectedIDs: Set<Entry.ID> = []
+    @State private var filter = PlaylistTrackFilter()
+    @State private var showsFilters = false
 
     init(
         playlist: Playlist,
@@ -86,14 +84,18 @@ struct PlaylistDetailView: View {
     }
     private var isPersonalPlaylist: Bool { playlist == nil || playlist?.isPrimaryPersonal == true }
     private var tracks: [Track] { entries.map(\.track) }
-    private var entries: [Entry] {
+    private var playbackPlaylistID: UUID? { filter.isActive ? nil : playlist?.id }
+    private var entries: [Entry] { filter.apply(to: allEntries, supportsAddedTime: playlist != nil) }
+    private var allEntries: [Entry] {
         if let playlist {
             return playlist.orderedItems.enumerated().compactMap { index, item in
                 guard let track = item.track.track else { return nil }
-                return Entry(id: track.musicID, track: track, playlistIndex: index)
+                return Entry(id: .stored(item.persistentModelID), track: track, playlistIndex: index, addedAt: item.addedAt)
             }
         }
-        return fallbackTracks.enumerated().map { Entry(id: $0.element.musicID, track: $0.element, playlistIndex: nil) }
+        return fallbackTracks.enumerated().map {
+            Entry(id: .external($0.offset), track: $0.element, playlistIndex: nil, addedAt: nil)
+        }
     }
     var body: some View {
         VStack(spacing: 0) {
@@ -129,6 +131,16 @@ struct PlaylistDetailView: View {
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden(true)
         .ncmEdgeSwipeBack()
+        .onChange(of: filter) { _, _ in selectedIDs.removeAll() }
+        .onChange(of: allEntries.map(\.id)) { _, ids in selectedIDs.formIntersection(Set(ids)) }
+        .sheet(isPresented: $showsFilters) {
+            PlaylistFilterSheet(
+                filter: $filter,
+                tracks: allEntries.map(\.track),
+                supportsAddedTime: playlist != nil,
+                hasUnknownDates: allEntries.contains { $0.addedAt == nil }
+            )
+        }
         .songActionsSheet(
             track: Binding(
                 get: { selectedEntry?.track },
@@ -157,7 +169,7 @@ struct PlaylistDetailView: View {
                     playbackService: playbackService
                 )
             }
-            if let entry = selectedEntry, let playlist, !playlist.isSystem, entry.playlistIndex != nil {
+            if let entry = selectedEntry, let playlist, !playlist.isSystem, currentIndex(for: entry, in: playlist) != nil {
                 actions.append(SongAction(
                     title: "移出歌单",
                     systemImage: "text.badge.minus",
@@ -205,7 +217,18 @@ struct PlaylistDetailView: View {
 
             Spacer()
 
-            if !entries.isEmpty {
+            if !allEntries.isEmpty {
+                Button { showsFilters = true } label: {
+                    Image(systemName: filter.isActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+                        .font(.system(size: 21, weight: .medium))
+                        .foregroundStyle(filter.isActive ? scheme.primary : scheme.onSurface)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("筛选与排序")
+                .accessibilityValue(filter.isActive ? filter.summary : "未筛选")
+                .accessibilityIdentifier("playlist-filter-button")
+
                 Button(isSelecting ? "取消" : "选择") {
                     if isSelecting {
                         isSelecting = false
@@ -262,14 +285,14 @@ struct PlaylistDetailView: View {
     }
 
     private var allSelected: Bool {
-        !entries.isEmpty && selectedIDs.count == entries.count
+        !entries.isEmpty && Set(entries.map(\.id)).isSubset(of: selectedIDs)
     }
 
     private var selectedEntries: [Entry] {
         entries.filter { selectedIDs.contains($0.id) }
     }
 
-    private func toggleSelection(_ id: String) {
+    private func toggleSelection(_ id: Entry.ID) {
         if selectedIDs.contains(id) {
             selectedIDs.remove(id)
         } else {
@@ -306,14 +329,18 @@ struct PlaylistDetailView: View {
 
     private func removeSelected() {
         guard let playlist, !playlist.isSystem else { return }
-        let indices = selectedEntries.compactMap(\.playlistIndex).sorted(by: >)
-        guard !indices.isEmpty else { return }
+        let removals = selectedEntries.compactMap { entry -> (index: Int, track: Track)? in
+            guard let index = currentIndex(for: entry, in: playlist) else { return nil }
+            return (index, entry.track)
+        }.sorted { $0.index > $1.index }
+        guard !removals.isEmpty else { return }
         let store = LibraryStore(context: modelContext)
         do {
-            for index in indices {
-                try store.removeItem(at: index, from: playlist)
+            for removal in removals {
+                try store.removeItem(at: removal.index, from: playlist)
+                playbackService.onTrackRemovedFromPlaylist(removal.track, playlistID: playlist.id)
             }
-            toastCenter.show("已移出 \(indices.count) 首")
+            toastCenter.show("已移出 \(removals.count) 首")
             isSelecting = false
             selectedIDs.removeAll()
         } catch {
@@ -351,7 +378,17 @@ struct PlaylistDetailView: View {
         LazyVStack(spacing: 0) {
             playlistSongsHeader
 
-            if entries.isEmpty {
+            if entries.isEmpty, filter.hasConditions, !allEntries.isEmpty {
+                ContentUnavailableView {
+                    Label("没有符合条件的歌曲", systemImage: "line.3.horizontal.decrease.circle")
+                } description: {
+                    Text("调整歌手或添加时间，或清除筛选以查看全部歌曲。")
+                } actions: {
+                    Button("清除筛选") { filter = PlaylistTrackFilter() }
+                        .accessibilityIdentifier("playlist-filter-reset-empty")
+                }
+                .frame(minHeight: 260)
+            } else if entries.isEmpty {
                 ContentUnavailableView {
                     Label("这个歌单还没有歌曲", systemImage: "music.note.list")
                 } description: {
@@ -372,14 +409,14 @@ struct PlaylistDetailView: View {
                             if isSelecting {
                                 toggleSelection(entry.id)
                             } else {
-                                Task { await playbackService.replaceQueue(tracks, startingAt: index, activePlaylistID: playlist?.id) }
+                                Task { await playbackService.replaceQueue(tracks, startingAt: index, activePlaylistID: playbackPlaylistID) }
                             }
                         },
                         onAction: isSelecting ? { toggleSelection(entry.id) } : { selectedEntry = entry }
                     )
                     .contextMenu {
                         Button("立即播放", systemImage: "play.fill") {
-                            Task { await playbackService.replaceQueue(tracks, startingAt: index, activePlaylistID: playlist?.id) }
+                            Task { await playbackService.replaceQueue(tracks, startingAt: index, activePlaylistID: playbackPlaylistID) }
                         }
                         .disabled(!entry.track.source.isEnabled)
                         Button("下一首播放", systemImage: "text.line.first.and.arrowtriangle.forward") {
@@ -404,7 +441,7 @@ struct PlaylistDetailView: View {
                                 playbackService: playbackService
                             )
                         }
-                        if let playlist, !playlist.isSystem, entry.playlistIndex != nil {
+                        if let playlist, !playlist.isSystem, currentIndex(for: entry, in: playlist) != nil {
                             Divider()
                             Button("移出歌单", systemImage: "trash", role: .destructive) {
                                 remove(entry, from: playlist)
@@ -458,7 +495,7 @@ struct PlaylistDetailView: View {
         .disabled(!tracks.contains(where: { $0.source.isEnabled }))
         .opacity(tracks.contains(where: { $0.source.isEnabled }) ? 1 : 0.45)
         .accessibilityLabel("播放全部")
-        .accessibilityHint(tracks.isEmpty ? "歌单中还没有歌曲" : "按添加顺序播放歌单中的全部歌曲")
+        .accessibilityHint(tracks.isEmpty ? "当前没有可播放的歌曲" : "按当前显示顺序播放歌曲")
         .accessibilityIdentifier(isPersonalPlaylist ? "personal-playlist-play-all-button" : "playlist-play-all-button")
     }
 
@@ -488,13 +525,34 @@ struct PlaylistDetailView: View {
     }
 
     private var playlistSongsHeader: some View {
-        Color.clear
-            .frame(height: 2)
-            .accessibilityIdentifier(isPersonalPlaylist ? "personal-playlist-songs-header" : "playlist-songs-header")
+        Group {
+            if filter.isActive {
+                HStack(spacing: 8) {
+                    Text(filter.summary)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(scheme.onSurfaceVariant)
+                        .lineLimit(2)
+                    Spacer(minLength: 0)
+                    Button("重置") { filter = PlaylistTrackFilter() }
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(scheme.primary)
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 10)
+            } else {
+                Color.clear.frame(height: 2)
+            }
+        }
+        .accessibilityIdentifier(isPersonalPlaylist ? "personal-playlist-songs-header" : "playlist-songs-header")
+    }
+
+    private func currentIndex(for entry: Entry, in playlist: Playlist) -> Int? {
+        guard case let .stored(id) = entry.id else { return nil }
+        return playlist.orderedItems.firstIndex { $0.persistentModelID == id }
     }
 
     private func remove(_ entry: Entry, from playlist: Playlist) {
-        guard let index = entry.playlistIndex else { return }
+        guard let index = currentIndex(for: entry, in: playlist) else { return }
         do {
             try LibraryStore(context: modelContext).removeItem(at: index, from: playlist)
             playbackService.onTrackRemovedFromPlaylist(entry.track, playlistID: playlist.id)
@@ -507,7 +565,7 @@ struct PlaylistDetailView: View {
 
     private func shufflePlaylist() {
         Task {
-            let started = await playbackService.shuffleAndPlay(tracks, activePlaylistID: playlist?.id)
+            let started = await playbackService.shuffleAndPlay(tracks, activePlaylistID: playbackPlaylistID)
             guard started else {
                 toastCenter.show("歌单中还没有歌曲")
                 return
@@ -526,15 +584,15 @@ struct PlaylistDetailView: View {
             return
         }
         Task {
-            // “播放全部” always means the persisted playlist order, even if
-            // the player was previously left in shuffle mode.
+            // 播放全部沿用当前筛选与排序后的顺序，重置此前的随机模式。
             playbackService.setPlaybackMode(.sequence)
-            await playbackService.replaceQueue(tracks, activePlaylistID: playlist?.id)
+            await playbackService.replaceQueue(tracks, activePlaylistID: playbackPlaylistID)
             toastCenter.show("已开始播放 \(tracks.count) 首歌曲")
         }
     }
 
     private var heroMetadata: String {
+        if filter.hasConditions { return "\(tracks.count) / \(allEntries.count) 首歌曲" }
         if isPersonalPlaylist {
             return "\(tracks.count) 首歌曲"
         }
@@ -589,5 +647,140 @@ struct PlaylistDetailView: View {
                 return
             }
         }
+    }
+}
+
+private struct PlaylistFilterSheet: View {
+    @Binding var filter: PlaylistTrackFilter
+    let tracks: [Track]
+    let supportsAddedTime: Bool
+    let hasUnknownDates: Bool
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.m3Scheme) private var scheme
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("歌手") {
+                    NavigationLink {
+                        PlaylistArtistPicker(artist: $filter.artist, tracks: tracks)
+                    } label: {
+                        HStack {
+                            Text("按歌手筛选")
+                            Spacer()
+                            Text(filter.artist ?? "全部歌手")
+                                .foregroundStyle(scheme.onSurfaceVariant)
+                                .lineLimit(1)
+                        }
+                    }
+                    .accessibilityIdentifier("playlist-filter-artist")
+                }
+
+                if supportsAddedTime {
+                    Section {
+                        Picker("添加时间", selection: $filter.addedTime) {
+                            ForEach(PlaylistTrackFilter.AddedTime.allCases) { time in
+                                Text(time.rawValue).tag(time)
+                            }
+                        }
+                        .accessibilityIdentifier("playlist-filter-added-time")
+                    } footer: {
+                        if hasUnknownDates {
+                            Text("早期歌曲未记录添加日期，可在“全部时间”或“未记录时间”中查看。")
+                        }
+                    }
+                }
+
+                Section("排序") {
+                    Picker("排列方式", selection: $filter.order) {
+                        ForEach(PlaylistTrackFilter.Order.allCases.filter { supportsAddedTime || ![.newest, .oldest].contains($0) }) { order in
+                            Text(order.rawValue).tag(order)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                    .accessibilityIdentifier("playlist-filter-order")
+                }
+
+                if filter.isActive {
+                    Section {
+                        Button("重置筛选与排序") { filter = PlaylistTrackFilter() }
+                            .accessibilityIdentifier("playlist-filter-reset")
+                    }
+                }
+            }
+            .tint(scheme.primary)
+            .navigationTitle("筛选与排序")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+}
+
+private struct PlaylistArtistPicker: View {
+    @Binding var artist: String?
+    let tracks: [Track]
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.m3Scheme) private var scheme
+    @State private var query = ""
+
+    private var counts: [String: Int] {
+        tracks.reduce(into: [:]) { counts, track in
+            for name in PlaylistTrackFilter.artists(for: track) { counts[name, default: 0] += 1 }
+        }
+    }
+
+    private var artists: [String] {
+        counts.keys.filter { query.isEmpty || $0.localizedStandardContains(query.trimmingCharacters(in: .whitespacesAndNewlines)) }
+            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
+    var body: some View {
+        List {
+            artistRow(name: "全部歌手", count: tracks.count, selected: artist == nil) {
+                artist = nil
+                dismiss()
+            }
+            ForEach(artists, id: \.self) { name in
+                artistRow(name: name, count: counts[name] ?? 0, selected: artist == name) {
+                    artist = name
+                    dismiss()
+                }
+            }
+            if artists.isEmpty, !query.isEmpty {
+                Text("没有匹配的歌手")
+                    .foregroundStyle(scheme.onSurfaceVariant)
+            }
+        }
+        .navigationTitle("按歌手筛选")
+        .navigationBarTitleDisplayMode(.inline)
+        .searchable(text: $query, prompt: "搜索歌手")
+    }
+
+    private func artistRow(name: String, count: Int, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Text(name)
+                    .foregroundStyle(scheme.onSurface)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text("\(count)")
+                    .font(.system(size: 13).monospacedDigit())
+                    .foregroundStyle(scheme.onSurfaceVariant)
+                if selected {
+                    Image(systemName: "checkmark")
+                        .foregroundStyle(scheme.primary)
+                }
+            }
+            .frame(minHeight: 32)
+        }
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }

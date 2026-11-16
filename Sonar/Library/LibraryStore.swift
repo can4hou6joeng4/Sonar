@@ -26,6 +26,112 @@ public struct PersonalPlaylistCollectionResult {
     public let inserted: Bool
 }
 
+/// 列表身份与歌单中的原始位置分开保存，筛选或排序后仍可准确移除指定条目。
+struct PlaylistTrackEntry: Identifiable {
+    enum ID: Hashable {
+        case stored(PersistentIdentifier)
+        case external(Int)
+    }
+
+    let id: ID
+    let track: Track
+    let playlistIndex: Int?
+    let addedAt: Date?
+}
+
+struct PlaylistTrackFilter: Equatable {
+    enum AddedTime: String, CaseIterable, Identifiable {
+        case all = "全部时间"
+        case lastWeek = "最近 7 天"
+        case lastMonth = "最近 30 天"
+        case unknown = "未记录时间"
+        var id: Self { self }
+    }
+
+    enum Order: String, CaseIterable, Identifiable {
+        case original = "原有顺序"
+        case newest = "最新添加"
+        case oldest = "最早添加"
+        case artist = "按歌手"
+        case title = "按歌名"
+        var id: Self { self }
+    }
+
+    var artist: String?
+    var addedTime: AddedTime = .all
+    var order: Order = .original
+
+    var hasConditions: Bool { artist != nil || addedTime != .all }
+    var isActive: Bool { hasConditions || order != .original }
+
+    var summary: String {
+        [artist, addedTime == .all ? nil : addedTime.rawValue, order == .original ? nil : order.rawValue]
+            .compactMap { $0 }.joined(separator: " · ")
+    }
+
+    static func artists(for track: Track) -> [String] {
+        let raw = track.rawPayload
+        let people = (raw["ar"] as? [[String: Any]]) ?? (raw["artists"] as? [[String: Any]])
+        let names = people?.compactMap { $0["name"] as? String }
+            ?? track.artist.components(separatedBy: CharacterSet(charactersIn: "/、;；"))
+        let cleaned = names.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        return cleaned.isEmpty ? ["未知歌手"] : Array(Set(cleaned)).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
+    /// 远程歌单预览没有持久成员日期，调用时忽略添加时间条件，避免误筛成空。
+    func apply(
+        to entries: [PlaylistTrackEntry],
+        supportsAddedTime: Bool = true,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> [PlaylistTrackEntry] {
+        let addedTime = supportsAddedTime ? addedTime : .all
+        let days: Int?
+        switch addedTime {
+        case .lastWeek: days = 7
+        case .lastMonth: days = 30
+        case .all, .unknown: days = nil
+        }
+        let cutoff = days.flatMap { calendar.date(byAdding: .day, value: -$0, to: now) }
+        let matches = entries.enumerated().filter { _, entry in
+            if let artist, !Self.artists(for: entry.track).contains(artist) { return false }
+            switch addedTime {
+            case .all: return true
+            case .unknown: return entry.addedAt == nil
+            case .lastWeek, .lastMonth:
+                guard let date = entry.addedAt, let cutoff else { return false }
+                return date >= cutoff && date <= now
+            }
+        }
+        let sorted = matches.sorted { lhs, rhs in
+            switch order {
+            case .original:
+                break
+            case .title:
+                let comparison = lhs.element.track.title.localizedStandardCompare(rhs.element.track.title)
+                if comparison != .orderedSame { return comparison == .orderedAscending }
+            case .artist:
+                let comparison = lhs.element.track.artist.localizedStandardCompare(rhs.element.track.artist)
+                if comparison != .orderedSame { return comparison == .orderedAscending }
+            case .newest, .oldest:
+                switch (lhs.element.addedAt, rhs.element.addedAt) {
+                case let (left?, right?) where left != right:
+                    return order == .newest ? left > right : left < right
+                case (_?, nil):
+                    // 未记录日期的历史条目固定排在已知日期之后，不伪造时间。
+                    return true
+                case (nil, _?):
+                    return false
+                default:
+                    break
+                }
+            }
+            return lhs.offset < rhs.offset
+        }
+        return sorted.map { $0.element }
+    }
+}
+
 public struct TrackDetailCachePolicy: Sendable {
     public static let currentVersion = 1
     public static let production = TrackDetailCachePolicy()
@@ -152,7 +258,7 @@ public final class LibraryStore {
         var nextItemIndex = (primary.orderedItems.map(\.sortIndex).max() ?? -1) + 1
         for playlist in userPlaylists where playlist !== primary && playlist.isPrimaryPersonal {
             for item in playlist.orderedItems where existingIDs.insert(item.track.musicId).inserted {
-                let copy = PlaylistItem(sortIndex: nextItemIndex, playlist: primary, track: item.track)
+                let copy = PlaylistItem(sortIndex: nextItemIndex, playlist: primary, track: item.track, addedAt: item.addedAt)
                 nextItemIndex += 1
                 context.insert(copy)
                 primary.items.append(copy)

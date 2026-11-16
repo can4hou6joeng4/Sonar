@@ -405,9 +405,112 @@ public enum SonarSchemaV5: VersionedSchema {
     }
 }
 
+public enum SonarSchemaV6: VersionedSchema {
+    public static var versionIdentifier = Schema.Version(6, 0, 0)
+    public static var models: [any PersistentModel.Type] {
+        [Playlist.self, PlaylistItem.self, TrackRecord.self]
+    }
+
+    @Model
+    public final class Playlist {
+        @Attribute(.unique) public var id: UUID
+        public var name: String
+        public var sortIndex: Int
+        public var isSystem: Bool
+        public var kindRaw: String = PlaylistKind.music.rawValue
+        public var isShared: Bool = false
+        public var isPrivate: Bool = false
+        public var isPrimaryPersonal: Bool = false
+        public var isArchived: Bool = false
+        @Relationship(deleteRule: .cascade, inverse: \PlaylistItem.playlist)
+        public var items: [PlaylistItem]
+
+        public init(
+            id: UUID = UUID(),
+            name: String,
+            sortIndex: Int,
+            isSystem: Bool = false,
+            kindRaw: String = PlaylistKind.music.rawValue,
+            isShared: Bool = false,
+            isPrivate: Bool = false,
+            isPrimaryPersonal: Bool = false,
+            isArchived: Bool = false,
+            items: [PlaylistItem] = []
+        ) {
+            self.id = id
+            self.name = name
+            self.sortIndex = sortIndex
+            self.isSystem = isSystem
+            self.kindRaw = kindRaw
+            self.isShared = isShared
+            self.isPrivate = isPrivate
+            self.isPrimaryPersonal = isPrimaryPersonal
+            self.isArchived = isArchived
+            self.items = items
+        }
+    }
+
+    @Model
+    public final class PlaylistItem {
+        public var sortIndex: Int
+        /// 旧版条目没有日期，轻量迁移保留 nil，不将升级时间当作添加时间。
+        public var addedAt: Date?
+        public var playlist: Playlist?
+        public var track: TrackRecord
+
+        public init(sortIndex: Int, playlist: Playlist? = nil, track: TrackRecord, addedAt: Date? = Date()) {
+            self.sortIndex = sortIndex
+            self.addedAt = addedAt
+            self.playlist = playlist
+            self.track = track
+        }
+    }
+
+    @Model
+    public final class TrackRecord {
+        @Attribute(.unique) public var musicId: String
+        public var title: String
+        public var artist: String
+        public var album: String
+        public var duration: Int
+        public var source: String
+        public var payload: Data
+        public var accentHex: String?
+        public var detailRefreshedAt: Date?
+        public var detailRefreshVersion: Int = 0
+        public var detailRetryAfter: Date?
+
+        public init(
+            musicId: String,
+            title: String,
+            artist: String,
+            album: String,
+            duration: Int,
+            source: String,
+            payload: Data,
+            accentHex: String? = nil,
+            detailRefreshedAt: Date? = nil,
+            detailRefreshVersion: Int = 0,
+            detailRetryAfter: Date? = nil
+        ) {
+            self.musicId = musicId
+            self.title = title
+            self.artist = artist
+            self.album = album
+            self.duration = duration
+            self.source = source
+            self.payload = payload
+            self.accentHex = accentHex
+            self.detailRefreshedAt = detailRefreshedAt
+            self.detailRefreshVersion = detailRefreshVersion
+            self.detailRetryAfter = detailRetryAfter
+        }
+    }
+}
+
 public enum SonarMigrationPlan: SchemaMigrationPlan {
     public static var schemas: [any VersionedSchema.Type] {
-        [SonarSchemaV1.self, SonarSchemaV2.self, SonarSchemaV3.self, SonarSchemaV4.self, SonarSchemaV5.self]
+        [SonarSchemaV1.self, SonarSchemaV2.self, SonarSchemaV3.self, SonarSchemaV4.self, SonarSchemaV5.self, SonarSchemaV6.self]
     }
 
     public static var stages: [MigrationStage] {
@@ -416,17 +519,18 @@ public enum SonarMigrationPlan: SchemaMigrationPlan {
             .lightweight(fromVersion: SonarSchemaV2.self, toVersion: SonarSchemaV3.self),
             .lightweight(fromVersion: SonarSchemaV3.self, toVersion: SonarSchemaV4.self),
             .lightweight(fromVersion: SonarSchemaV4.self, toVersion: SonarSchemaV5.self),
+            .lightweight(fromVersion: SonarSchemaV5.self, toVersion: SonarSchemaV6.self),
         ]
     }
 }
 
-public typealias Playlist = SonarSchemaV5.Playlist
-public typealias PlaylistItem = SonarSchemaV5.PlaylistItem
-public typealias TrackRecord = SonarSchemaV5.TrackRecord
+public typealias Playlist = SonarSchemaV6.Playlist
+public typealias PlaylistItem = SonarSchemaV6.PlaylistItem
+public typealias TrackRecord = SonarSchemaV6.TrackRecord
 
 public enum SonarModelContainer {
     public static func make(inMemory: Bool = false, url: URL? = nil) throws -> ModelContainer {
-        let schema = Schema(versionedSchema: SonarSchemaV5.self)
+        let schema = Schema(versionedSchema: SonarSchemaV6.self)
         let configuration: ModelConfiguration
         if let url {
             configuration = ModelConfiguration("Sonar", schema: schema, url: url, cloudKitDatabase: .none)
