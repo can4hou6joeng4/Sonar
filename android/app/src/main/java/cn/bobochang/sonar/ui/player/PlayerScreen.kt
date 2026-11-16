@@ -220,23 +220,6 @@ fun PlayerScreen(
                                 isVisible = true,
                                 onSeekTo = { container.playerConnection.seekTo(it) },
                             )
-                            LyricsOffsetBar(
-                                offset = lyricsOffset,
-                                onAdjust = { delta ->
-                                    scope.launch {
-                                        lyricsOffset = container.settings.adjustLyricsOffsetSeconds(track?.musicId, delta)
-                                    }
-                                },
-                                onReset = {
-                                    scope.launch {
-                                        container.settings.resetLyricsOffset(track?.musicId)
-                                        lyricsOffset = 0f
-                                    }
-                                },
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .padding(bottom = 10.dp),
-                            )
                         }
                     }
 
@@ -590,46 +573,6 @@ private fun androidx.compose.foundation.layout.RowScope.FooterButton(
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
             )
-        }
-    }
-}
-
-@Composable
-private fun LyricsOffsetBar(
-    offset: Float,
-    onAdjust: (Float) -> Unit,
-    onReset: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier
-            .clip(CircleShape)
-            .background(Color.White.copy(alpha = 0.10f))
-            .height(32.dp)
-            .padding(horizontal = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Box(Modifier.size(30.dp).clickable { onAdjust(-0.5f) }, contentAlignment = Alignment.Center) {
-            Text("−", color = SecondaryInk, fontSize = 16.sp)
-        }
-        Text(
-            text = when {
-                kotlin.math.abs(offset) < 0.001f -> "歌词偏移 0.0s"
-                else -> "歌词偏移 %+.1fs".format(offset)
-            },
-            color = SecondaryInk,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(horizontal = 8.dp),
-        )
-        Box(Modifier.size(30.dp).clickable { onAdjust(0.5f) }, contentAlignment = Alignment.Center) {
-            Text("+", color = SecondaryInk, fontSize = 16.sp)
-        }
-        if (kotlin.math.abs(offset) >= 0.001f) {
-            Box(Modifier.height(30.dp).clickable { onReset() }, contentAlignment = Alignment.Center) {
-                Text("复位", color = SecondaryInk, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-            }
         }
     }
 }

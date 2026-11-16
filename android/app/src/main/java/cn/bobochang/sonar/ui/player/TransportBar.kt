@@ -42,7 +42,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -140,15 +139,9 @@ fun TransportBar(
                         Box(
                             Modifier
                                 .size(60.dp)
+                                // 对齐 iOS：均匀半透明玻璃圆 + 淡描边，不叠阴影和渐变。
                                 .background(Color.White.copy(alpha = 0.18f), CircleShape)
-                                .border(
-                                    1.dp,
-                                    Brush.linearGradient(
-                                        listOf(Color.White.copy(alpha = 0.40f), Color.White.copy(alpha = 0.10f)),
-                                    ),
-                                    CircleShape,
-                                )
-                                .shadow(10.dp, CircleShape),
+                                .border(1.dp, Color.White.copy(alpha = 0.22f), CircleShape),
                             contentAlignment = Alignment.Center,
                         ) {
                             when {
@@ -386,8 +379,8 @@ private fun PlayerProgressSlider(
             Modifier
                 .offset(x = (thumbOffset - 5.5.dp).coerceAtLeast(0.dp))
                 .size(if (dragging) 16.5.dp else 11.dp)
-                .background(Color.White, CircleShape)
-                .shadow(2.dp, CircleShape),
+                .shadow(2.dp, CircleShape)
+                .background(Color.White, CircleShape),
         )
     }
 }

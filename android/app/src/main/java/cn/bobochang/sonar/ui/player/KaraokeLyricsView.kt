@@ -38,6 +38,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
@@ -53,11 +55,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import androidx.compose.runtime.withFrameNanos
 import kotlin.math.abs
-import kotlin.math.roundToInt
 
 private val PrimaryInk = Color.White.copy(alpha = 0.96f)
 private val SecondaryInk = Color.White.copy(alpha = 0.62f)
 private val TertiaryInk = Color.White.copy(alpha = 0.34f)
+
+/** 当前句在视口中的纵向位置：0.25 表示居中偏上，下方露出更多即将到来的歌词。 */
+private const val LyricAnchorFraction = 0.25f
 
 /** iOS `KaraokeLyricsView`：逐字扫光、自动跟随、用户滚动后 3.5 秒恢复。 */
 @Composable
@@ -121,81 +125,84 @@ fun KaraokeLyricsView(
 
     LaunchedEffect(activeIndex, userScrollLocked, viewportHeightPx, isVisible) {
         if (activeIndex == null || userScrollLocked || !isVisible || viewportHeightPx <= 0f) return@LaunchedEffect
+        // 顶部 contentPadding 已预留锚点位置，额外的负偏移会将当前句再次向下推。
         if (reduceMotion) {
-            listState.scrollToItem(activeIndex, (-viewportHeightPx * 0.40f).roundToInt())
+            listState.scrollToItem(activeIndex, 0)
         } else {
-            listState.animateScrollToItem(activeIndex, (-viewportHeightPx * 0.40f).roundToInt())
+            listState.animateScrollToItem(activeIndex, 0)
         }
     }
 
-    Box(modifier.fillMaxSize()) {
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .fillMaxSize()
-                .onSizeChanged { viewportHeightPx = it.height.toFloat() }
-                .drawWithContent {
-                    drawContent()
-                    drawRect(
-                        brush = Brush.verticalGradient(
-                            0f to Color.Transparent,
-                            0.12f to Color.Black,
-                            0.88f to Color.Black,
-                            1f to Color.Transparent,
-                        ),
-                        blendMode = BlendMode.DstIn,
-                    )
-                },
-            contentPadding = PaddingValues(
-                top = with(LocalDensity.current) { (viewportHeightPx * 0.40f).toDp() },
-                bottom = with(LocalDensity.current) { (viewportHeightPx * 0.60f).toDp() },
-            ),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            items(lyrics.lines, key = { it.id }) { line ->
-                LyricLineView(
-                    line = line,
-                    isActive = line.id == activeIndex,
-                    activeIndex = activeIndex,
-                    effectiveMs = effectiveMs,
-                    isPlaying = isPlaying && !isBuffering,
-                    onSelect = { onSeekTo((line.startMs - timeOffsetSeconds * 1_000).toLong().coerceAtLeast(0)) },
-                )
-            }
-        }
-
+    Column(modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
         if (lyrics.isSynthesized) {
             Text(
                 text = "这首歌没有逐字歌词 · 已按字数合成",
                 color = TertiaryInk,
                 fontSize = 10.5.sp,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 2.dp),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp),
             )
         }
 
-        if (userScrollLocked) {
-            Box(
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(
+                state = listState,
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 8.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.16f))
-                    .clickable {
-                        userScrollLocked = false
-                        unlockAt = 0L
-                    }
-                    .padding(horizontal = 14.dp)
-                    .height(30.dp),
-                contentAlignment = Alignment.Center,
+                    .fillMaxSize()
+                    .onSizeChanged { viewportHeightPx = it.height.toFloat() }
+                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                    .drawWithContent {
+                        drawContent()
+                        drawRect(
+                            brush = Brush.verticalGradient(
+                                0f to Color.Transparent,
+                                0.12f to Color.Black,
+                                0.88f to Color.Black,
+                                1f to Color.Transparent,
+                            ),
+                            blendMode = BlendMode.DstIn,
+                        )
+                    },
+                contentPadding = PaddingValues(
+                    top = with(LocalDensity.current) { (viewportHeightPx * LyricAnchorFraction).toDp() },
+                    bottom = with(LocalDensity.current) { (viewportHeightPx * (1f - LyricAnchorFraction)).toDp() },
+                ),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                androidx.compose.foundation.layout.Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                items(lyrics.lines, key = { it.id }) { line ->
+                    LyricLineView(
+                        line = line,
+                        isActive = line.id == activeIndex,
+                        activeIndex = activeIndex,
+                        effectiveMs = effectiveMs,
+                        isPlaying = isPlaying && !isBuffering,
+                        onSelect = { onSeekTo((line.startMs - timeOffsetSeconds * 1_000).toLong().coerceAtLeast(0)) },
+                    )
+                }
+            }
+
+            if (userScrollLocked) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 8.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.16f))
+                        .clickable {
+                            userScrollLocked = false
+                            unlockAt = 0L
+                        }
+                        .padding(horizontal = 14.dp)
+                        .height(30.dp),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = PrimaryInk, modifier = Modifier.height(13.dp))
-                    Text("回到当前", color = PrimaryInk, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    androidx.compose.foundation.layout.Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = PrimaryInk, modifier = Modifier.height(13.dp))
+                        Text("回到当前", color = PrimaryInk, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    }
                 }
             }
         }
@@ -281,7 +288,7 @@ private fun ActiveTokenLine(line: KaraokeLine, effectiveMs: Long, sweeping: Bool
 
 @Composable
 private fun TokenView(token: KaraokeToken, progress: Float) {
-    val base = Color.White.copy(alpha = 0.24f)
+    val base = Color.White.copy(alpha = 0.48f)
     Box {
         Text(
             text = token.text,
