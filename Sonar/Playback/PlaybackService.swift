@@ -19,6 +19,8 @@ public protocol PlaybackAudioCaching: AnyObject {
         preferred: Quality,
         allowLowerQuality: Bool
     ) async -> (url: URL, quality: Quality)?
+    /// 批量判断是否已缓存，不做校验和计算；蜂窝网络下选曲与跳曲用。
+    func cachedMusicIDs(for tracks: [Track]) async -> Set<String>
     func cacheTracks(_ tracks: [Track], quality: Quality, priorityFirst: Bool) async
     func handleNetworkChange(isExpensive: Bool) async
     func invalidateCachedAudio(for track: Track, url: URL) async
@@ -382,7 +384,8 @@ public final class PlaybackService {
         if let index {
             startIndex = index
         } else if playbackMode == .shuffle, tracks.count > 1 {
-            startIndex = randomIndex(0..<tracks.count)
+            let candidates = await offlinePlayableIndices(in: tracks, among: Array(tracks.indices))
+            startIndex = candidates[randomIndex(0..<candidates.count)]
         } else {
             startIndex = 0
         }
@@ -432,8 +435,9 @@ public final class PlaybackService {
             if candidateIndices.allSatisfy({ preservedPlayedMusicIDs.contains(tracks[$0].musicID) }) {
                 preservedPlayedMusicIDs.removeAll()
             }
-            let offset = randomIndex(0..<candidateIndices.count)
-            startIndex = candidateIndices.indices.contains(offset) ? candidateIndices[offset] : 0
+            let playableCandidates = await offlinePlayableIndices(in: tracks, among: candidateIndices)
+            let offset = randomIndex(0..<playableCandidates.count)
+            startIndex = playableCandidates.indices.contains(offset) ? playableCandidates[offset] : 0
         } else {
             startIndex = 0
         }
@@ -692,6 +696,7 @@ public final class PlaybackService {
                 pause()
                 return
             }
+            await skipUncachedTracks(wrapping: false)
             await loadCurrent(autoplay: true)
         case .sequence, .shuffle:
             guard queue.tracks.count > 1 else {
@@ -702,6 +707,8 @@ public final class PlaybackService {
                 endTransitionBackgroundTask()
                 return
             }
+            // 蜂窝「仅播放已缓存」时继续前进到下一首已缓存的歌曲，而不是停在未缓存曲目上。
+            await skipUncachedTracks(wrapping: true)
             await loadCurrent(autoplay: true)
         case .repeatOne:
             await restartCurrent()
@@ -733,6 +740,37 @@ public final class PlaybackService {
         (networkStatus?.isConnected ?? true) && !isExpensiveNetwork
     }
     private var requiresLocalPlayback: Bool { cellularOnlyCached && !unmeteredNetworkAvailable }
+
+    /// 蜂窝「仅播放已缓存」时，从候选起点中挑出可离线播放的歌曲；全都不可用时保留原候选。
+    private func offlinePlayableIndices(in tracks: [Track], among indices: [Int]) async -> [Int] {
+        guard requiresLocalPlayback, let audioCache, !indices.isEmpty else { return indices }
+        let candidates = indices.map { tracks[$0] }
+        let cachedIDs = await audioCache.cachedMusicIDs(for: candidates)
+        let playable = indices.filter { index in
+            let track = tracks[index]
+            return track.source == .local || cachedIDs.contains(track.musicID)
+        }
+        return playable.isEmpty ? indices : playable
+    }
+
+    /// 自动切歌时跳过未缓存歌曲，避免随机循环里频繁停在无法播放的曲目上。
+    /// 最多检查一整圈；找不到可离线播放的歌曲时保持当前位置，交由常规拦截提示处理。
+    private func skipUncachedTracks(wrapping: Bool) async {
+        guard requiresLocalPlayback, let audioCache else { return }
+        let limit = max(1, queue.tracks.count)
+        var cachedIDs: Set<String>?
+        var probes = 0
+        while probes < limit {
+            guard let track = queue.current else { return }
+            if track.source == .local { return }
+            if cachedIDs == nil {
+                cachedIDs = await audioCache.cachedMusicIDs(for: queue.tracks)
+            }
+            if cachedIDs?.contains(track.musicID) == true { return }
+            guard queue.advance(wrapping: wrapping) != nil else { return }
+            probes += 1
+        }
+    }
 
     private func resolvePlaybackLocation(
         for track: Track,

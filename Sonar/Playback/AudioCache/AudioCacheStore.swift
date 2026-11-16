@@ -147,6 +147,20 @@ actor AudioCacheStore {
         return (fileURL(for: entry), entry.quality)
     }
 
+    /// 轻量批量查询：只核对文件仍在且大小一致，不做校验和，供切歌时快速判断。
+    func cachedMusicIDs(for musicIDs: Set<String>) -> Set<String> {
+        prepare()
+        guard !musicIDs.isEmpty else { return [] }
+        var result: Set<String> = []
+        for entry in entries.values where musicIDs.contains(entry.musicID) {
+            guard Self.isSafeFileName(entry.fileName),
+                  let file = fingerprint(at: fileURL(for: entry)),
+                  file.size > 0, file.size == entry.byteCount else { continue }
+            result.insert(entry.musicID)
+        }
+        return result
+    }
+
     func hasSpaceForDownload() -> Bool { availableCapacity() > Self.reserveBytes }
 
     func totalBytes() -> Int64 {

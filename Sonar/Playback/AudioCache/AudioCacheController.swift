@@ -85,6 +85,11 @@ final class AudioCacheController: PlaybackAudioCaching {
         return result
     }
 
+    func cachedMusicIDs(for tracks: [Track]) async -> Set<String> {
+        guard clearingCount == 0 else { return [] }
+        return await store.cachedMusicIDs(for: Set(tracks.map(\.musicID)))
+    }
+
     func invalidateCachedAudio(for track: Track, url: URL) async {
         cacheRevision += 1
         do { try await store.invalidate(for: track, url: url) } catch {
