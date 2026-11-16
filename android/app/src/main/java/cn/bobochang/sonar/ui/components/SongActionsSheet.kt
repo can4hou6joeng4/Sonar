@@ -44,6 +44,7 @@ data class SongAction(
     val icon: ImageVector,
     val destructive: Boolean = false,
     val enabled: Boolean = true,
+    val dismissAfterPerform: Boolean = true,
     val perform: () -> Unit,
 )
 
@@ -138,7 +139,7 @@ fun SongActionsSheet(
                         onClick = {
                             if (action.enabled) {
                                 action.perform()
-                                onCancel()
+                                if (action.dismissAfterPerform) onCancel()
                             }
                         },
                     )

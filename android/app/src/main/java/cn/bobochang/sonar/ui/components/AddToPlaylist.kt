@@ -42,9 +42,11 @@ import cn.bobochang.sonar.ui.theme.cellHighlight
 fun PlaylistPickerSheet(
     playlists: List<UserPlaylist>,
     isFavorite: Boolean,
-    onToggleFavorite: () -> Unit,
+    onAddFavorite: () -> Unit,
     onPickPlaylist: (UserPlaylist) -> Unit,
     onCancel: () -> Unit,
+    saving: Boolean = false,
+    error: String? = null,
 ) {
     val palette = LocalSonarPalette.current
     Column(
@@ -53,7 +55,10 @@ fun PlaylistPickerSheet(
             .background(palette.background)
             .padding(bottom = 16.dp),
     ) {
-        SheetHeader(title = "收藏到歌单")
+        SheetHeader(title = if (saving) "正在保存…" else "添加到歌单")
+        if (error != null) {
+            Text(error, color = palette.accent, modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
+        }
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
@@ -64,10 +69,11 @@ fun PlaylistPickerSheet(
             item {
                 PickRow(
                     title = if (isFavorite) "已在「我的收藏」中" else "我的收藏",
-                    subtitle = if (isFavorite) "再次点按取消收藏" else "保存到个人收藏",
+                    subtitle = if (isFavorite) "已保存，重复添加不会移除" else "保存到个人收藏",
                     icon = Icons.Rounded.Favorite,
                     selected = isFavorite,
-                    onClick = onToggleFavorite,
+                    enabled = !saving,
+                    onClick = onAddFavorite,
                 )
             }
             items(playlists, key = { it.id }) { playlist ->
@@ -76,6 +82,7 @@ fun PlaylistPickerSheet(
                     subtitle = if (playlist.system) "系统歌单" else "个人歌单",
                     icon = Icons.Rounded.LibraryMusic,
                     selected = false,
+                    enabled = !saving,
                     onClick = { onPickPlaylist(playlist) },
                 )
             }
@@ -90,6 +97,7 @@ fun PlaylistPickerSheet(
                 .combinedClickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
+                    enabled = !saving,
                     onClick = onCancel,
                 ),
             contentAlignment = Alignment.Center,
@@ -105,6 +113,7 @@ private fun PickRow(
     subtitle: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     selected: Boolean,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     val palette = LocalSonarPalette.current
@@ -113,7 +122,7 @@ private fun PickRow(
         modifier = Modifier
             .fillMaxWidth()
             .cellHighlight(interaction)
-            .combinedClickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .combinedClickable(interactionSource = interaction, indication = null, enabled = enabled, onClick = onClick)
             .padding(horizontal = 8.dp)
             .heightIn(min = 58.dp),
         verticalAlignment = Alignment.CenterVertically,

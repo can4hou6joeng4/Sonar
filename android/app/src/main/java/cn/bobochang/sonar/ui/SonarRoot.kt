@@ -121,9 +121,9 @@ import cn.bobochang.sonar.ui.theme.AppMotion
 import cn.bobochang.sonar.ui.theme.LocalReduceMotion
 import cn.bobochang.sonar.ui.theme.LocalSonarPalette
 import cn.bobochang.sonar.ui.theme.SonarTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
@@ -193,7 +193,9 @@ private fun RootContent(container: AppContainer, settings: SonarSettings) {
     var showWelcome by remember { mutableStateOf(true) }
     var searchVisible by remember { mutableStateOf(false) }
     var actionTrack by remember { mutableStateOf<Track?>(null) }
-    var pickerTrack by remember { mutableStateOf<Track?>(null) }
+    var pickingPlaylist by remember(actionTrack?.musicId) { mutableStateOf(false) }
+    var savingTrack by remember(actionTrack?.musicId) { mutableStateOf(false) }
+    var saveError by remember(actionTrack?.musicId) { mutableStateOf<String?>(null) }
     var playerOpen by remember { mutableStateOf(false) }
     var playerSurface by remember { mutableStateOf(PlayerSurface.ARTWORK) }
     var playerTranslation by remember { mutableFloatStateOf(0f) }
@@ -689,14 +691,52 @@ private fun RootContent(container: AppContainer, settings: SonarSettings) {
     }
 
     actionTrack?.let { track ->
+        fun saveTrack(save: suspend () -> String) {
+            if (savingTrack) return
+            savingTrack = true
+            saveError = null
+            scope.launch {
+                try {
+                    val message = save()
+                    toast.show(message)
+                    actionTrack = null
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    saveError = "保存失败：${error.message ?: "请稍后重试"}"
+                } finally {
+                    savingTrack = false
+                }
+            }
+        }
         ModalBottomSheet(
-            onDismissRequest = { actionTrack = null },
+            onDismissRequest = { if (!savingTrack) actionTrack = null },
             containerColor = palette.background,
             dragHandle = null,
         ) {
             val isCollected by container.library.observeIsFavorite(track.musicId)
                 .collectAsState(initial = false)
-            SongActionsSheet(
+            if (pickingPlaylist) {
+                val playlists by container.library.observePlaylists().collectAsState(initial = emptyList())
+                PlaylistPickerSheet(
+                    playlists = playlists,
+                    isFavorite = isCollected,
+                    saving = savingTrack,
+                    error = saveError,
+                    onAddFavorite = {
+                        saveTrack {
+                            if (container.library.addFavorite(track)) "已加入我的收藏" else "歌曲已在我的收藏中"
+                        }
+                    },
+                    onPickPlaylist = { playlist ->
+                        saveTrack {
+                            val count = container.library.addTracksToPlaylist(playlist.id, listOf(track))
+                            if (count > 0) "已添加到「${playlist.name}」" else "歌曲已在「${playlist.name}」中"
+                        }
+                    },
+                    onCancel = { if (!savingTrack) actionTrack = null },
+                )
+            } else SongActionsSheet(
                 track = track,
                 isCollected = isCollected,
                 actions = listOf(
@@ -723,14 +763,10 @@ private fun RootContent(container: AppContainer, settings: SonarSettings) {
                         },
                     ),
                     SongAction(
-                        title = "收藏到歌单",
+                        title = "添加到歌单",
                         icon = Icons.Rounded.PlaylistAdd,
-                        perform = {
-                            scope.launch {
-                                delay(220)
-                                pickerTrack = track
-                            }
-                        },
+                        dismissAfterPerform = false,
+                        perform = { pickingPlaylist = true },
                     ),
                     SongAction(
                         title = "分享歌曲",
@@ -740,8 +776,14 @@ private fun RootContent(container: AppContainer, settings: SonarSettings) {
                 ),
                 onToggleCollection = {
                     scope.launch {
-                        val added = container.library.toggleFavorite(track)
-                        toast.show(if (added) "已收藏" else "已取消收藏")
+                        try {
+                            val added = container.library.toggleFavorite(track)
+                            toast.show(if (added) "已收藏" else "已取消收藏")
+                        } catch (error: CancellationException) {
+                            throw error
+                        } catch (error: Exception) {
+                            toast.show("收藏操作失败：${error.message ?: "请稍后重试"}")
+                        }
                     }
                 },
                 onCancel = { actionTrack = null },
@@ -749,36 +791,6 @@ private fun RootContent(container: AppContainer, settings: SonarSettings) {
         }
     }
 
-    pickerTrack?.let { track ->
-        val playlists by container.library.observePlaylists().collectAsState(initial = emptyList())
-        val isCollected by container.library.observeIsFavorite(track.musicId).collectAsState(initial = false)
-        ModalBottomSheet(
-            onDismissRequest = { pickerTrack = null },
-            containerColor = palette.background,
-            dragHandle = null,
-        ) {
-            PlaylistPickerSheet(
-                playlists = playlists,
-                isFavorite = isCollected,
-                onToggleFavorite = {
-                    scope.launch {
-                        val added = container.library.toggleFavorite(track)
-                        toast.show(if (added) "已收藏" else "已取消收藏")
-                    }
-                },
-                onPickPlaylist = { playlist ->
-                    pickerTrack = null
-                    scope.launch {
-                        val count = container.library.addTracksToPlaylist(playlist.id, listOf(track))
-                        toast.show(
-                            if (count > 0) "已添加到「${playlist.name}」" else "歌曲已在「${playlist.name}」中",
-                        )
-                    }
-                },
-                onCancel = { pickerTrack = null },
-            )
-        }
-    }
 }
 
 @Composable
