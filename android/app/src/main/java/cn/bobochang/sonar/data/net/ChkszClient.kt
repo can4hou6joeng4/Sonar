@@ -135,12 +135,15 @@ class ChkszClient(
             for (attempt in 0..1) {
                 try {
                     val request = Request.Builder().url(url).get().build()
-                    client.newCall(request).execute().use { response ->
+                    val (response, responseBody) = client.newCall(request).awaitResponse {
+                        it to it.body?.string()
+                    }
+                    run {
                         if (response.code == 429 && attempt == 0) {
                             val retryAfter = response.header("Retry-After")?.toLongOrNull() ?: 5L
                             if (retryAfter in 0..10) {
                                 delay(retryAfter * 1000)
-                                return@use
+                                return@run
                             }
                         }
                         when (response.code) {
@@ -159,7 +162,7 @@ class ChkszClient(
                             }
                             else -> throw SourceException.Message("第三方请求失败（HTTP ${response.code}）")
                         }
-                        val body = response.body?.string()
+                        val body = responseBody
                             ?: throw SourceException.Message("ChKSz 返回空数据")
                         val obj = SonarJson.parseToJsonElement(body).jsonObject
                         val code = obj.int("code")

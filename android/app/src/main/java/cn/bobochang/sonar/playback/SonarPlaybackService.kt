@@ -26,6 +26,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.io.IOException
@@ -35,6 +36,8 @@ class SonarPlaybackService : MediaSessionService() {
     private lateinit var session: MediaSession
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var prefetchJob: Job? = null
+    private val prefetchTracks = linkedMapOf<String, Job>()
+    private var prefetchEnabled = false
 
     private val container get() = (application as SonarApplication).container
 
@@ -75,7 +78,7 @@ class SonarPlaybackService : MediaSessionService() {
                 true,
             )
             .setHandleAudioBecomingNoisy(true)
-            .setWakeMode(C.WAKE_MODE_LOCAL)
+            .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
         player.volume = 1f
 
@@ -89,6 +92,14 @@ class SonarPlaybackService : MediaSessionService() {
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 if (isPlaying) schedulePrefetch()
+            }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                schedulePrefetch()
+            }
+
+            override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+                schedulePrefetch()
             }
 
             override fun onPlayerError(error: PlaybackException) {
@@ -122,6 +133,16 @@ class SonarPlaybackService : MediaSessionService() {
                 }
             }
             .build()
+
+        scope.launch {
+            container.settings.settings.collect { settings ->
+                prefetchEnabled = settings.autoCache
+                schedulePrefetch()
+            }
+        }
+        scope.launch {
+            container.connectivity.changes.collect { schedulePrefetch() }
+        }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession = session
@@ -142,18 +163,38 @@ class SonarPlaybackService : MediaSessionService() {
 
     private fun schedulePrefetch() {
         prefetchJob?.cancel()
+        val index = player.currentMediaItemIndex
+        val tracks = if (prefetchEnabled && container.connectivity.isUnmetered() &&
+            index >= 0 && index < player.mediaItemCount
+        ) {
+            (index until minOf(player.mediaItemCount, index + 4)).mapNotNull { itemIndex ->
+                val item = player.getMediaItemAt(itemIndex)
+                val track = trackOf(item) ?: return@mapNotNull null
+                if (track.source == cn.bobochang.sonar.data.model.MusicSource.LOCAL || !track.source.isEnabled) {
+                    return@mapNotNull null
+                }
+                val quality = qualityOf(item) ?: Quality.MASTER
+                "${track.musicId}|${quality.wire}" to (track to quality)
+            }.toMap()
+        } else emptyMap()
+
+        // 换歌只取消离开窗口的任务；开始播放等重复事件不丢弃已下载的进度。
+        prefetchTracks.keys.filter { it !in tracks }.forEach { key ->
+            prefetchTracks.remove(key)?.cancel()
+        }
+        prefetchTracks.values.removeAll { !it.isActive }
+        if (tracks.isEmpty()) return
+        // 播放解析和首段缓冲先行；已开始的整文件下载不随短暂 rebuffer 重启。
+        if (player.playbackState != Player.STATE_READY || !player.playWhenReady) return
         prefetchJob = scope.launch {
             delay(1_200)
-            if (player.mediaItemCount == 0) return@launch
-            val index = player.currentMediaItemIndex
-            if (index < 0) return@launch
-            val quality = qualityOf(player.getMediaItemAt(index)) ?: Quality.MASTER
-            val end = minOf(player.mediaItemCount, index + 4)
-            val tracks = (index until end).mapNotNull { itemIndex ->
-                trackOf(player.getMediaItemAt(itemIndex))
-            }
-            if (tracks.isNotEmpty()) {
-                container.playback.prefetch(tracks, quality)
+            if (player.playbackState != Player.STATE_READY || !player.playWhenReady) return@launch
+            for ((key, pair) in tracks) {
+                if (prefetchTracks[key]?.isActive == true) continue
+                val (track, quality) = pair
+                prefetchTracks[key] = scope.launch {
+                    container.playback.prefetch(listOf(track), quality)
+                }
             }
         }
     }

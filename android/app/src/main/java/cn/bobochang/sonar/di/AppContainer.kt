@@ -38,7 +38,6 @@ class AppContainer(context: Context) {
         cache = audioCache,
         settings = settings,
         connectivity = connectivity,
-        appScope = appScope,
     )
     val lyrics = LyricsRepository(appContext, netEase, chksz)
 

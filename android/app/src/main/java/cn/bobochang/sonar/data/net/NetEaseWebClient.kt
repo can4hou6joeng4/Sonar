@@ -287,11 +287,14 @@ class NetEaseWebClient(
                     cookieProvider()?.takeIf { it.isNotBlank() }?.let {
                         requestBuilder.header("Cookie", "MUSIC_U=$it; os=ios; appver=9.6.07")
                     }
-                    client.newCall(requestBuilder.build()).execute().use { response ->
+                    val (response, responseBody) = client.newCall(requestBuilder.build()).awaitResponse {
+                        it to it.body?.string()
+                    }
+                    run {
                         if (!response.isSuccessful) {
                             throw SourceException.Message("网易云接口返回 HTTP ${response.code}")
                         }
-                        val body = response.body?.string()
+                        val body = responseBody
                             ?: throw SourceException.Message("网易云接口返回空数据")
                         val obj = SonarJson.parseToJsonElement(body).jsonObject
                         val code = obj.int("code") ?: 200
