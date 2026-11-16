@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
+import androidx.room.Embedded
 import androidx.room.Index
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -106,6 +107,13 @@ data class SearchHistoryEntity(
     val searchedAt: Long,
 )
 
+data class PlaylistTrackRow(
+    @Embedded val track: TrackEntity,
+    val memberAddedAt: Long,
+) {
+    fun toEntry(): PlaylistEntry? = track.toTrack()?.let { PlaylistEntry(it, memberAddedAt.takeIf { time -> time > 0 }) }
+}
+
 @Dao
 interface LibraryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -125,6 +133,12 @@ interface LibraryDao {
             "ORDER BY f.addedAt DESC",
     )
     fun observeFavorites(): Flow<List<TrackEntity>>
+
+    @Query(
+        "SELECT t.*, f.addedAt AS memberAddedAt FROM tracks t INNER JOIN favorites f ON f.musicId = t.musicId " +
+            "ORDER BY f.addedAt DESC, f.musicId ASC",
+    )
+    fun observeFavoriteEntries(): Flow<List<PlaylistTrackRow>>
 
     @Query("SELECT musicId FROM favorites ORDER BY addedAt DESC")
     suspend fun favoriteIds(): List<String>
@@ -176,6 +190,12 @@ interface LibraryDao {
             "WHERE pt.playlistId = :playlistId ORDER BY pt.position ASC",
     )
     fun observePlaylistTracks(playlistId: String): Flow<List<TrackEntity>>
+
+    @Query(
+        "SELECT t.*, pt.addedAt AS memberAddedAt FROM tracks t INNER JOIN playlist_tracks pt ON pt.musicId = t.musicId " +
+            "WHERE pt.playlistId = :playlistId ORDER BY pt.position ASC, pt.musicId ASC",
+    )
+    fun observePlaylistEntries(playlistId: String): Flow<List<PlaylistTrackRow>>
 
     @Query("SELECT * FROM playlist_tracks WHERE playlistId = :playlistId ORDER BY position ASC")
     suspend fun playlistItems(playlistId: String): List<PlaylistTrackEntity>

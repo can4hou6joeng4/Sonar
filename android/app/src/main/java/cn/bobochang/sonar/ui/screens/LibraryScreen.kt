@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package cn.bobochang.sonar.ui.screens
 
 import androidx.compose.foundation.background
@@ -19,6 +21,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.rounded.LibraryMusic
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.LaunchedEffect
+import cn.bobochang.sonar.data.library.PlaylistFilter
+import cn.bobochang.sonar.ui.components.PlaylistFilterButton
+import cn.bobochang.sonar.ui.components.PlaylistFilterSummary
+import cn.bobochang.sonar.ui.components.FilteredPlaylistEmpty
+import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.MusicNote
@@ -75,11 +88,20 @@ fun LibraryScreen(
     val palette = LocalSonarPalette.current
     val toast = LocalToast.current
     val scope = rememberCoroutineScope()
-    val favorites by container.library.observeFavorites().collectAsState(initial = emptyList())
+    val entries by remember { container.library.observeFavoriteEntries() }.collectAsState(initial = emptyList())
+    var filter by remember { mutableStateOf(PlaylistFilter()) }
+    val favorites = remember(entries, filter) { filter.apply(entries).map { it.track } }
+    val playlists by remember { container.library.observePlaylists() }.collectAsState(initial = emptyList())
+    var showPlaylists by remember { mutableStateOf(false) }
+    var newPlaylistName by remember { mutableStateOf("") }
+    var playlistError by remember { mutableStateOf<String?>(null) }
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     var isSelecting by remember { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf(setOf<String>()) }
+    val visibleIds = favorites.map { it.musicId }.toSet()
+    val visibleSelectedIds = selectedIds.intersect(visibleIds)
+    LaunchedEffect(visibleIds) { selectedIds = selectedIds.intersect(visibleIds) }
 
     val durationText = remember(favorites) {
         val total = favorites.sumOf { it.durationMs ?: 0L }
@@ -120,8 +142,12 @@ fun LibraryScreen(
             }
 
             Spacer(Modifier.weight(1f))
+            androidx.compose.material3.IconButton(onClick = { showPlaylists = true }) {
+                Icon(Icons.Rounded.LibraryMusic, contentDescription = "我的歌单", tint = palette.ink, modifier = Modifier.size(21.dp))
+            }
+            PlaylistFilterButton(entries, filter, onChange = { filter = it; selectedIds = emptySet() })
 
-            if (favorites.isNotEmpty()) {
+            if (entries.isNotEmpty()) {
                 val selectInteraction = remember { MutableInteractionSource() }
                 Box(
                     modifier = Modifier
@@ -150,13 +176,14 @@ fun LibraryScreen(
         // 多选操作条（若处于多选态）
         if (isSelecting) {
             SelectionBar(
-                allSelected = selectedIds.size == favorites.size && favorites.isNotEmpty(),
-                selectedCount = selectedIds.size,
+                allSelected = visibleSelectedIds.size == favorites.size && favorites.isNotEmpty(),
+                selectedCount = visibleSelectedIds.size,
                 onToggleAll = {
-                    selectedIds = if (selectedIds.size == favorites.size) emptySet() else favorites.map { it.musicId }.toSet()
+                    selectedIds = if (visibleSelectedIds.size == favorites.size) emptySet() else visibleIds
                 },
                 onEnqueue = {
-                    val tracksToEnqueue = favorites.filter { it.musicId in selectedIds }
+                    // 只入队当前筛选后可见且被选中的歌曲。
+                    val tracksToEnqueue = favorites.filter { it.musicId in visibleSelectedIds }
                     scope.launch {
                         val quality = container.settings.snapshot().quality
                         tracksToEnqueue.forEach { container.playerConnection.enqueue(it, quality) }
@@ -166,12 +193,18 @@ fun LibraryScreen(
                     }
                 },
                 onRemove = {
-                    val tracksToRemove = favorites.filter { it.musicId in selectedIds }
+                    val tracksToRemove = favorites.filter { it.musicId in visibleSelectedIds }
                     scope.launch {
-                        tracksToRemove.forEach { container.library.toggleFavorite(it) }
-                        toast.show("已从我的收藏中移除 ${tracksToRemove.size} 首歌曲")
-                        isSelecting = false
-                        selectedIds = emptySet()
+                        try {
+                            container.library.removeFavorites(tracksToRemove.map { it.musicId })
+                            toast.show("已从我的收藏中移除 ${tracksToRemove.size} 首歌曲")
+                            isSelecting = false
+                            selectedIds = emptySet()
+                        } catch (error: CancellationException) {
+                            throw error
+                        } catch (error: Exception) {
+                            toast.show("移除失败：${error.message ?: "请稍后重试"}")
+                        }
                     }
                 },
             )
@@ -203,7 +236,11 @@ fun LibraryScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "${favorites.size} 首歌曲",
+                            text = if (filter.isActive && entries.isNotEmpty()) {
+                                "${favorites.size} / ${entries.size} 首歌曲"
+                            } else {
+                                "${favorites.size} 首歌曲"
+                            },
                             color = palette.secondaryInk,
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
@@ -226,6 +263,10 @@ fun LibraryScreen(
                         }
                     }
                 }
+            }
+
+            item(key = "filter-summary") {
+                PlaylistFilterSummary(filter, favorites.size, entries.size) { filter = PlaylistFilter(); selectedIds = emptySet() }
             }
 
             // Playlist Actions：播放全部与随机播放
@@ -272,7 +313,9 @@ fun LibraryScreen(
             }
 
             // 歌曲列表
-            if (favorites.isEmpty()) {
+            if (favorites.isEmpty() && entries.isNotEmpty() && filter.isActive) {
+                item(key = "filtered-empty") { FilteredPlaylistEmpty { filter = PlaylistFilter(); selectedIds = emptySet() } }
+            } else if (favorites.isEmpty()) {
                 item(key = "empty") {
                     Column(
                         modifier = Modifier
@@ -295,7 +338,7 @@ fun LibraryScreen(
                             style = SonarBaseTextStyle,
                         )
                         Text(
-                            text = "在搜索结果或歌手页面选择“收藏到歌单”，歌曲会保存在这里。",
+                            text = "在搜索结果或歌手页面长按歌曲，选择“添加到歌单”，歌曲会保存在这里。",
                             color = palette.secondaryInk,
                             fontSize = 13.sp,
                             style = SonarBaseTextStyle,
@@ -304,7 +347,7 @@ fun LibraryScreen(
                 }
             } else {
                 itemsIndexed(favorites, key = { _, track -> track.musicId }) { index, track ->
-                    val isTrackSelected = track.musicId in selectedIds
+                    val isTrackSelected = track.musicId in visibleSelectedIds
                     SongRow(
                         track = track,
                         leading = SongLeading.Index(index + 1),
@@ -327,6 +370,49 @@ fun LibraryScreen(
                         onAction = { onSongAction(track) },
                     )
                 }
+            }
+        }
+    }
+
+    if (showPlaylists) {
+        ModalBottomSheet(onDismissRequest = { showPlaylists = false }, containerColor = palette.background) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("我的歌单", color = palette.ink, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(newPlaylistName, { newPlaylistName = it }, label = { Text("新歌单名称") },
+                        singleLine = true, modifier = Modifier.weight(1f))
+                    TextButton(onClick = {
+                        if (newPlaylistName.isNotBlank()) scope.launch {
+                            try {
+                                container.library.createPlaylist(newPlaylistName)
+                                newPlaylistName = ""
+                                playlistError = null
+                            } catch (error: CancellationException) {
+                                throw error
+                            } catch (error: Exception) {
+                                playlistError = "创建失败：${error.message ?: "请稍后重试"}"
+                            }
+                        }
+                    }) { Text("创建", color = palette.accent) }
+                }
+                playlistError?.let { Text(it, color = palette.accent, fontSize = 13.sp) }
+                LazyColumn(Modifier.fillMaxWidth().height(320.dp)) {
+                    items(playlists, key = { it.id }) { playlist ->
+                        Row(Modifier.fillMaxWidth().clickable {
+                            showPlaylists = false
+                            onOpenPlaylist(playlist.id)
+                        }.padding(vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Rounded.LibraryMusic, contentDescription = null, tint = palette.accent,
+                                modifier = Modifier.size(20.dp))
+                            Text(playlist.name, Modifier.weight(1f).padding(start = 12.dp), color = palette.ink,
+                                fontSize = 15.sp, maxLines = 1)
+                            Text("打开", color = palette.secondaryInk, fontSize = 13.sp)
+                        }
+                    }
+                }
+                if (playlists.isEmpty()) Text("还没有个人歌单", color = palette.secondaryInk, fontSize = 13.sp)
             }
         }
     }

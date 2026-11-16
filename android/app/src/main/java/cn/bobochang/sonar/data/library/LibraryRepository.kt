@@ -32,6 +32,12 @@ class LibraryRepository(private val database: LibraryDatabase) {
     fun observeFavorites(): Flow<List<Track>> =
         dao.observeFavorites().map { rows -> rows.mapNotNull(TrackEntity::toTrack) }
 
+    fun observeFavoriteEntries(): Flow<List<PlaylistEntry>> =
+        dao.observeFavoriteEntries().map { rows -> rows.mapNotNull(PlaylistTrackRow::toEntry) }
+
+    fun observePlaylistEntries(playlistId: String): Flow<List<PlaylistEntry>> =
+        dao.observePlaylistEntries(playlistId).map { rows -> rows.mapNotNull(PlaylistTrackRow::toEntry) }
+
     fun observeFavoriteCount(): Flow<Int> = dao.observeFavoriteCount()
 
     fun observeFavoriteIds(): Flow<Set<String>> =
@@ -72,12 +78,17 @@ class LibraryRepository(private val database: LibraryDatabase) {
         }
     }
 
-    suspend fun addFavorite(track: Track) {
+    /** 明确添加，不切换状态；重复添加保留原成员时间。 */
+    suspend fun addFavorite(track: Track): Boolean = database.withTransaction {
+        if (dao.isFavorite(track.musicId)) return@withTransaction false
         val now = System.currentTimeMillis()
-        database.withTransaction {
-            dao.upsertTrack(TrackEntity.from(track, now))
-            dao.addFavorite(FavoriteEntity(track.musicId, now))
-        }
+        dao.upsertTrack(TrackEntity.from(track, now))
+        dao.addFavorite(FavoriteEntity(track.musicId, now))
+        true
+    }
+
+    suspend fun removeFavorites(musicIds: Collection<String>) {
+        database.withTransaction { musicIds.distinct().forEach { dao.removeFavorite(it) } }
     }
 
     suspend fun recordPlay(track: Track) {
@@ -112,6 +123,7 @@ class LibraryRepository(private val database: LibraryDatabase) {
     suspend fun addTracksToPlaylist(playlistId: String, tracks: List<Track>): Int {
         if (tracks.isEmpty()) return 0
         return database.withTransaction {
+            requireNotNull(dao.playlist(playlistId)) { "歌单不存在或已删除，请重新选择" }
             val existing = dao.playlistItems(playlistId).mapTo(mutableSetOf()) { it.musicId }
             var position = (dao.maxPosition(playlistId) ?: -1) + 1
             val now = System.currentTimeMillis()
@@ -134,6 +146,11 @@ class LibraryRepository(private val database: LibraryDatabase) {
         dao.removeFromPlaylist(playlistId, musicId)
     }
 
+    /** 批量移除同一事务完成，失败时不留下只删了一半的歌单。 */
+    suspend fun removeFromPlaylist(playlistId: String, musicIds: Collection<String>) {
+        database.withTransaction { musicIds.distinct().forEach { dao.removeFromPlaylist(playlistId, it) } }
+    }
+
     suspend fun moveInPlaylist(playlistId: String, from: Int, to: Int) {
         if (from == to) return
         database.withTransaction {
@@ -141,10 +158,9 @@ class LibraryRepository(private val database: LibraryDatabase) {
             if (from !in items.indices || to !in items.indices) return@withTransaction
             val moved = items.removeAt(from)
             items.add(to, moved)
-            val now = System.currentTimeMillis()
             dao.insertPlaylistTracks(
                 items.mapIndexed { index, item ->
-                    item.copy(position = index, addedAt = now)
+                    item.copy(position = index)
                 },
             )
         }

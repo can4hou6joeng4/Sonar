@@ -52,6 +52,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import cn.bobochang.sonar.data.library.AddedPeriod
+import cn.bobochang.sonar.data.library.PlaylistEntry
+import cn.bobochang.sonar.data.library.PlaylistFilter
 import cn.bobochang.sonar.data.model.AlbumSummary
 import cn.bobochang.sonar.data.model.ArtistSummary
 import cn.bobochang.sonar.data.model.PlaylistSummary
@@ -59,7 +62,10 @@ import cn.bobochang.sonar.data.model.Track
 import cn.bobochang.sonar.di.AppContainer
 import cn.bobochang.sonar.playback.PlaybackMode
 import cn.bobochang.sonar.playback.PlayerUiState
+import cn.bobochang.sonar.ui.components.FilteredPlaylistEmpty
 import cn.bobochang.sonar.ui.components.LocalToast
+import cn.bobochang.sonar.ui.components.PlaylistFilterButton
+import cn.bobochang.sonar.ui.components.PlaylistFilterSummary
 import cn.bobochang.sonar.ui.components.RemoteArtwork
 import cn.bobochang.sonar.ui.components.SkeletonSongList
 import cn.bobochang.sonar.ui.components.SongLeading
@@ -69,6 +75,7 @@ import cn.bobochang.sonar.ui.theme.LocalSonarPalette
 import cn.bobochang.sonar.ui.theme.SonarBaseTextStyle
 import cn.bobochang.sonar.ui.theme.bouncePress
 import cn.bobochang.sonar.ui.theme.withTnum
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 /** 本地歌单 / 我的收藏：对应 iOS `PlaylistDetailView`。 */
@@ -84,16 +91,19 @@ fun PlaylistDetailScreen(
     val palette = LocalSonarPalette.current
     val toast = LocalToast.current
     val scope = rememberCoroutineScope()
-    val favorites by container.library.observeFavorites().collectAsState(initial = emptyList())
     val playlists by container.library.observePlaylists().collectAsState(initial = emptyList())
-    val playlistTracks by remember(playlistId) {
-        if (playlistId == null) kotlinx.coroutines.flow.flowOf(emptyList()) else container.library.observePlaylistTracks(playlistId)
+    val entries by remember(playlistId) {
+        if (playlistId == null) container.library.observeFavoriteEntries()
+        else container.library.observePlaylistEntries(playlistId)
     }.collectAsState(initial = emptyList())
     val playlist = playlists.firstOrNull { it.id == playlistId }
-    val tracks = if (playlistId == null) favorites else playlistTracks
+    var filter by remember(playlistId) { mutableStateOf(PlaylistFilter()) }
+    val tracks = remember(entries, filter) { filter.apply(entries).map { it.track } }
     val title = if (playlistId == null) "我的收藏" else playlist?.name ?: "歌单"
     var selecting by remember { mutableStateOf(false) }
     val selected = remember { mutableStateListOf<String>() }
+    val visible = tracks.map { it.musicId }.toSet()
+    LaunchedEffect(visible) { selected.retainAll(visible) }
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val durationText = remember(tracks) {
         val total = tracks.sumOf { it.durationMs ?: 0L }
@@ -109,9 +119,10 @@ fun PlaylistDetailScreen(
         DetailNavBar(
             title = "",
             onBack = onBack,
-            trailing = if (tracks.isNotEmpty()) {
-                {
-                    Text(
+            trailing = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    PlaylistFilterButton(entries, filter, onChange = { filter = it; selected.clear() })
+                    if (entries.isNotEmpty()) Text(
                         text = if (selecting) "取消" else "选择",
                         color = palette.ink,
                         fontSize = 15.sp,
@@ -121,11 +132,11 @@ fun PlaylistDetailScreen(
                         }.padding(12.dp),
                     )
                 }
-            } else null,
+            },
         )
         if (selecting) {
             SelectionBar(
-                allSelected = selected.size == tracks.size,
+                allSelected = tracks.isNotEmpty() && selected.size == tracks.size,
                 count = selected.size,
                 canRemove = playlistId != null,
                 onToggleAll = {
@@ -152,13 +163,19 @@ fun PlaylistDetailScreen(
                 },
                 onRemove = if (playlistId != null) {
                     {
+                        // 只移除当前可见且被选中的真实成员；筛选隐藏的歌曲不受影响。
+                        val ids = tracks.filter { selected.contains(it.musicId) }.map { it.musicId }
                         scope.launch {
-                            tracks.filter { selected.contains(it.musicId) }.forEach { track ->
-                                container.library.removeFromPlaylist(playlistId, track.musicId)
+                            try {
+                                container.library.removeFromPlaylist(playlistId, ids)
+                                toast.show("已移出 ${ids.size} 首")
+                                selecting = false
+                                selected.clear()
+                            } catch (error: CancellationException) {
+                                throw error
+                            } catch (error: Exception) {
+                                toast.show("移出失败：${error.message ?: "请稍后重试"}")
                             }
-                            toast.show("已移出 ${selected.size} 首")
-                            selecting = false
-                            selected.clear()
                         }
                     }
                 } else null,
@@ -189,13 +206,19 @@ fun PlaylistDetailScreen(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("${tracks.size} 首歌曲", color = palette.secondaryInk, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        Text(
+                            if (filter.isActive) "${tracks.size} / ${entries.size} 首歌曲" else "${tracks.size} 首歌曲",
+                            color = palette.secondaryInk, fontSize = 14.sp, fontWeight = FontWeight.Medium,
+                        )
                         if (durationText != null) {
                             Text("·", color = palette.secondaryInk, fontSize = 14.sp)
                             Text(durationText, color = palette.secondaryInk, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                         }
                     }
                 }
+            }
+            item(key = "filter-summary") {
+                PlaylistFilterSummary(filter, tracks.size, entries.size) { filter = PlaylistFilter(); selected.clear() }
             }
             item(key = "actions") {
                 Row(
@@ -240,9 +263,11 @@ fun PlaylistDetailScreen(
                     }
                 }
             }
-            if (tracks.isEmpty()) {
+            if (tracks.isEmpty() && entries.isNotEmpty() && filter.isActive) {
+                item(key = "filtered-empty") { FilteredPlaylistEmpty { filter = PlaylistFilter(); selected.clear() } }
+            } else if (tracks.isEmpty()) {
                 item(key = "empty") {
-                    EmptyDetail("这个歌单还没有歌曲", "在搜索结果或歌手页面选择“收藏到歌单”，歌曲会保存在这里")
+                    EmptyDetail("这个歌单还没有歌曲", "在搜索结果或歌手页面长按歌曲，选择“添加到歌单”，歌曲会保存在这里")
                 }
             } else {
                 itemsIndexed(tracks, key = { _, track -> track.musicId }) { index, track ->
@@ -301,6 +326,13 @@ fun RemotePlaylistScreen(
     var total by remember(playlist.id) { mutableStateOf(playlist.total) }
     var loading by remember(playlist.id) { mutableStateOf(true) }
     var error by remember(playlist.id) { mutableStateOf<String?>(null) }
+    var filter by remember(playlist.id) { mutableStateOf(PlaylistFilter()) }
+    // 远程预览没有成员添加时间，只允许歌手与不依赖时间的排序，绝不伪造日期。
+    val entries = remember(tracks) { tracks.map { PlaylistEntry(it) } }
+    val visibleTracks = remember(entries, filter) {
+        val safe = filter.copy(period = AddedPeriod.ALL)
+        safe.apply(entries).map { it.track }
+    }
     val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
     LaunchedEffect(playlist.id) {
@@ -321,7 +353,15 @@ fun RemotePlaylistScreen(
             .background(palette.background)
             .padding(top = statusTop),
     ) {
-        DetailNavBar(title = "网易云歌单", onBack = onBack)
+        DetailNavBar(
+            title = "网易云歌单",
+            onBack = onBack,
+            trailing = {
+                if (tracks.isNotEmpty()) {
+                    PlaylistFilterButton(entries, filter, onChange = { filter = it }, hasDates = false)
+                }
+            },
+        )
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = bottomPadding + 20.dp),
@@ -350,7 +390,15 @@ fun RemotePlaylistScreen(
                             overflow = TextOverflow.Ellipsis,
                         )
                         (total ?: 0).takeIf { it > 0 }?.let {
-                            Text("$it 首歌曲", color = palette.secondaryInk, fontSize = 12.sp)
+                            Text(
+                                if (filter.isActive && tracks.isNotEmpty()) {
+                                    "${visibleTracks.size} / ${tracks.size} 首歌曲"
+                                } else {
+                                    "$it 首歌曲"
+                                },
+                                color = palette.secondaryInk,
+                                fontSize = 12.sp,
+                            )
                         }
                     }
                 }
@@ -365,29 +413,40 @@ fun RemotePlaylistScreen(
                 }
 
                 tracks.isNotEmpty() -> {
-                    item(key = "play-all") {
-                        WidePlayButton("播放全部") {
-                            scope.launch {
-                                container.playerConnection.setPlaybackMode(PlaybackMode.SEQUENCE)
-                                container.playerConnection.playTracks(tracks, 0, container.settings.snapshot().quality)
-                            }
-                        }
+                    item(key = "filter-summary") {
+                        PlaylistFilterSummary(filter, visibleTracks.size, tracks.size) { filter = PlaylistFilter() }
                     }
-                    itemsIndexed(tracks, key = { _, track -> track.musicId }) { index, track ->
-                        SongRow(
-                            track = track,
-                            trailing = SongTrailing.More,
-                            showDivider = index < tracks.lastIndex,
-                            isCurrent = playerState.track?.musicId == track.musicId,
-                            isPlaying = playerState.isPlaying,
-                            onPlay = {
+                    if (visibleTracks.isEmpty()) {
+                        item(key = "filtered-empty") { FilteredPlaylistEmpty { filter = PlaylistFilter() } }
+                    } else {
+                        item(key = "play-all") {
+                            WidePlayButton("播放全部") {
                                 scope.launch {
                                     container.playerConnection.setPlaybackMode(PlaybackMode.SEQUENCE)
-                                    container.playerConnection.playTracks(tracks, index, container.settings.snapshot().quality)
+                                    container.playerConnection.playTracks(
+                                        visibleTracks, 0, container.settings.snapshot().quality,
+                                    )
                                 }
-                            },
-                            onAction = { onSongAction(track) },
-                        )
+                            }
+                        }
+                        itemsIndexed(visibleTracks, key = { _, track -> track.musicId }) { index, track ->
+                            SongRow(
+                                track = track,
+                                trailing = SongTrailing.More,
+                                showDivider = index < visibleTracks.lastIndex,
+                                isCurrent = playerState.track?.musicId == track.musicId,
+                                isPlaying = playerState.isPlaying,
+                                onPlay = {
+                                    scope.launch {
+                                        container.playerConnection.setPlaybackMode(PlaybackMode.SEQUENCE)
+                                        container.playerConnection.playTracks(
+                                            visibleTracks, index, container.settings.snapshot().quality,
+                                        )
+                                    }
+                                },
+                                onAction = { onSongAction(track) },
+                            )
+                        }
                     }
                 }
             }
