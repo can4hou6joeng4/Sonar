@@ -61,7 +61,8 @@ private final class SonarServices {
         )
         sourceRuntime = runtime
         onlinePlaylistImporter = OnlinePlaylistImportService(chkszAPI: chkszAPI)
-        let resolver = PlaybackResolverPipeline.make(
+        // 每次解析直接返回 URL 与实际音质，可以安全共享最终结果，避免播放和缓存重复解析。
+        let resolver = CachedPlaybackURLResolver(resolver: PlaybackResolverPipeline.make(
             primary: PlaybackURLResolver(
                 credentials: credentials,
                 breaker: breaker,
@@ -69,24 +70,13 @@ private final class SonarServices {
                 netease: netease
             ),
             direct: NetEasePlaybackResolver(client: direct)
-        )
+        ))
         let networkStatus = NetworkStatusMonitor()
         self.networkStatus = networkStatus
         let cacheStore = AudioCacheStore()
-        // 缓存下载使用独立的解析器，避免与正在播放的曲目争抢
-        // `PlaybackQualityReporting` 的最近一次音质记录。
-        let cacheResolver = PlaybackResolverPipeline.make(
-            primary: PlaybackURLResolver(
-                credentials: credentials,
-                breaker: breaker,
-                chkszAPI: chkszAPI,
-                netease: netease
-            ),
-            direct: NetEasePlaybackResolver(client: direct)
-        )
         let cacheDownloader = AudioCacheDownloader(
             store: cacheStore,
-            resolver: cacheResolver,
+            resolver: resolver,
             isExpensive: { networkStatus.isExpensiveSnapshot },
             allowsDownloads: { networkStatus.allowsDownloadsSnapshot }
         )

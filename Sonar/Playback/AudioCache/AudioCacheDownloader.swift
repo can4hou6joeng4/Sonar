@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import OSLog
 
 extension Notification.Name {
     static let sonarAudioCacheDownloadsDidChange = Notification.Name("sonar.audioCache.downloadsDidChange")
@@ -54,6 +55,7 @@ actor AudioCacheDownloader {
     private let download: Download
     private let maxConcurrent: Int
     private let allowsDownloads: @Sendable () -> Bool
+    private let logger = Logger(subsystem: "cn.bobochang.sonar", category: "AudioCache")
 
     private var queue: [Job] = []
     private var active: [UUID: Active] = [:]
@@ -69,14 +71,15 @@ actor AudioCacheDownloader {
     init(
         store: AudioCacheStore,
         resolver: PlaybackURLResolving,
-        maxConcurrent: Int = 2,
+        maxConcurrent: Int = 4,
         isExpensive: @escaping @Sendable () -> Bool,
         allowsDownloads: (@Sendable () -> Bool)? = nil,
         download: Download? = nil
     ) {
         self.store = store
         self.resolver = resolver
-        self.maxConcurrent = min(2, max(1, maxConcurrent))
+        // 与「当前＋后 3 首」预取窗口一致；仍为有界并发，避免过度挤占播放缓冲。
+        self.maxConcurrent = min(4, max(1, maxConcurrent))
         self.allowsDownloads = { !isExpensive() && (allowsDownloads?() ?? true) }
 
         let configuration = URLSessionConfiguration.default
@@ -87,7 +90,8 @@ actor AudioCacheDownloader {
         configuration.urlCache = nil
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.timeoutIntervalForRequest = 60
-        configuration.timeoutIntervalForResource = 300
+        // 整首母带/Hi-Res 在慢速链路上可能持续数分钟；只限制停滞时间，不因总时长中断后从头重下。
+        configuration.timeoutIntervalForResource = 30 * 60
         configuration.httpShouldSetCookies = false
         configuration.httpCookieStorage = nil
         configuration.httpMaximumConnectionsPerHost = self.maxConcurrent
@@ -218,9 +222,11 @@ actor AudioCacheDownloader {
                 try check(job)
                 guard await store.hasSpaceForDownload() else { throw DownloadError.noSpace }
                 try check(job)
+                let resolutionStarted = ProcessInfo.processInfo.systemUptime
                 let resolved = try await resolver.resolvedMusicURL(
                     for: job.track, quality: job.quality, refreshing: attempt > 0
                 )
+                let resolutionMilliseconds = (ProcessInfo.processInfo.systemUptime - resolutionStarted) * 1_000
                 try check(job)
                 if let cached = await store.cachedEntry(
                     for: job.track, preferred: resolved.quality, allowLowerQuality: false
@@ -241,7 +247,10 @@ actor AudioCacheDownloader {
                 request.allowsCellularAccess = false
                 request.allowsExpensiveNetworkAccess = false
                 request.allowsConstrainedNetworkAccess = false
+                let downloadStarted = ProcessInfo.processInfo.systemUptime
                 let (tempURL, response) = try await download(request)
+                let downloadMilliseconds = (ProcessInfo.processInfo.systemUptime - downloadStarted) * 1_000
+                let validationStarted = ProcessInfo.processInfo.systemUptime
                 defer { try? FileManager.default.removeItem(at: tempURL) }
                 try check(job)
                 try Self.validateResponse(response, fileURL: tempURL)
@@ -253,10 +262,13 @@ actor AudioCacheDownloader {
                 defer { try? FileManager.default.removeItem(at: namedURL) }
                 try await Self.validateAudioFile(at: namedURL, expectedDuration: job.track.durationSeconds)
                 try check(job)
-                _ = try await store.install(
+                let installed = try await store.install(
                     tempURL: namedURL, track: job.track, actualQuality: resolved.quality,
                     fileExtension: ext, requestedQuality: job.quality
                 )
+                let validationMilliseconds = (ProcessInfo.processInfo.systemUptime - validationStarted) * 1_000
+                // 只记录阶段耗时与字节数，不记录歌曲、链接或凭据。
+                logger.info("cache_completed resolution_ms=\(resolutionMilliseconds) transfer_ms=\(downloadMilliseconds) validation_ms=\(validationMilliseconds) bytes=\(installed.byteCount)")
                 if !spaceBlocked, !waitingForNetwork { lastError = nil }
                 postDownloadsChanged()
                 return
